@@ -1,0 +1,8 @@
+* @munisp
+/contracts/ @munisp
+/database/ @munisp
+/infrastructure/ @munisp
+/services/payment-engine/ @munisp
+/services/risk-compliance-core/ @munisp
+/services/ledger-gateway/ @munisp
+/services/reporting-analytics/ @munisp

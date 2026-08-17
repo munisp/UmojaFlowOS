@@ -1,0 +1,8 @@
+[package]
+name = "ledger-gateway"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "ledger_gateway"
+path = "src/lib.rs"

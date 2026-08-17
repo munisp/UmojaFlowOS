@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package umojaflowos.v1;
+
+option go_package = "github.com/munisp/UmojaFlowOS/contracts/gen/go/umojaflowos/v1;umojaflowosv1";
+
+enum Corridor {
+  CORRIDOR_UNSPECIFIED = 0;
+  CORRIDOR_NIGERIA_NGN = 1;
+  CORRIDOR_KENYA_KES = 2;
+  CORRIDOR_SOUTH_AFRICA_ZAR = 3;
+}
+
+enum Stablecoin {
+  STABLECOIN_UNSPECIFIED = 0;
+  STABLECOIN_USDC = 1;
+  STABLECOIN_USDT = 2;
+}
+
+enum PolicyOutcome {
+  POLICY_OUTCOME_UNSPECIFIED = 0;
+  POLICY_OUTCOME_ALLOW = 1;
+  POLICY_OUTCOME_MANUAL_REVIEW = 2;
+  POLICY_OUTCOME_BLOCK = 3;
+}
+
+message Money {
+  string currency = 1;
+  string amount = 2;
+}
+
+message PaymentOrder {
+  string id = 1;
+  Corridor corridor = 2;
+  Money source = 3;
+  Money target = 4;
+  string customer_id = 5;
+  string beneficiary_id = 6;
+  string counterparty_id = 7;
+  string idempotency_key = 8;
+  string created_at_rfc3339 = 9;
+}
+
+message PolicyDecision {
+  string decision_id = 1;
+  PolicyOutcome outcome = 2;
+  repeated string reason_codes = 3;
+  string policy_version = 4;
+  string evaluated_at_rfc3339 = 5;
+}

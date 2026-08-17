@@ -1,0 +1,12 @@
+[package]
+name = "risk-compliance-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "risk_compliance_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "risk-compliance-core"
+path = "src/main.rs"

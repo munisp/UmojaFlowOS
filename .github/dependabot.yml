@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: "/services/payment-engine"
+    schedule:
+      interval: weekly
+  - package-ecosystem: cargo
+    directory: "/services/risk-compliance-core"
+    schedule:
+      interval: weekly
+  - package-ecosystem: cargo
+    directory: "/services/ledger-gateway"
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: "/services/reporting-analytics"
+    schedule:
+      interval: weekly

@@ -1,0 +1,21 @@
+# Project TODO
+
+- [x] Extract traceable business, functional, technical, and regulatory requirements from the supplied platform and regulatory documents.
+- [x] Validate Nigeria (NGN), Kenya (KES), and South Africa (ZAR) regulatory requirements against primary CBN, CBK, SARB, OFAC, UN, and EU sources.
+- [x] Document the production GitHub monorepo strategy, service ownership, API contracts, branch protection, and CI/CD controls.
+- [x] Build the TypeScript control plane, authenticated International Typographic Style dashboard, API gateway, role-based access control, and immutable activity audit log.
+- [ ] Build the Go payment-orchestration service for Nigeria (NGN), Kenya (KES), and South Africa (ZAR) corridor transaction lifecycle management and audit evidence.
+- [ ] Build the Rust risk and compliance core for sanctions screening, rules-based transaction monitoring, counterparty risk, and velocity controls.
+- [ ] Build the Python reporting and analytics service for regulatory report assembly, stablecoin exposure reporting, and policy-based report validation.
+- [ ] Implement multi-currency treasury operations for liquidity pools, nostro and vostro balances, pre-funding positions, and deterministic rebalancing alerts.
+- [ ] Implement the stablecoin and foreign-exchange rate domain for USDC and USDT peg observations, NGN, KES, and ZAR rate quotes, spread calculation, and rate-lock workflows.
+- [ ] Implement compliance workflows for customer due-diligence records, KYC document review state, alerts, cases, and SAR/STR filing records without asserting regulator submission connectivity where no integration is available.
+- [ ] Implement the licensed PSP partner, correspondent bank, and stablecoin-provider counterparty registry with risk controls.
+- [ ] Implement operational notification policies for liquidity thresholds, payment failures, compliance flags, and regulatory deadlines.
+- [x] Apply database migrations, add schemas and typed procedures for every implemented capability, and connect all production interface flows end to end.
+- [ ] Implement real provider adapters only after the user supplies approved sandbox or production credentials and confirms licensed payment, KYC, sanctions, rate, and regulatory-submission counterparties.
+- [ ] Add automated unit, integration, contract, and interface tests; perform security, accessibility, and visual validation.
+- [x] Produce a requirements traceability matrix, source-validation record, architecture record, visual validation record, and implementation handover materials.
+- [ ] Integrate the Go, Rust, and Python service artifacts with the TypeScript control plane through documented versioned contracts and provider-safe activation gates.
+- [ ] Exercise every implemented control-plane form workflow through the interface and record end-to-end validation evidence without creating fictitious operational records.
+- [ ] Produce an explicit implementation handover covering deployed components, activation gates, validation results, non-activated integrations, and operator next steps.
