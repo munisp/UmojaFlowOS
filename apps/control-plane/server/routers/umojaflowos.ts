@@ -1,6 +1,9 @@
 import { z } from "zod";
+import { parse as parseCookie } from "cookie";
 import * as db from "../db";
 import { adminProcedure, auditorProcedure, complianceProcedure, router, treasuryProcedure } from "../_core/trpc";
+import { createHeartbeatJob } from "../_core/heartbeat";
+import { COOKIE_NAME } from "@shared/const";
 
 const corridor = z.enum(["NIGERIA_NGN", "KENYA_KES", "SOUTH_AFRICA_ZAR"]);
 const currency = z.enum(["NGN", "KES", "ZAR", "USD", "USDC", "USDT"]);
@@ -86,13 +89,27 @@ export const umojaFlowRouter = router({
     record: treasuryProcedure
       .input(z.object({ integrationConnectionId: z.number().int().positive(), baseAsset: currency, quoteAsset: currency, rate: decimal.refine(value => value !== "0", "Rate must be greater than zero"), observedAt: z.coerce.date(), sourceReference: z.string().url() }).refine(value => value.baseAsset !== value.quoteAsset, "The base and quote assets must differ"))
       .mutation(({ ctx, input }) => db.recordMarketObservation(actorOf(ctx.user), input)),
+    listRateLocks: auditorProcedure.query(() => db.listRateLocks()),
+    createRateLock: treasuryProcedure
+      .input(z.object({ marketObservationId: z.number().int().positive(), paymentOrderId: z.number().int().positive().optional(), corridor, expiresAt: z.coerce.date() }))
+      .mutation(({ ctx, input }) => db.createRateLock(actorOf(ctx.user), input)),
+    cancelRateLock: treasuryProcedure
+      .input(z.object({ rateLockId: z.number().int().positive() }))
+      .mutation(({ ctx, input }) => db.cancelRateLock(actorOf(ctx.user), input.rateLockId)),
   }),
 
   payments: router({
     list: auditorProcedure.query(() => db.listPaymentOrders()),
+    listLegs: auditorProcedure.input(z.object({ paymentOrderId: z.number().int().positive().optional() }).optional()).query(({ input }) => db.listPaymentLegs(input?.paymentOrderId)),
     create: treasuryProcedure
       .input(z.object({ idempotencyKey: z.string().trim().min(16).max(255), customerId: z.number().int().positive(), beneficiaryId: z.number().int().positive(), corridor, sourceCurrency: currency, sourceAmount: decimal.refine(value => value !== "0", "Amount must be greater than zero"), targetCurrency: currency, targetAmount: decimal.optional() }).refine(value => value.sourceCurrency !== value.targetCurrency, "Source and target currencies must differ"))
       .mutation(({ ctx, input }) => db.createPaymentOrder(actorOf(ctx.user), input)),
+    createLeg: treasuryProcedure
+      .input(z.object({ paymentOrderId: z.number().int().positive(), sequenceNumber: z.number().int().positive(), legKind: z.enum(["collection", "fx", "stablecoin_settlement", "payout", "reversal"]), counterpartyId: z.number().int().positive().optional() }))
+      .mutation(({ ctx, input }) => db.createPaymentLeg(actorOf(ctx.user), input)),
+    transitionLeg: treasuryProcedure
+      .input(z.object({ paymentLegId: z.number().int().positive(), status: z.enum(["blocked", "cancelled"]) }))
+      .mutation(({ ctx, input }) => db.transitionPaymentLeg(actorOf(ctx.user), input)),
   }),
 
   compliance: router({
@@ -107,6 +124,10 @@ export const umojaFlowRouter = router({
     create: complianceProcedure
       .input(z.object({ regulator: z.enum(["CBN", "CBK", "SARB"]), corridor, reportType: z.string().trim().min(4).max(255), periodStart: z.coerce.date(), periodEnd: z.coerce.date() }).refine(value => value.periodEnd >= value.periodStart, "The reporting period end must not precede its start"))
       .mutation(({ ctx, input }) => db.createRegulatoryReport(actorOf(ctx.user), input)),
+    listDeadlines: auditorProcedure.query(() => db.listRegulatoryDeadlines()),
+    createDeadline: complianceProcedure
+      .input(z.object({ regulator: z.enum(["CBN", "CBK", "SARB"]), corridor, title: z.string().trim().min(4).max(255), dueAt: z.coerce.date(), sourceReference: z.string().url() }))
+      .mutation(({ ctx, input }) => db.createRegulatoryDeadline(actorOf(ctx.user), input)),
   }),
 
   alerts: router({
@@ -114,5 +135,19 @@ export const umojaFlowRouter = router({
     create: adminProcedure
       .input(z.object({ alertType: z.enum(["liquidity_threshold", "payment_failure", "compliance_flag", "regulatory_deadline"]), corridor: corridor.optional(), threshold: z.record(z.string(), z.unknown()), enabled: z.boolean().default(true) }))
       .mutation(({ ctx, input }) => db.createAlertPolicy(actorOf(ctx.user), input)),
+    evaluateDeadlines: adminProcedure.mutation(({ ctx }) => db.evaluateRegulatoryDeadlineAlerts(actorOf(ctx.user))),
+    configureDeadlineReminders: adminProcedure
+      .input(z.object({ cronExpression: z.string().regex(/^\d+\s+\d+\s+\d+\s+\*\s+\*\s+\*$/, "Use a six-field UTC cron expression with wildcard day fields") }))
+      .mutation(async ({ ctx, input }) => {
+        const sessionToken = parseCookie(ctx.req.headers.cookie ?? "")[COOKIE_NAME];
+        if (!sessionToken) throw new Error("An authenticated session is required to configure a reminder schedule");
+        const job = await createHeartbeatJob({
+          name: "umojaflowos-regulatory-deadline-reminders",
+          cron: input.cronExpression,
+          path: "/api/scheduled/regulatory-deadline-reminders",
+          description: "Evaluates CBN, CBK, and SARB reporting deadlines and sends configured owner alerts.",
+        }, sessionToken);
+        return db.createRegulatoryDeadlineReminderJob(actorOf(ctx.user), { taskUid: job.taskUid, cronExpression: input.cronExpression });
+      }),
   }),
 });

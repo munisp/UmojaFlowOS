@@ -39,4 +39,14 @@ describe("UmojaFlowOS role boundaries", () => {
       reconciledAt: new Date("2026-08-17T00:00:00.000Z"),
     })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
+
+  it("prevents an auditor from cancelling a rate lock", async () => {
+    const caller = appRouter.createCaller(auditorContext());
+    await expect(caller.umoja.markets.cancelRateLock({ rateLockId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("prevents an auditor from changing a payment-leg state", async () => {
+    const caller = appRouter.createCaller(auditorContext());
+    await expect(caller.umoja.payments.transitionLeg({ paymentLegId: 1, status: "blocked" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 });

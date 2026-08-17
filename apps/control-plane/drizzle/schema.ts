@@ -186,6 +186,24 @@ export const marketObservations = mysqlTable(
   table => [index("market_pair_idx").on(table.baseAsset, table.quoteAsset, table.observedAt)],
 );
 
+export const rateLocks = mysqlTable(
+  "rateLocks",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    marketObservationId: int("marketObservationId").notNull(),
+    paymentOrderId: int("paymentOrderId"),
+    corridor: mysqlEnum("corridor", ["NIGERIA_NGN", "KENYA_KES", "SOUTH_AFRICA_ZAR"]).notNull(),
+    baseAsset: mysqlEnum("baseAsset", ["NGN", "KES", "ZAR", "USD", "USDC", "USDT"]).notNull(),
+    quoteAsset: mysqlEnum("quoteAsset", ["NGN", "KES", "ZAR", "USD", "USDC", "USDT"]).notNull(),
+    lockedRate: decimal("lockedRate", { precision: 30, scale: 12 }).notNull(),
+    expiresAt: datetime("expiresAt").notNull(),
+    status: mysqlEnum("status", ["locked", "expired", "cancelled"]).default("locked").notNull(),
+    createdBy: varchar("createdBy", { length: 64 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("rate_lock_status_idx").on(table.corridor, table.status, table.expiresAt)],
+);
+
 export const paymentOrders = mysqlTable(
   "paymentOrders",
   {
@@ -208,6 +226,24 @@ export const paymentOrders = mysqlTable(
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   table => [index("payment_corridor_status_idx").on(table.corridor, table.status, table.createdAt)],
+);
+
+export const paymentLegs = mysqlTable(
+  "paymentLegs",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    paymentOrderId: int("paymentOrderId").notNull(),
+    sequenceNumber: int("sequenceNumber").notNull(),
+    legKind: mysqlEnum("legKind", ["collection", "fx", "stablecoin_settlement", "payout", "reversal"]).notNull(),
+    counterpartyId: int("counterpartyId"),
+    status: mysqlEnum("status", ["draft", "pending_policy_decision", "blocked", "manual_review", "approved", "executing", "partially_completed", "completed", "failed", "cancelled"])
+      .default("draft")
+      .notNull(),
+    providerInstructionReference: varchar("providerInstructionReference", { length: 512 }),
+    providerFinalityReference: varchar("providerFinalityReference", { length: 512 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [uniqueIndex("payment_leg_sequence_idx").on(table.paymentOrderId, table.sequenceNumber)],
 );
 
 export const complianceCases = mysqlTable(
@@ -246,6 +282,53 @@ export const regulatoryReports = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   table => [index("regulatory_report_idx").on(table.regulator, table.corridor, table.periodEnd)],
+);
+
+export const regulatoryDeadlines = mysqlTable(
+  "regulatoryDeadlines",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    regulator: mysqlEnum("regulator", ["CBN", "CBK", "SARB"]).notNull(),
+    corridor: mysqlEnum("corridor", ["NIGERIA_NGN", "KENYA_KES", "SOUTH_AFRICA_ZAR"]).notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    dueAt: datetime("dueAt").notNull(),
+    sourceReference: varchar("sourceReference", { length: 2048 }).notNull(),
+    status: mysqlEnum("status", ["open", "acknowledged", "completed", "cancelled"]).default("open").notNull(),
+    lastRemindedAt: timestamp("lastRemindedAt"),
+    createdBy: varchar("createdBy", { length: 64 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("regulatory_deadline_due_idx").on(table.status, table.dueAt)],
+);
+
+export const notificationDeliveries = mysqlTable(
+  "notificationDeliveries",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    alertPolicyId: int("alertPolicyId"),
+    alertType: mysqlEnum("alertType", ["liquidity_threshold", "payment_failure", "compliance_flag", "regulatory_deadline"]).notNull(),
+    deliveryState: mysqlEnum("deliveryState", ["accepted", "unavailable"]).notNull(),
+    destination: varchar("destination", { length: 64 }).notNull(),
+    correlationId: varchar("correlationId", { length: 128 }).notNull(),
+    payloadHash: varchar("payloadHash", { length: 128 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("notification_delivery_idx").on(table.alertType, table.createdAt)],
+);
+
+export const scheduledJobs = mysqlTable(
+  "scheduledJobs",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    purpose: mysqlEnum("purpose", ["regulatory_deadline_reminders"]).notNull().unique(),
+    scheduleCronTaskUid: varchar("scheduleCronTaskUid", { length: 65 }).unique(),
+    cronExpression: varchar("cronExpression", { length: 64 }).notNull(),
+    enabled: boolean("enabled").default(false).notNull(),
+    lastExecutedAt: timestamp("lastExecutedAt"),
+    createdBy: varchar("createdBy", { length: 64 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("scheduled_job_task_idx").on(table.scheduleCronTaskUid)],
 );
 
 export const alertPolicies = mysqlTable("alertPolicies", {

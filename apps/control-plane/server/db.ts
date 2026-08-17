@@ -1,6 +1,6 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   activityEvents,
   alertPolicies,
@@ -14,8 +14,13 @@ import {
   integrationConnections,
   liquidityPositions,
   marketObservations,
+  notificationDeliveries,
+  paymentLegs,
   paymentOrders,
+  rateLocks,
+  regulatoryDeadlines,
   regulatoryReports,
+  scheduledJobs,
   users,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -61,7 +66,7 @@ function thresholdMinimum(value: unknown): number | undefined {
 
 async function notifyForAlertPolicies(
   actor: Actor,
-  alertType: "liquidity_threshold" | "compliance_flag",
+  alertType: "liquidity_threshold" | "payment_failure" | "compliance_flag" | "regulatory_deadline",
   corridor: "NIGERIA_NGN" | "KENYA_KES" | "SOUTH_AFRICA_ZAR" | undefined,
   title: string,
   content: string,
@@ -72,6 +77,17 @@ async function notifyForAlertPolicies(
   const enabled = policies.filter(policy => policy.enabled && (!policy.corridor || policy.corridor === corridor));
   if (!enabled.length) return;
   const delivered = await notifyOwner({ title, content });
+  const deliveryState: "accepted" | "unavailable" = delivered ? "accepted" : "unavailable";
+  const correlationId = randomUUID();
+  const payloadHash = createHash("sha256").update(`${title}\n${content}`).digest("hex");
+  await db.insert(notificationDeliveries).values(enabled.map(policy => ({
+    alertPolicyId: policy.id,
+    alertType,
+    deliveryState,
+    destination: "project_owner",
+    correlationId,
+    payloadHash,
+  })));
   await recordActivity(actor, "operational_alert.delivery_attempted", "alert_delivery", undefined, {
     ...metadata,
     alertType,
@@ -246,9 +262,86 @@ export async function recordMarketObservation(actor: Actor, input: Omit<typeof m
   return id;
 }
 
+export async function listRateLocks() {
+  const db = await requireDb();
+  return db.select().from(rateLocks).orderBy(desc(rateLocks.createdAt)).limit(100);
+}
+
+export async function createRateLock(actor: Actor, input: { marketObservationId: number; paymentOrderId?: number; corridor: "NIGERIA_NGN" | "KENYA_KES" | "SOUTH_AFRICA_ZAR"; expiresAt: Date }) {
+  const db = await requireDb();
+  if (input.expiresAt <= new Date()) throw new Error("A rate lock expiry must be in the future");
+  const observation = await db.select().from(marketObservations).where(eq(marketObservations.id, input.marketObservationId)).limit(1);
+  if (!observation[0]) throw new Error("A source-stamped market observation is required for a rate lock");
+  if (input.paymentOrderId) {
+    const payment = await db.select({ id: paymentOrders.id }).from(paymentOrders).where(eq(paymentOrders.id, input.paymentOrderId)).limit(1);
+    if (!payment[0]) throw new Error("The linked payment order does not exist");
+  }
+  const result = await db.insert(rateLocks).values({
+    marketObservationId: input.marketObservationId,
+    paymentOrderId: input.paymentOrderId,
+    corridor: input.corridor,
+    baseAsset: observation[0].baseAsset,
+    quoteAsset: observation[0].quoteAsset,
+    lockedRate: observation[0].rate,
+    expiresAt: input.expiresAt,
+    createdBy: actor.openId,
+  });
+  const id = Number(result[0].insertId);
+  await recordActivity(actor, "rate_lock.created", "rate_lock", String(id), { marketObservationId: input.marketObservationId, paymentOrderId: input.paymentOrderId, corridor: input.corridor });
+  return id;
+}
+
+export async function cancelRateLock(actor: Actor, rateLockId: number) {
+  const db = await requireDb();
+  const lock = await db.select().from(rateLocks).where(eq(rateLocks.id, rateLockId)).limit(1);
+  if (!lock[0]) throw new Error("The rate lock does not exist");
+  if (lock[0].status !== "locked") throw new Error("Only an active rate lock can be cancelled");
+  await db.update(rateLocks).set({ status: "cancelled" }).where(eq(rateLocks.id, rateLockId));
+  await recordActivity(actor, "rate_lock.cancelled", "rate_lock", String(rateLockId), { priorStatus: lock[0].status });
+  return { id: rateLockId, status: "cancelled" as const };
+}
+
+export async function expireRateLocks(actor: Actor, now = new Date()) {
+  const db = await requireDb();
+  const result = await db.update(rateLocks).set({ status: "expired" }).where(and(eq(rateLocks.status, "locked"), lte(rateLocks.expiresAt, now)));
+  const expired = Number(result[0].affectedRows ?? 0);
+  await recordActivity(actor, "rate_lock.expiry_evaluated", "rate_lock", undefined, { expired, evaluatedAt: now.toISOString() });
+  return { expired };
+}
+
 export async function listPaymentOrders() {
   const db = await requireDb();
   return db.select().from(paymentOrders).orderBy(desc(paymentOrders.createdAt)).limit(100);
+}
+
+export async function listPaymentLegs(paymentOrderId?: number) {
+  const db = await requireDb();
+  if (paymentOrderId) return db.select().from(paymentLegs).where(eq(paymentLegs.paymentOrderId, paymentOrderId)).orderBy(paymentLegs.sequenceNumber);
+  return db.select().from(paymentLegs).orderBy(desc(paymentLegs.createdAt)).limit(100);
+}
+
+export async function transitionPaymentLeg(actor: Actor, input: { paymentLegId: number; status: "blocked" | "cancelled" }) {
+  const db = await requireDb();
+  const leg = await db.select().from(paymentLegs).where(eq(paymentLegs.id, input.paymentLegId)).limit(1);
+  if (!leg[0]) throw new Error("The payment leg does not exist");
+  if (leg[0].status === "completed" || leg[0].status === "cancelled") throw new Error("A finalised payment leg cannot be changed");
+  await db.update(paymentLegs).set({ status: input.status }).where(eq(paymentLegs.id, input.paymentLegId));
+  await recordActivity(actor, "payment_leg.transitioned", "payment_leg", String(input.paymentLegId), { priorStatus: leg[0].status, status: input.status });
+  return { id: input.paymentLegId, status: input.status };
+}
+
+export async function createPaymentLeg(actor: Actor, input: { paymentOrderId: number; sequenceNumber: number; legKind: "collection" | "fx" | "stablecoin_settlement" | "payout" | "reversal"; counterpartyId?: number }) {
+  const db = await requireDb();
+  const payment = await db.select({ id: paymentOrders.id }).from(paymentOrders).where(eq(paymentOrders.id, input.paymentOrderId)).limit(1);
+  if (!payment[0]) throw new Error("The payment order does not exist");
+  if (input.counterpartyId) {
+    const counterparty = await db.select({ id: counterparties.id }).from(counterparties).where(eq(counterparties.id, input.counterpartyId)).limit(1);
+    if (!counterparty[0]) throw new Error("The selected counterparty does not exist");
+  }
+  const result = await db.insert(paymentLegs).values({ ...input, status: "draft" });
+  const id = Number(result[0].insertId);
+  await recordActivity(actor, "payment_leg.created", "payment_leg", String(id), { paymentOrderId: input.paymentOrderId, sequenceNumber: input.sequenceNumber, legKind: input.legKind });
+  return id;
 }
 
 export async function createPaymentOrder(actor: Actor, input: Omit<typeof paymentOrders.$inferInsert, "id" | "createdAt" | "updatedAt" | "createdBy" | "status" | "policyDecisionReference" | "providerFinalityReference">) {
@@ -288,6 +381,62 @@ export async function createComplianceCase(actor: Actor, input: Omit<typeof comp
 export async function listRegulatoryReports() {
   const db = await requireDb();
   return db.select().from(regulatoryReports).orderBy(desc(regulatoryReports.periodEnd)).limit(100);
+}
+
+export async function listRegulatoryDeadlines() {
+  const db = await requireDb();
+  return db.select().from(regulatoryDeadlines).orderBy(regulatoryDeadlines.dueAt).limit(100);
+}
+
+export async function createRegulatoryDeadline(actor: Actor, input: Omit<typeof regulatoryDeadlines.$inferInsert, "id" | "createdAt" | "createdBy" | "status" | "lastRemindedAt">) {
+  const db = await requireDb();
+  const result = await db.insert(regulatoryDeadlines).values({ ...input, createdBy: actor.openId, status: "open" });
+  const id = Number(result[0].insertId);
+  await recordActivity(actor, "regulatory_deadline.created", "regulatory_deadline", String(id), { regulator: input.regulator, corridor: input.corridor, dueAt: input.dueAt.toISOString() });
+  return id;
+}
+
+export async function evaluateRegulatoryDeadlineAlerts(actor: Actor, now = new Date()) {
+  const db = await requireDb();
+  const horizon = new Date(now.getTime() + 72 * 60 * 60 * 1000);
+  const deadlines = await db.select().from(regulatoryDeadlines).where(eq(regulatoryDeadlines.status, "open"));
+  let reminded = 0;
+  for (const deadline of deadlines) {
+    const dueAt = new Date(deadline.dueAt);
+    const alreadyRemindedToday = deadline.lastRemindedAt && new Date(deadline.lastRemindedAt).toDateString() === now.toDateString();
+    if (dueAt > horizon || alreadyRemindedToday) continue;
+    await notifyForAlertPolicies(actor, "regulatory_deadline", deadline.corridor, `UmojaFlowOS ${deadline.regulator} reporting deadline`, `${deadline.title} is due at ${dueAt.toISOString()}. Review the source evidence and report-pack status before the deadline.`, { deadlineId: deadline.id, regulator: deadline.regulator, dueAt: dueAt.toISOString() });
+    await db.update(regulatoryDeadlines).set({ lastRemindedAt: now }).where(eq(regulatoryDeadlines.id, deadline.id));
+    reminded += 1;
+  }
+  await recordActivity(actor, "regulatory_deadline.evaluated", "regulatory_deadline", undefined, { evaluated: deadlines.length, reminded, horizon: horizon.toISOString() });
+  return { evaluated: deadlines.length, reminded };
+}
+
+export async function getScheduledJobByTaskUid(taskUid: string) {
+  const db = await requireDb();
+  return (await db.select().from(scheduledJobs).where(eq(scheduledJobs.scheduleCronTaskUid, taskUid)).limit(1))[0];
+}
+
+export async function createRegulatoryDeadlineReminderJob(actor: Actor, input: { taskUid: string; cronExpression: string }) {
+  const db = await requireDb();
+  const existing = await db.select({ id: scheduledJobs.id }).from(scheduledJobs).where(eq(scheduledJobs.purpose, "regulatory_deadline_reminders")).limit(1);
+  if (existing[0]) throw new Error("The regulatory deadline reminder job already exists");
+  const result = await db.insert(scheduledJobs).values({
+    purpose: "regulatory_deadline_reminders",
+    scheduleCronTaskUid: input.taskUid,
+    cronExpression: input.cronExpression,
+    enabled: true,
+    createdBy: actor.openId,
+  });
+  const id = Number(result[0].insertId);
+  await recordActivity(actor, "scheduled_job.created", "scheduled_job", String(id), { purpose: "regulatory_deadline_reminders", taskUid: input.taskUid, cronExpression: input.cronExpression });
+  return id;
+}
+
+export async function markScheduledJobExecuted(taskUid: string, executedAt = new Date()) {
+  const db = await requireDb();
+  await db.update(scheduledJobs).set({ lastExecutedAt: executedAt }).where(eq(scheduledJobs.scheduleCronTaskUid, taskUid));
 }
 
 export async function createRegulatoryReport(actor: Actor, input: Omit<typeof regulatoryReports.$inferInsert, "id" | "createdAt" | "createdBy" | "status" | "artifactUrl" | "evidenceManifest" | "submissionReference">) {

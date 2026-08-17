@@ -18,4 +18,9 @@
 - [x] Produce a requirements traceability matrix, source-validation record, architecture record, visual validation record, and implementation handover materials.
 - [ ] Integrate the Go, Rust, and Python service artifacts with the TypeScript control plane through documented versioned contracts and provider-safe activation gates.
 - [ ] Exercise every implemented control-plane form workflow through the interface and record end-to-end validation evidence without creating fictitious operational records.
-- [ ] Produce an explicit implementation handover covering deployed components, activation gates, validation results, non-activated integrations, and operator next steps.
+- [x] Produce an explicit implementation handover covering deployed components, activation gates, validation results, non-activated integrations, and operator next steps.
+- [ ] Complete source-derived rate-lock and payment-leg workflows, including expiry, cancellation, and immutable control evidence.
+- [ ] Complete CBN, CBK, and SARB regulatory-deadline workflows with scheduled, idempotent reminder evaluation and delivery evidence.
+- [ ] Expose rate locks, payment legs, regulatory deadlines, and reminder controls through the operator console with role-specific actions.
+- [ ] Integrate provider-independent Go payment-engine, Rust risk/ledger, and Python report-validation contracts into the TypeScript control plane.
+- [ ] Add contract, unit, RBAC, and non-provider workflow tests for the completed multi-language service boundaries.
