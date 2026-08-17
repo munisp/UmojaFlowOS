@@ -19,7 +19,9 @@ fn south_africa_travel_rule_incompleteness_blocks_execution() {
     input.travel_rule_complete = false;
     let result = evaluate(&input);
     assert_eq!(result.decision, Decision::Block);
-    assert!(result.reason_codes.contains(&"TRAVEL_RULE_INCOMPLETE"));
+    assert!(result
+        .reason_codes
+        .contains(&"TRAVEL_RULE_INCOMPLETE".to_string()));
 }
 
 #[test]
