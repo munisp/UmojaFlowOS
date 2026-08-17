@@ -156,6 +156,29 @@ export async function createCounterpartyAuthorization(actor: Actor, input: Omit<
   return id;
 }
 
+export async function listCounterpartyAuthorizations() {
+  const db = await requireDb();
+  return db
+    .select({ authorization: counterpartyAuthorizations, counterpartyName: counterparties.legalName })
+    .from(counterpartyAuthorizations)
+    .innerJoin(counterparties, eq(counterpartyAuthorizations.counterpartyId, counterparties.id))
+    .orderBy(desc(counterpartyAuthorizations.createdAt));
+}
+
+export async function transitionCounterpartyAuthorization(actor: Actor, input: { authorizationId: number; status: "pending_review" | "verified" | "expired" | "suspended" | "rejected" }) {
+  const db = await requireDb();
+  const authorization = await db.select().from(counterpartyAuthorizations).where(eq(counterpartyAuthorizations.id, input.authorizationId)).limit(1);
+  if (!authorization[0]) throw new Error("The counterparty authorisation does not exist");
+  const isVerified = input.status === "verified";
+  await db.update(counterpartyAuthorizations).set({
+    status: input.status,
+    verifiedBy: isVerified ? actor.openId : authorization[0].verifiedBy,
+    verifiedAt: isVerified ? new Date() : authorization[0].verifiedAt,
+  }).where(eq(counterpartyAuthorizations.id, input.authorizationId));
+  await recordActivity(actor, "counterparty.authorization_transitioned", "counterparty_authorization", String(input.authorizationId), { priorStatus: authorization[0].status, status: input.status, counterpartyId: authorization[0].counterpartyId });
+  return { id: input.authorizationId, status: input.status };
+}
+
 export async function listIntegrations() {
   const db = await requireDb();
   return db

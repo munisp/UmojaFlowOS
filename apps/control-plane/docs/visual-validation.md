@@ -19,3 +19,7 @@ The payment-orchestration module was reviewed after payment-leg controls were ad
 ## 2026-08-17 regulatory-deadline and alert review
 
 The CBN, CBK, and SARB reporting module displayed separate report and deadline actions with a readable source-honest deadline register. The alert module displayed policy creation and a protected evaluation action without claiming a scheduled job is active before deployment. Both action panels remained legible at the desktop viewport and their empty states did not introduce regulatory, payment, or notification data.
+
+## 2026-08-17 counterparty licence-evidence review
+
+The counterparty registry was reviewed after adding separate licence-evidence controls. The administrator view presented independent counterparty and licence actions, a counterparty register, and an authorisation-evidence register. The layout remained legible at the desktop viewport, and both empty states accurately represented the absence of persisted operational data rather than fabricated provider or licence records.

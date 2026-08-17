@@ -15,6 +15,7 @@ export const umojaFlowRouter = router({
 
   registry: router({
     list: auditorProcedure.query(() => db.listCounterparties()),
+    listAuthorizations: auditorProcedure.query(() => db.listCounterpartyAuthorizations()),
     create: adminProcedure
       .input(z.object({
         legalName: z.string().trim().min(2).max(255),
@@ -34,6 +35,9 @@ export const umojaFlowRouter = router({
         status: z.enum(["pending_review", "verified", "expired", "suspended", "rejected"]).default("pending_review"),
       }))
       .mutation(({ ctx, input }) => db.createCounterpartyAuthorization(actorOf(ctx.user), input)),
+    transitionAuthorization: adminProcedure
+      .input(z.object({ authorizationId: z.number().int().positive(), status: z.enum(["pending_review", "verified", "expired", "suspended", "rejected"]) }))
+      .mutation(({ ctx, input }) => db.transitionCounterpartyAuthorization(actorOf(ctx.user), input)),
   }),
 
   integrations: router({

@@ -22,5 +22,12 @@
 - [ ] Complete source-derived rate-lock and payment-leg workflows, including expiry, cancellation, and immutable control evidence.
 - [ ] Complete CBN, CBK, and SARB regulatory-deadline workflows with scheduled, idempotent reminder evaluation and delivery evidence.
 - [ ] Expose rate locks, payment legs, regulatory deadlines, and reminder controls through the operator console with role-specific actions.
+- [ ] Add frontend role-aware rendering so only treasury users see rate-lock and payment-leg actions, only compliance users see deadline creation, only administrators see reminder evaluation controls, and auditors remain read-only.
+- [ ] Add visible access-state validation proving the operator console hides or disables unauthorised actions for each operational role.
+- [ ] Hide all payment shortcut controls for unauthorised roles so auditors do not see customer, beneficiary, payment, or payment-leg creation affordances.
+- [ ] Add role-specific console rendering tests or documented interaction evidence for administrator, compliance officer, treasury operator, and auditor views.
+- [ ] Expose counterparty licence authorisation evidence and lifecycle management in the administrator registry console.
+- [ ] Implement administrator-only counterparty licence lifecycle transitions for pending review, verified, expired, suspended, and rejected states with immutable activity evidence.
+- [ ] Add registry tests proving authorisation lifecycle updates are administrator-only, persisted, and visible in the administrator console.
 - [ ] Integrate provider-independent Go payment-engine, Rust risk/ledger, and Python report-validation contracts into the TypeScript control plane.
 - [ ] Add contract, unit, RBAC, and non-provider workflow tests for the completed multi-language service boundaries.

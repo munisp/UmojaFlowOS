@@ -49,4 +49,9 @@ describe("UmojaFlowOS role boundaries", () => {
     const caller = appRouter.createCaller(auditorContext());
     await expect(caller.umoja.payments.transitionLeg({ paymentLegId: 1, status: "blocked" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
+
+  it("prevents an auditor from changing a counterparty licence lifecycle", async () => {
+    const caller = appRouter.createCaller(auditorContext());
+    await expect(caller.umoja.registry.transitionAuthorization({ authorizationId: 1, status: "verified" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 });
