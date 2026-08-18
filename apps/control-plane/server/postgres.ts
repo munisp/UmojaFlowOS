@@ -223,6 +223,14 @@ export async function listPostgresRegulatoryDeadlines() {
   }
 }
 
+export async function listPostgresLiquidityPositions() {
+  const client = await getPool().connect();
+  try {
+    const { rows } = await client.query<{ id: string; corridor: string; currency: string; accountKind: string; availableAmount: string; reservedAmount: string; reconciledAt: Date }>("SELECT id, corridor, currency, account_kind AS \"accountKind\", available_amount::text AS \"availableAmount\", reserved_amount::text AS \"reservedAmount\", reconciled_at AS \"reconciledAt\" FROM liquidity_positions ORDER BY reconciled_at DESC, created_at DESC");
+    return rows;
+  } finally { client.release(); }
+}
+
 export async function listPostgresNotificationDeliveries() {
   const client = await getPool().connect();
   try {
