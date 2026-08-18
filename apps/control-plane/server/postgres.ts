@@ -151,6 +151,31 @@ export async function createPostgresCounterpartyAuthorization(
   }
 }
 
+export async function transitionPostgresCounterpartyAuthorization(
+  actor: { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" },
+  input: { authorizationId: string; status: "pending_review" | "verified" | "expired" | "suspended" | "rejected" },
+) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const current = await client.query<{ status: string }>("SELECT status FROM counterparty_authorizations WHERE id=$1 FOR UPDATE", [input.authorizationId]);
+    const record = current.rows[0];
+    if (!record) throw new Error("counterparty authorization was not found");
+    const allowed: Record<string, string[]> = {
+      pending_review: ["verified", "rejected", "suspended"],
+      verified: ["expired", "suspended"],
+      suspended: ["pending_review", "rejected"],
+      expired: ["pending_review"],
+      rejected: ["pending_review"],
+    };
+    if (!allowed[record.status]?.includes(input.status)) throw new Error("invalid counterparty authorization lifecycle transition");
+    await client.query("UPDATE counterparty_authorizations SET status=$1, verified_by=CASE WHEN $1='verified' THEN $2 ELSE verified_by END, verified_at=CASE WHEN $1='verified' THEN now() ELSE verified_at END WHERE id=$3", [input.status, actor.openId, input.authorizationId]);
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "counterparty_authorization.transitioned", "counterparty_authorization", input.authorizationId, JSON.stringify({ from: record.status, to: input.status })]);
+    await client.query("COMMIT");
+    return { id: input.authorizationId, status: input.status };
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
 export async function listPostgresKycDocuments() {
   const client = await getPool().connect();
   try {
