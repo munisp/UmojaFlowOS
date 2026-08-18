@@ -14,6 +14,7 @@ rust-check:
 
 python-check:
 	PYTHONPATH=services/reporting-analytics/src python3 -m unittest discover -s services/reporting-analytics/tests -v
+	PYTHONPATH=services/document-intelligence/src python3 -m pytest -q services/document-intelligence/tests
 
 typescript-check:
 	cd apps/control-plane && pnpm install --frozen-lockfile && pnpm check && pnpm test
