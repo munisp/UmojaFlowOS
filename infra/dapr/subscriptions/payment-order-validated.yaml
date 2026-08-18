@@ -1,0 +1,12 @@
+apiVersion: dapr.io/v2alpha1
+kind: Subscription
+metadata:
+  name: payment-order-validated-v1
+  namespace: umojaflowos
+spec:
+  pubsubname: kafka
+  topic: payment.events
+  routes:
+    default: /events/payment-order-validated
+scopes:
+  - ledger-gateway
