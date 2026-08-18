@@ -1,4 +1,6 @@
 import { Pool } from "pg";
+import { createHash } from "node:crypto";
+import { storageCreateUploadUrl, storageGetSignedUrl } from "./storage";
 
 const localDevelopmentConfig = {
   host: "/var/run/postgresql",
@@ -34,7 +36,7 @@ export async function getPostgresReadiness() {
 }
 
 const canonicalTables = [
-  "activity_events", "alert_policies", "beneficiaries", "compliance_cases", "corridor_policies", "counterparties", "counterparty_authorizations", "customers", "document_analysis_evidence", "document_analysis_jobs", "integration_connections", "kyc_documents", "legal_entities", "liquidity_positions", "market_observations", "notification_deliveries", "payment_legs", "payment_orders", "policy_decisions", "rate_locks", "regulatory_deadlines", "regulatory_reports", "sar_str_filings", "scheduled_jobs", "user_role_assignments", "verification_consents", "verification_reviewer_decisions",
+  "activity_events", "alert_policies", "beneficiaries", "compliance_cases", "corridor_policies", "counterparties", "counterparty_authorizations", "customers", "document_analysis_evidence", "document_analysis_jobs", "integration_connections", "kyc_documents", "kyc_document_upload_intents", "legal_entities", "liquidity_positions", "market_observations", "notification_deliveries", "payment_legs", "payment_orders", "policy_decisions", "rate_locks", "regulatory_deadlines", "regulatory_reports", "sar_str_filings", "scheduled_jobs", "user_role_assignments", "verification_consents", "verification_reviewer_decisions",
 ] as const;
 
 export async function getPostgresCutoverReadiness() {
@@ -69,6 +71,11 @@ export async function listPostgresCounterparties() {
   } finally {
     client.release();
   }
+}
+
+export async function listPostgresCustomers() {
+  const { rows } = await getPool().query<{ id: string; legalName: string; kycStatus: string; createdAt: Date }>("SELECT id, legal_name AS \"legalName\", kyc_status AS \"kycStatus\", created_at AS \"createdAt\" FROM customers ORDER BY created_at DESC LIMIT 200");
+  return rows;
 }
 
 export async function createPostgresCounterparty(
@@ -218,6 +225,52 @@ export async function updatePostgresKycDocumentReview(actor: Actor, input: { doc
     await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "kyc_document.review_transitioned", "kyc_document", input.documentId, JSON.stringify({ from: document.reviewStatus, to: input.reviewStatus, reviewNoteLength: input.reviewNote.trim().length, documentBytesPersisted: false })]);
     await client.query("COMMIT");
     return { id: input.documentId, reviewStatus: input.reviewStatus };
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
+export async function createPostgresKycDocumentUploadIntent(actor: Actor, input: { customerId: string; documentType: "registration_certificate" | "identity_document" | "proof_of_address" | "beneficial_ownership" | "source_of_funds" | "other"; originalFilename: string; mimeType: "application/pdf" | "image/jpeg" | "image/png" | "image/webp" | "image/tiff"; sizeBytes: number; contentSha256: string }) {
+  const customer = await getPool().query<{ id: string }>("SELECT id FROM customers WHERE id=$1", [input.customerId]);
+  if (!customer.rows[0]) throw new Error("KYC upload requires an existing canonical customer record");
+  const safeFilename = input.originalFilename.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 180) || "document";
+  const { key, uploadUrl } = await storageCreateUploadUrl(`kyc-document-intake/${input.customerId}/${safeFilename}`, input.mimeType);
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ id: string }>("INSERT INTO kyc_document_upload_intents (customer_id, document_type, original_filename, mime_type, size_bytes, content_sha256, storage_key, uploaded_by, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id", [input.customerId, input.documentType, input.originalFilename, input.mimeType, input.sizeBytes, input.contentSha256, key, actor.openId, expiresAt]);
+    const intent = rows[0];
+    if (!intent) throw new Error("KYC document upload intent insert did not return a record");
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "kyc_document.upload_intent_created", "kyc_document_upload_intent", intent.id, JSON.stringify({ customerId: input.customerId, documentType: input.documentType, mimeType: input.mimeType, sizeBytes: input.sizeBytes, contentSha256: input.contentSha256, storageKey: key, expiresAt: expiresAt.toISOString(), documentBytesPersisted: false })]);
+    await client.query("COMMIT");
+    return { id: intent.id, storageKey: key, uploadUrl, expiresAt };
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
+export async function finalizePostgresKycDocumentUpload(actor: Actor, uploadIntentId: string) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const intentQuery = await client.query<{ customerId: string; documentType: string; originalFilename: string; mimeType: string; sizeBytes: string; contentSha256: string; storageKey: string; uploadedBy: string; expiresAt: Date; finalizedAt: Date | null }>("SELECT customer_id AS \"customerId\", document_type AS \"documentType\", original_filename AS \"originalFilename\", mime_type AS \"mimeType\", size_bytes::text AS \"sizeBytes\", content_sha256 AS \"contentSha256\", storage_key AS \"storageKey\", uploaded_by AS \"uploadedBy\", expires_at AS \"expiresAt\", finalized_at AS \"finalizedAt\" FROM kyc_document_upload_intents WHERE id=$1 FOR UPDATE", [uploadIntentId]);
+    const intent = intentQuery.rows[0];
+    if (!intent) throw new Error("KYC upload intent was not found");
+    if (intent.uploadedBy !== actor.openId) throw new Error("only the originating compliance operator may finalize this KYC upload");
+    if (intent.finalizedAt) throw new Error("KYC upload intent has already been finalized");
+    if (intent.expiresAt <= new Date()) throw new Error("KYC upload intent expired before verification");
+    const signedUrl = await storageGetSignedUrl(intent.storageKey);
+    const objectResponse = await fetch(signedUrl);
+    if (!objectResponse.ok) throw new Error("uploaded KYC document is unavailable from secured storage");
+    const contentType = objectResponse.headers.get("content-type")?.split(";")[0];
+    const bytes = Buffer.from(await objectResponse.arrayBuffer());
+    if (contentType !== intent.mimeType || bytes.byteLength !== Number(intent.sizeBytes)) throw new Error("uploaded KYC document metadata does not match its declared secure-upload intent");
+    const actualSha256 = createHash("sha256").update(bytes).digest("hex");
+    if (actualSha256 !== intent.contentSha256) throw new Error("uploaded KYC document checksum does not match its declared secure-upload intent");
+    const { rows } = await client.query<{ id: string; reviewStatus: string }>("INSERT INTO kyc_documents (customer_id, document_type, storage_key, storage_url, original_filename, mime_type, size_bytes, uploaded_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, review_status AS \"reviewStatus\"", [intent.customerId, intent.documentType, intent.storageKey, `/manus-storage/${intent.storageKey}`, intent.originalFilename, intent.mimeType, Number(intent.sizeBytes), actor.openId]);
+    const document = rows[0];
+    if (!document) throw new Error("KYC document metadata insert did not return a record");
+    await client.query("UPDATE kyc_document_upload_intents SET finalized_at=now() WHERE id=$1", [uploadIntentId]);
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "kyc_document.upload_verified_and_recorded", "kyc_document", document.id, JSON.stringify({ uploadIntentId, customerId: intent.customerId, documentType: intent.documentType, storageKey: intent.storageKey, sizeBytes: Number(intent.sizeBytes), contentSha256: intent.contentSha256, documentBytesPersisted: false })]);
+    await client.query("COMMIT");
+    return document;
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
 }
 

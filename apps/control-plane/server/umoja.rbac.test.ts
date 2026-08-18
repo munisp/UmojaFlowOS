@@ -82,4 +82,21 @@ describe("UmojaFlowOS role boundaries", () => {
       reviewNote: "Manual review initiated.",
     })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
+
+  it("prevents an auditor from initiating a direct-to-S3 KYC document upload", async () => {
+    const caller = appRouter.createCaller(auditorContext());
+    await expect(caller.postgres.createKycDocumentUploadIntent({
+      customerId: "00000000-0000-4000-8000-000000000004",
+      documentType: "identity_document",
+      originalFilename: "authorised-evidence.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 1024,
+      contentSha256: "a".repeat(64),
+    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("prevents an auditor from finalizing a direct-to-S3 KYC document upload", async () => {
+    const caller = appRouter.createCaller(auditorContext());
+    await expect(caller.postgres.finalizeKycDocumentUpload({ uploadIntentId: "00000000-0000-4000-8000-000000000005" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 });

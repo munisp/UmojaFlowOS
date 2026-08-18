@@ -3,7 +3,7 @@ DECLARE
   expected_tables TEXT[] := ARRAY[
     'activity_events', 'alert_policies', 'beneficiaries', 'compliance_cases',
     'corridor_policies', 'counterparties', 'counterparty_authorizations',
-    'customers', 'integration_connections', 'kyc_documents', 'legal_entities',
+    'customers', 'integration_connections', 'kyc_documents', 'kyc_document_upload_intents', 'legal_entities',
     'liquidity_positions', 'market_observations', 'notification_deliveries',
     'payment_legs', 'payment_orders', 'policy_decisions', 'rate_locks',
     'regulatory_deadlines', 'regulatory_reports', 'sar_str_filings',
@@ -15,6 +15,9 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'kyc_documents' AND column_name = 'storage_key') THEN
     RAISE EXCEPTION 'kyc_documents must retain object-storage references, not bytes';
+  END IF;
+  IF to_regclass('public.kyc_document_upload_intents') IS NULL THEN
+    RAISE EXCEPTION 'KYC document upload-intent metadata table is missing';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'sar_str_filings' AND column_name = 'submission_reference') THEN
     RAISE EXCEPTION 'sar_str_filings must distinguish workflow state from verified submission evidence';
