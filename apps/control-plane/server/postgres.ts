@@ -202,6 +202,46 @@ export async function listPostgresSarStrFilings() {
   }
 }
 
+export async function listPostgresRegulatoryDeadlines() {
+  const client = await getPool().connect();
+  try {
+    const { rows } = await client.query<{
+      id: string;
+      regulator: string;
+      corridor: string;
+      title: string;
+      dueAt: Date;
+      sourceReference: string;
+      status: string;
+      lastRemindedAt: Date | null;
+      createdBy: string;
+      createdAt: Date;
+    }>("SELECT id, regulator, corridor, title, due_at AS \"dueAt\", source_reference AS \"sourceReference\", status, last_reminded_at AS \"lastRemindedAt\", created_by AS \"createdBy\", created_at AS \"createdAt\" FROM regulatory_deadlines ORDER BY due_at ASC");
+    return rows;
+  } finally {
+    client.release();
+  }
+}
+
+export async function listPostgresNotificationDeliveries() {
+  const client = await getPool().connect();
+  try {
+    const { rows } = await client.query<{
+      id: string;
+      alertPolicyId: string | null;
+      alertType: string;
+      deliveryState: string;
+      destination: string;
+      correlationId: string;
+      payloadHash: string;
+      createdAt: Date;
+    }>("SELECT id, alert_policy_id AS \"alertPolicyId\", alert_type AS \"alertType\", delivery_state AS \"deliveryState\", destination, correlation_id AS \"correlationId\", payload_hash AS \"payloadHash\", created_at AS \"createdAt\" FROM notification_deliveries ORDER BY created_at DESC");
+    return rows;
+  } finally {
+    client.release();
+  }
+}
+
 export async function closePostgresPool() {
   if (pool) {
     await pool.end();
