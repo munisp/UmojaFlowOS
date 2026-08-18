@@ -4,6 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, auditorProcedure, complianceProcedure, publicProcedure, router } from "./_core/trpc";
 import { createPostgresCounterparty, createPostgresCounterpartyAuthorization, createPostgresDocumentAnalysisJob, createPostgresReviewerDecision, createPostgresVerificationConsent, getPostgresCutoverReadiness, getPostgresReadiness, listPostgresCounterparties, listPostgresCounterpartyAuthorizations, listPostgresDocumentAnalysisJobs, listPostgresKycDocuments, listPostgresNotificationDeliveries, listPostgresRegulatoryDeadlines, listPostgresSarStrFilings, persistPostgresDocumentAnalysisEvidence } from "./postgres";
 import { umojaFlowRouter } from "./routers/umojaflowos";
+import { parseNonExecutableComplianceEvent } from "./contracts/events";
 import { z } from "zod";
 
 export const appRouter = router({
@@ -46,9 +47,12 @@ export const appRouter = router({
       validFrom: z.coerce.date(),
       validTo: z.coerce.date().optional(),
       status: z.enum(["pending_review", "verified", "expired", "suspended", "rejected"]).default("pending_review"),
-    })).mutation(({ ctx, input }) => createPostgresCounterpartyAuthorization({ openId: ctx.user.openId, role: ctx.user.role }, input)),
-  }),
-  umoja: umojaFlowRouter,
+	    })).mutation(({ ctx, input }) => createPostgresCounterpartyAuthorization({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+	  }),
+	  contracts: router({
+	    parseCompliancePolicyDecision: complianceProcedure.input(z.unknown()).mutation(({ input }) => parseNonExecutableComplianceEvent(input)),
+	  }),
+	  umoja: umojaFlowRouter,
 });
 
 export type AppRouter = typeof appRouter;
