@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from umojaflowos_document_intelligence.contracts import AnalysisDisposition, AnalysisRequest, CaseKind, DocumentType, EngineProvenance, EvidenceSignal, OllamaVisualAssessment
 from umojaflowos_document_intelligence.pad import PadEvidenceError, build_review_only_pad_evidence
+from umojaflowos_document_intelligence.deepfake import DeepfakeEvidenceError, build_review_only_deepfake_evidence
 
 
 def test_analysis_request_requires_a_hash_matched_document_contract() -> None:
@@ -82,3 +83,44 @@ def test_pad_evidence_rejects_non_identity_imagery_and_untrusted_signal_provenan
     authorized_request = request.model_copy(update={"document_type": DocumentType.IDENTITY_DOCUMENT})
     with pytest.raises(PadEvidenceError):
         build_review_only_pad_evidence(authorized_request, [EvidenceSignal(code="capture_anomaly", severity="low", rationale="Untrusted signal must be rejected.", provenance="ollama_vlm")], engine)
+
+
+def test_deepfake_evidence_is_review_only_for_authorised_identity_imagery() -> None:
+    request = AnalysisRequest(
+        case_kind=CaseKind.KYC,
+        document_type=DocumentType.IDENTITY_DOCUMENT,
+        consent_reference="consent-reference-789",
+        source_uri="https://storage.example.invalid/identity",
+        source_sha256="c" * 64,
+        mime_type="image/jpeg",
+        filename="authorised-identity.jpg",
+        submitted_at=datetime.now(UTC),
+    )
+    result = build_review_only_deepfake_evidence(
+        request,
+        [EvidenceSignal(code="synthetic_texture", severity="high", rationale="Specialised model signal requires reviewer examination.", provenance="specialized_deepfake")],
+        EngineProvenance(engine="specialized-deepfake", version="v1", model_digest="sha256:approved"),
+    )
+    assert result.disposition is AnalysisDisposition.REVIEW_REQUIRED
+    assert result.review_required is True
+    assert "No identity approval" in result.limitations[1]
+
+
+def test_deepfake_evidence_rejects_non_identity_imagery_and_untrusted_provenance() -> None:
+    request = AnalysisRequest(
+        case_kind=CaseKind.KYB,
+        document_type=DocumentType.REGISTRATION_CERTIFICATE,
+        consent_reference="consent-reference-987",
+        source_uri="https://storage.example.invalid/registration",
+        source_sha256="d" * 64,
+        mime_type="image/png",
+        filename="registration.png",
+        submitted_at=datetime.now(UTC),
+    )
+    engine = EngineProvenance(engine="specialized-deepfake", version="v1")
+    with pytest.raises(DeepfakeEvidenceError):
+        build_review_only_deepfake_evidence(request, [EvidenceSignal(code="synthetic_texture", severity="medium", rationale="Must not accept non-identity imagery.", provenance="specialized_deepfake")], engine)
+
+    authorized_request = request.model_copy(update={"document_type": DocumentType.SELFIE_OR_CAPTURE})
+    with pytest.raises(DeepfakeEvidenceError):
+        build_review_only_deepfake_evidence(authorized_request, [EvidenceSignal(code="synthetic_texture", severity="medium", rationale="Untrusted provenance must be rejected.", provenance="ollama_vlm")], engine)

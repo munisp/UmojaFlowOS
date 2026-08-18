@@ -58,7 +58,7 @@ class EvidenceSignal(BaseModel):
     code: str = Field(pattern=r"^[a-z0-9_]{3,80}$")
     severity: Literal["informational", "low", "medium", "high"]
     rationale: str = Field(min_length=1, max_length=1200)
-    provenance: Literal["ocr", "docling", "ollama_vlm", "image_integrity", "specialized_pad"]
+    provenance: Literal["ocr", "docling", "ollama_vlm", "image_integrity", "specialized_pad", "specialized_deepfake"]
 
 
 class EngineProvenance(BaseModel):
