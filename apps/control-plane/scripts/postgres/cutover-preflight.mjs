@@ -33,6 +33,7 @@ try {
   const [sourceCustomers] = await source.query("SELECT id, legalName, registrationIdentifier, kycStatus, createdAt FROM customers ORDER BY id");
   const [sourceBeneficiaries] = await source.query("SELECT id, customerId, legalName, countryCode, bankOrWalletReference, screeningState, createdAt FROM beneficiaries ORDER BY id");
   const [sourcePaymentOrders] = await source.query("SELECT id, idempotencyKey, customerId, beneficiaryId, corridor, sourceCurrency, sourceAmount, targetCurrency, targetAmount, status, policyDecisionReference, providerFinalityReference, createdBy, createdAt, updatedAt FROM paymentOrders ORDER BY id");
+  const [sourcePaymentLegs] = await source.query("SELECT id, paymentOrderId, sequenceNumber, legKind, counterpartyId, status, providerInstructionReference, providerFinalityReference FROM paymentLegs ORDER BY id");
   const mappedUsers = mapRoles(sourceUsers);
   const counterparties = sourceCounterparties.map(row => ({ id: deterministicUuid("counterparties", row.id), legalName: row.legalName, counterpartyType: row.counterpartyType, jurisdiction: row.jurisdiction, createdAt: asIso(row.createdAt) })).sort((a, b) => a.id.localeCompare(b.id));
   const unsupportedCounterparty = counterparties.find(record => !supportedCounterpartyTypes.has(record.counterpartyType));
@@ -46,7 +47,8 @@ try {
     if (row.policyDecisionReference) throw new Error(`Cutover blocked: payment order ${row.id} has a legacy policyDecisionReference with no approved canonical policy-decision mapping`);
     return { id: deterministicUuid("paymentOrders", row.id), idempotencyKey: row.idempotencyKey, customerId: deterministicUuid("customers", row.customerId), beneficiaryId: deterministicUuid("beneficiaries", row.beneficiaryId), corridor: row.corridor, sourceCurrency: row.sourceCurrency, sourceAmount: String(row.sourceAmount), targetCurrency: row.targetCurrency, targetAmount: row.targetAmount === null ? null : String(row.targetAmount), status: row.status, providerFinalityReference: row.providerFinalityReference ?? null, createdBy: row.createdBy, createdAt: asIso(row.createdAt), updatedAt: asIso(row.updatedAt) };
   }).sort((a, b) => a.id.localeCompare(b.id));
-  const sourceSnapshotSha256 = checksum({ userRoles: mappedUsers, businessTableCounts: sourceCounts, counterparties, counterpartyAuthorizations, integrationConnections, customers, beneficiaries, paymentOrders });
+  const paymentLegs = sourcePaymentLegs.map(row => ({ id: deterministicUuid("paymentLegs", row.id), paymentOrderId: deterministicUuid("paymentOrders", row.paymentOrderId), sequenceNumber: row.sequenceNumber, legKind: row.legKind, counterpartyId: row.counterpartyId === null ? null : deterministicUuid("counterparties", row.counterpartyId), status: row.status, providerInstructionReference: row.providerInstructionReference ?? null, providerFinalityReference: row.providerFinalityReference ?? null })).sort((a, b) => a.id.localeCompare(b.id));
+  const sourceSnapshotSha256 = checksum({ userRoles: mappedUsers, businessTableCounts: sourceCounts, counterparties, counterpartyAuthorizations, integrationConnections, customers, beneficiaries, paymentOrders, paymentLegs });
   const { rows: targetTables } = await target.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public'");
   const requiredTargetTables = ["counterparties", "customers", "payment_orders", "payment_legs", "compliance_cases", "regulatory_reports", "activity_events"];
   const missingTargetTables = requiredTargetTables.filter(name => !targetTables.some(row => row.tablename === name));
