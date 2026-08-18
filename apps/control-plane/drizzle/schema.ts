@@ -153,6 +153,27 @@ export const beneficiaries = mysqlTable(
   table => [uniqueIndex("beneficiary_identity_idx").on(table.customerId, table.legalName, table.bankOrWalletReference)],
 );
 
+export const kycDocuments = mysqlTable(
+  "kycDocuments",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    customerId: int("customerId").notNull(),
+    documentType: mysqlEnum("documentType", ["registration_certificate", "identity_document", "proof_of_address", "beneficial_ownership", "source_of_funds", "other"]).notNull(),
+    storageKey: varchar("storageKey", { length: 1024 }).notNull(),
+    storageUrl: varchar("storageUrl", { length: 2048 }).notNull(),
+    originalFilename: varchar("originalFilename", { length: 512 }).notNull(),
+    mimeType: varchar("mimeType", { length: 255 }).notNull(),
+    sizeBytes: int("sizeBytes").notNull(),
+    reviewStatus: mysqlEnum("reviewStatus", ["submitted", "under_review", "approved", "rejected", "expired"]).default("submitted").notNull(),
+    reviewNote: text("reviewNote"),
+    reviewedBy: varchar("reviewedBy", { length: 64 }),
+    reviewedAt: timestamp("reviewedAt"),
+    uploadedBy: varchar("uploadedBy", { length: 64 }).notNull(),
+    uploadedAt: timestamp("uploadedAt").defaultNow().notNull(),
+  },
+  table => [index("kyc_document_customer_idx").on(table.customerId, table.reviewStatus, table.uploadedAt)],
+);
+
 export const liquidityPositions = mysqlTable(
   "liquidityPositions",
   {
@@ -261,6 +282,24 @@ export const complianceCases = mysqlTable(
     closedAt: timestamp("closedAt"),
   },
   table => [index("compliance_case_status_idx").on(table.status, table.severity, table.openedAt)],
+);
+
+export const sarStrFilings = mysqlTable(
+  "sarStrFilings",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    complianceCaseId: int("complianceCaseId").notNull(),
+    corridor: mysqlEnum("corridor", ["NIGERIA_NGN", "KENYA_KES", "SOUTH_AFRICA_ZAR"]).notNull(),
+    filingType: mysqlEnum("filingType", ["sar", "str"]).notNull(),
+    filingAuthority: varchar("filingAuthority", { length: 255 }).notNull(),
+    sourceReference: varchar("sourceReference", { length: 2048 }).notNull(),
+    status: mysqlEnum("status", ["draft", "under_review", "approved_for_submission", "pending_submission", "submitted", "submission_unavailable", "rejected"]).default("draft").notNull(),
+    submissionReference: varchar("submissionReference", { length: 512 }),
+    createdBy: varchar("createdBy", { length: 64 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [index("sar_str_filing_idx").on(table.corridor, table.status, table.createdAt)],
 );
 
 export const regulatoryReports = mysqlTable(

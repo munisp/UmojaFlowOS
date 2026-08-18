@@ -29,5 +29,14 @@
 - [ ] Expose counterparty licence authorisation evidence and lifecycle management in the administrator registry console.
 - [ ] Implement administrator-only counterparty licence lifecycle transitions for pending review, verified, expired, suspended, and rejected states with immutable activity evidence.
 - [ ] Add registry tests proving authorisation lifecycle updates are administrator-only, persisted, and visible in the administrator console.
+- [ ] Implement customer KYC document evidence, review lifecycle, and compliance-officer controls without storing document bytes in the database.
+- [ ] Implement SAR/STR filing records and compliance-officer workflow transitions without representing a regulator submission as completed before a verified channel reference exists.
+- [ ] Freeze the managed MySQL/TiDB schema as transitional only and prevent any additional canonical data-model changes on it.
+- [x] Define and implement the canonical PostgreSQL control-plane schema, including data types, constraints, indexes, audit evidence, and provider activation gates.
+- [ ] Create a data-preserving MySQL-to-PostgreSQL migration plan and executable migration tooling with validation checks.
+- [ ] Port the TypeScript control plane from MySQL-specific Drizzle access to PostgreSQL and validate every implemented workflow against PostgreSQL.
+- [ ] Align the Go payment engine, Rust risk and ledger services, and Python reporting service with the PostgreSQL-first deployment and contract strategy.
+- [x] Install a localhost-only PostgreSQL development instance and create the canonical UmojaFlowOS development database and least-privilege application role.
+- [x] Apply and validate canonical PostgreSQL migrations locally without transferring any fabricated or provider-derived records.
 - [ ] Integrate provider-independent Go payment-engine, Rust risk/ledger, and Python report-validation contracts into the TypeScript control plane.
 - [ ] Add contract, unit, RBAC, and non-provider workflow tests for the completed multi-language service boundaries.
