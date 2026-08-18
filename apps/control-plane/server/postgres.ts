@@ -151,6 +151,35 @@ export async function createPostgresCounterpartyAuthorization(
   }
 }
 
+export async function listPostgresKycDocuments() {
+  const client = await getPool().connect();
+  try {
+    const { rows } = await client.query<{
+      id: string;
+      customerId: string;
+      customerLegalName: string;
+      documentType: string;
+      storageKey: string;
+      storageUrl: string;
+      originalFilename: string;
+      mimeType: string;
+      sizeBytes: string;
+      reviewStatus: string;
+      reviewNote: string | null;
+      reviewedBy: string | null;
+      reviewedAt: Date | null;
+      uploadedBy: string;
+      uploadedAt: Date;
+    }>(`SELECT document.id, document.customer_id AS "customerId", customer.legal_name AS "customerLegalName", document.document_type AS "documentType", document.storage_key AS "storageKey", document.storage_url AS "storageUrl", document.original_filename AS "originalFilename", document.mime_type AS "mimeType", document.size_bytes::text AS "sizeBytes", document.review_status AS "reviewStatus", document.review_note AS "reviewNote", document.reviewed_by AS "reviewedBy", document.reviewed_at AS "reviewedAt", document.uploaded_by AS "uploadedBy", document.uploaded_at AS "uploadedAt"
+       FROM kyc_documents document
+       JOIN customers customer ON customer.id = document.customer_id
+       ORDER BY document.uploaded_at DESC`);
+    return rows;
+  } finally {
+    client.release();
+  }
+}
+
 export async function closePostgresPool() {
   if (pool) {
     await pool.end();
