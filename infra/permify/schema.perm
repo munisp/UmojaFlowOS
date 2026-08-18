@@ -1,0 +1,33 @@
+entity user {}
+
+entity organization {
+  relation admin @user
+  relation compliance_officer @user
+  relation treasury_operator @user
+  relation auditor @user
+}
+
+entity payment_order {
+  relation organization @organization
+
+  permission view = organization.admin or organization.compliance_officer or organization.treasury_operator or organization.auditor
+  permission approve_compliance = organization.compliance_officer
+  permission manage_treasury = organization.treasury_operator
+  permission administer = organization.admin
+}
+
+entity regulatory_report {
+  relation organization @organization
+
+  permission view = organization.admin or organization.compliance_officer or organization.auditor
+  permission transition = organization.compliance_officer
+  permission administer = organization.admin
+}
+
+entity counterparty_risk_assessment {
+  relation organization @organization
+
+  permission view = organization.admin or organization.compliance_officer or organization.auditor
+  permission assess = organization.compliance_officer
+  permission escalate = organization.admin
+}
