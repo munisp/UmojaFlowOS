@@ -6,7 +6,8 @@ This FastAPI service processes consented KYC and KYB documents with PaddleOCR, D
 
 Deploy this service on a private runtime with sufficient model resources, isolated object storage access, and a private Ollama endpoint. Do not deploy it in the WebDev 1 vCPU / 512 MB container. Set `OLLAMA_BASE_URL` and pin `OLLAMA_VISION_MODEL=qwen3-vl:8b` plus the verified model digest in deployment configuration.
 
+For loopback-only development, load `config/local-ollama.env` before starting the service. It pins the verified local `qwen3-vl:8b` digest and is intentionally limited to `127.0.0.1`; it is not production configuration and does not authorize document inference.
+
 ## API contract
 
 `POST /v1/analyse` accepts a binary upload and an `x-umojaflowos-analysis-request` JSON header. The declared document hash, MIME type, consent reference, and case/document class are validated before analysis. A missing engine or VLM yields review-required unavailable evidence rather than approval or rejection.
-
