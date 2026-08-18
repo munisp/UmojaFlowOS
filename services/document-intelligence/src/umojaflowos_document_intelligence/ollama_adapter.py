@@ -4,6 +4,7 @@ import base64
 import json
 import os
 from hashlib import sha256
+from urllib.parse import urlparse
 
 import httpx
 
@@ -20,12 +21,27 @@ class OllamaVisualAdapter:
     def __init__(self) -> None:
         self.base_url = os.environ.get("OLLAMA_BASE_URL", "").rstrip("/")
         self.model = os.environ.get("OLLAMA_VISION_MODEL", "qwen3-vl:8b")
+        self.allowed_digests = {digest.strip() for digest in os.environ.get("OLLAMA_ALLOWED_MODEL_DIGESTS", "").split(",") if digest.strip()}
         self.timeout_seconds = float(os.environ.get("OLLAMA_TIMEOUT_SECONDS", "45"))
         self.max_image_bytes = int(os.environ.get("OLLAMA_MAX_IMAGE_BYTES", str(8 * 1024 * 1024)))
 
-    async def assess(self, image_bytes: bytes, mime_type: str) -> tuple[OllamaVisualAssessment, str | None]:
+    def validate_activation_configuration(self) -> None:
         if not self.base_url:
             raise OllamaUnavailable("OLLAMA_BASE_URL is not configured")
+        parsed = urlparse(self.base_url)
+        hostname = (parsed.hostname or "").lower()
+        private_host = hostname in {"localhost", "127.0.0.1", "::1"} or hostname.endswith(".internal") or hostname.endswith(".local")
+        if parsed.scheme != "https" and not private_host:
+            raise OllamaUnavailable("Ollama endpoint must use HTTPS unless it is an explicitly private local hostname")
+        if not private_host:
+            raise OllamaUnavailable("Ollama endpoint must be a private or internal hostname; public ingress is prohibited")
+        if not self.model.startswith("qwen3-vl:"):
+            raise OllamaUnavailable("Only a pinned qwen3-vl model tag may be used for visual evidence")
+        if not self.allowed_digests:
+            raise OllamaUnavailable("OLLAMA_ALLOWED_MODEL_DIGESTS must contain the verified model digest")
+
+    async def assess(self, image_bytes: bytes, mime_type: str) -> tuple[OllamaVisualAssessment, str | None]:
+        self.validate_activation_configuration()
         if len(image_bytes) > self.max_image_bytes:
             raise OllamaUnavailable("image exceeds configured Ollama visual-analysis limit")
         if mime_type not in {"image/jpeg", "image/png", "image/webp", "image/tiff"}:
@@ -55,6 +71,8 @@ class OllamaVisualAdapter:
             raise OllamaUnavailable(f"Ollama request failed: {exc}") from exc
 
         digest = model_info.json().get("details", {}).get("digest") or model_info.json().get("digest")
+        if not isinstance(digest, str) or digest not in self.allowed_digests:
+            raise OllamaUnavailable("Ollama model digest is absent or not allowlisted")
         content = chat.json().get("message", {}).get("content")
         if not isinstance(content, str):
             raise OllamaUnavailable("Ollama returned no structured analysis content")
