@@ -50,6 +50,10 @@ for (currency, net_minor) in balances {
 }
 ```
 
+## Rust: confirmed-transfer projection reconciliation
+
+`services/ledger-gateway/src/lib.rs` now mirrors the Go projection control with `ConfirmedTransferFact`, `PostgresProjectionRecord`, and `verify_projection`. The verifier requires complete evidence on both sides and returns `Mismatch` when the transfer ID, correlation ID, currency, or minor-unit amount differs. Its Rust tests prove a matching confirmed fact reconciles and an amount mismatch fails.
+
 ## Rust: missing Kafka/Dapr input is fail-closed
 
 `services/risk-compliance-core/src/lib.rs` now evaluates transport availability before normal policy allow logic.
