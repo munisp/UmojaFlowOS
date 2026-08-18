@@ -11,6 +11,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:postgres": "POSTGRES_INTEGRATION_TEST=1 vitest run server/postgres.integration.test.ts",
+    "postgres:cutover-preflight": "node scripts/postgres/cutover-preflight.mjs",
     "db:push": "drizzle-kit generate && drizzle-kit migrate"
   },
   "dependencies": {
