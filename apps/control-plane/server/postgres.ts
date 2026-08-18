@@ -180,6 +180,28 @@ export async function listPostgresKycDocuments() {
   }
 }
 
+export async function listPostgresSarStrFilings() {
+  const client = await getPool().connect();
+  try {
+    const { rows } = await client.query<{
+      id: string;
+      complianceCaseId: string;
+      corridor: string;
+      filingType: string;
+      filingAuthority: string;
+      sourceReference: string;
+      status: string;
+      submissionReference: string | null;
+      createdBy: string;
+      createdAt: Date;
+      updatedAt: Date;
+    }>("SELECT id, compliance_case_id AS \"complianceCaseId\", corridor, filing_type AS \"filingType\", filing_authority AS \"filingAuthority\", source_reference AS \"sourceReference\", status, submission_reference AS \"submissionReference\", created_by AS \"createdBy\", created_at AS \"createdAt\", updated_at AS \"updatedAt\" FROM sar_str_filings ORDER BY created_at DESC");
+    return rows;
+  } finally {
+    client.release();
+  }
+}
+
 export async function closePostgresPool() {
   if (pool) {
     await pool.end();

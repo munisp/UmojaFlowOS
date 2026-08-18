@@ -2,7 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, auditorProcedure, publicProcedure, router } from "./_core/trpc";
-import { createPostgresCounterparty, createPostgresCounterpartyAuthorization, getPostgresCutoverReadiness, getPostgresReadiness, listPostgresCounterparties, listPostgresCounterpartyAuthorizations, listPostgresKycDocuments } from "./postgres";
+import { createPostgresCounterparty, createPostgresCounterpartyAuthorization, getPostgresCutoverReadiness, getPostgresReadiness, listPostgresCounterparties, listPostgresCounterpartyAuthorizations, listPostgresKycDocuments, listPostgresSarStrFilings } from "./postgres";
 import { umojaFlowRouter } from "./routers/umojaflowos";
 import { z } from "zod";
 
@@ -24,6 +24,7 @@ export const appRouter = router({
     counterparties: auditorProcedure.query(() => listPostgresCounterparties()),
     counterpartyAuthorizations: auditorProcedure.query(() => listPostgresCounterpartyAuthorizations()),
     kycDocuments: auditorProcedure.query(() => listPostgresKycDocuments()),
+    sarStrFilings: auditorProcedure.query(() => listPostgresSarStrFilings()),
     createCounterparty: adminProcedure.input(z.object({
       legalName: z.string().trim().min(2).max(255),
       counterpartyType: z.enum(["licensed_psp", "correspondent_bank", "stablecoin_provider", "fx_liquidity_provider", "custody_provider", "kyc_provider", "sanctions_provider", "chain_analytics_provider", "notification_provider", "regulatory_submission_provider"]),
