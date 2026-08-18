@@ -22,6 +22,12 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'rate_locks_status_expiry_idx') THEN
     RAISE EXCEPTION 'rate lock expiry index is missing';
   END IF;
+  IF to_regclass('public.verification_consents') IS NULL
+     OR to_regclass('public.document_analysis_jobs') IS NULL
+     OR to_regclass('public.document_analysis_evidence') IS NULL
+     OR to_regclass('public.verification_reviewer_decisions') IS NULL THEN
+    RAISE EXCEPTION 'canonical KYC/KYB document-intelligence tables are missing';
+  END IF;
 END $$;
 
 SELECT 'canonical PostgreSQL schema validated' AS validation_result;
