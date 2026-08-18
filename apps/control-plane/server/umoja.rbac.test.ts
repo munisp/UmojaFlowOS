@@ -99,4 +99,11 @@ describe("UmojaFlowOS role boundaries", () => {
     const caller = appRouter.createCaller(auditorContext());
     await expect(caller.postgres.finalizeKycDocumentUpload({ uploadIntentId: "00000000-0000-4000-8000-000000000005" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
+
+  it("prevents an auditor from parsing Go, Rust, or Python service contracts", async () => {
+    const caller = appRouter.createCaller(auditorContext());
+    await expect(caller.contracts.parseGoPaymentOrderValidated({})).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.contracts.parseRustPolicyDecision({})).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.contracts.parsePythonBronzeManifest({})).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 });
