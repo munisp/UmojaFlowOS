@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseNonExecutableComplianceEvent } from "./events";
+import { parseGoPaymentOrderValidatedEvent, parseNonExecutableComplianceEvent, parseRustNonExecutablePolicyDecisionEvent } from "./events";
 
 const envelope = {
   eventId: "event-1",
@@ -17,5 +17,14 @@ describe("control-plane event contract", () => {
 
   it("rejects an externally executable policy event", () => {
     expect(() => parseNonExecutableComplianceEvent({ envelope, orderId: "order-1", outcome: "ALLOW", policyVersion: "v1", externalExecutionAuthorized: true })).toThrow();
+  });
+
+  it("accepts the exact Go payment-order validated envelope without executing it", () => {
+    expect(parseGoPaymentOrderValidatedEvent({ event_id: "go-event-1", event_type: "umojaflowos.payment.order.validated.v1", schema_version: "v1", occurred_at: "2026-08-18T00:00:00.000Z", correlation_id: "order-1", payload: { order_id: "order-1" } }).event_type).toBe("umojaflowos.payment.order.validated.v1");
+  });
+
+  it("accepts the exact Rust policy event only when external execution remains false", () => {
+    expect(parseRustNonExecutablePolicyDecisionEvent({ event_id: "rust-event-1", correlation_id: "order-1", event_type: "umojaflowos.policy.decision.v1", schema_version: "v1", decision: "BLOCK", reason_codes: ["INPUT_UNAVAILABLE_EVENT_STREAM"], external_execution_authorized: false }).decision).toBe("BLOCK");
+    expect(() => parseRustNonExecutablePolicyDecisionEvent({ event_id: "rust-event-1", correlation_id: "order-1", event_type: "umojaflowos.policy.decision.v1", schema_version: "v1", decision: "ALLOW", reason_codes: [], external_execution_authorized: true })).toThrow();
   });
 });
