@@ -390,6 +390,19 @@ export async function escalatePostgresCounterpartyRiskAssessment(actor: Actor, i
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
 }
 
+export async function recordPostgresLiquidityPosition(actor: Actor, input: { corridor: "NIGERIA_NGN" | "KENYA_KES" | "SOUTH_AFRICA_ZAR"; currency: "NGN" | "KES" | "ZAR" | "USD" | "USDC" | "USDT"; accountKind: "liquidity_pool" | "nostro" | "vostro" | "prefunding" | "custody_wallet"; accountReference: string; availableAmount: string; reservedAmount: string; sourceReference: string; reconciledAt: Date }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ id: string }>("INSERT INTO liquidity_positions (corridor, currency, account_kind, account_reference, available_amount, reserved_amount, source_reference, reconciled_at, recorded_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id", [input.corridor, input.currency, input.accountKind, input.accountReference, input.availableAmount, input.reservedAmount, input.sourceReference, input.reconciledAt, actor.openId]);
+    const position = rows[0];
+    if (!position) throw new Error("PostgreSQL liquidity position insert did not return a record");
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "liquidity_position.recorded", "liquidity_position", position.id, JSON.stringify({ corridor: input.corridor, currency: input.currency, accountKind: input.accountKind, sourceReference: input.sourceReference, reconciledAt: input.reconciledAt })]);
+    await client.query("COMMIT");
+    return position;
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
 export async function closePostgresPool() {
   if (pool) {
     await pool.end();
