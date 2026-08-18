@@ -300,6 +300,28 @@ export async function listPostgresVerificationConsents() {
   }
 }
 
+export async function listPostgresDocumentAnalysisEvidence() {
+  const client = await getPool().connect();
+  try {
+    const { rows } = await client.query<{
+      id: string; analysisJobId: string; kind: string; disposition: string;
+      engineName: string; engineVersion: string; modelTag: string | null; modelDigest: string | null;
+      signals: unknown[]; limitations: string[]; createdAt: Date;
+    }>("SELECT id, analysis_job_id AS \"analysisJobId\", kind, disposition, engine_name AS \"engineName\", engine_version AS \"engineVersion\", model_tag AS \"modelTag\", model_digest AS \"modelDigest\", signals, limitations, created_at AS \"createdAt\" FROM document_analysis_evidence ORDER BY created_at DESC");
+    return rows;
+  } finally { client.release(); }
+}
+
+export async function listPostgresReviewerDecisions() {
+  const client = await getPool().connect();
+  try {
+    const { rows } = await client.query<{
+      id: string; analysisJobId: string; disposition: string; rationale: string; decidedBy: string; decidedAt: Date;
+    }>("SELECT id, analysis_job_id AS \"analysisJobId\", disposition, rationale, decided_by AS \"decidedBy\", decided_at AS \"decidedAt\" FROM verification_reviewer_decisions ORDER BY decided_at DESC");
+    return rows;
+  } finally { client.release(); }
+}
+
 type Actor = { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" };
 
 export async function createPostgresVerificationConsent(actor: Actor, input: { scope: "kyc" | "kyb"; subjectReference: string; consentVersion: string; purpose: string; grantedAt: Date; expiresAt?: Date }) {
