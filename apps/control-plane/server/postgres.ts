@@ -363,6 +363,33 @@ export async function transitionPostgresRegulatoryReport(actor: Actor, input: { 
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
 }
 
+export async function createPostgresCounterpartyRiskAssessment(actor: Actor, input: { counterpartyId: string; riskLevel: "low" | "medium" | "high" | "critical"; riskScore: number; riskFactors: unknown; evidenceManifest: unknown; assessedAt: Date; nextReviewAt: Date }) {
+  if (input.nextReviewAt <= input.assessedAt) throw new Error("counterparty risk next review must follow assessment time");
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ id: string; reviewStatus: string }>("INSERT INTO counterparty_risk_assessments (counterparty_id, risk_level, risk_score, risk_factors, evidence_manifest, assessed_at, next_review_at, assessed_by) VALUES ($1,$2,$3,$4::jsonb,$5::jsonb,$6,$7,$8) RETURNING id, review_status AS \"reviewStatus\"", [input.counterpartyId, input.riskLevel, input.riskScore, JSON.stringify(input.riskFactors), JSON.stringify(input.evidenceManifest), input.assessedAt, input.nextReviewAt, actor.openId]);
+    const assessment = rows[0];
+    if (!assessment) throw new Error("PostgreSQL counterparty risk assessment insert did not return a record");
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "counterparty_risk_assessment.created", "counterparty_risk_assessment", assessment.id, JSON.stringify({ counterpartyId: input.counterpartyId, riskLevel: input.riskLevel, riskScore: input.riskScore, nextReviewAt: input.nextReviewAt, reviewStatus: assessment.reviewStatus })]);
+    await client.query("COMMIT");
+    return assessment;
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
+export async function escalatePostgresCounterpartyRiskAssessment(actor: Actor, input: { assessmentId: string; escalationReason: string }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ id: string }>("UPDATE counterparty_risk_assessments SET review_status='escalated', escalation_reason=$1, escalated_by=$2, escalated_at=now() WHERE id=$3 AND review_status <> 'escalated' RETURNING id", [input.escalationReason, actor.openId, input.assessmentId]);
+    const assessment = rows[0];
+    if (!assessment) throw new Error("counterparty risk assessment was not found or already escalated");
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "counterparty_risk_assessment.escalated", "counterparty_risk_assessment", assessment.id, JSON.stringify({ escalationReason: input.escalationReason })]);
+    await client.query("COMMIT");
+    return assessment;
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
 export async function closePostgresPool() {
   if (pool) {
     await pool.end();
