@@ -2,14 +2,14 @@
 
 ## Scope and non-negotiable boundary
 
-PostgreSQL is UmojaFlowOS's canonical control-plane store. The legacy MySQL/TiDB schema is transitional only. The executable tooling migrates active user-role assignments only when the source contains no non-empty business tables. It **does not** transfer payments, balances, KYC documents, rates, screening results, cases, reports, or provider outcomes without a separately reviewed table mapping and destination reconciliation contract.
+PostgreSQL is UmojaFlowOS's canonical control-plane store. The legacy MySQL/TiDB schema is transitional only. The executable tooling has deterministic, reconciled mappings for active user-role assignments, counterparties, and customers. It **does not** transfer counterparty authorisations, beneficiaries, payments, balances, KYC documents, rates, screening results, cases, reports, or provider outcomes without a separately reviewed table mapping and destination reconciliation contract.
 
 | Cutover stage | Command | Required outcome | Fail-closed condition |
 |---|---|---|---|
 | Read-only preflight | `pnpm postgres:cutover-preflight` | Emits `sourceSnapshotSha256`, source table counts, mapped-role count, and target schema status | Invalid role, missing source URL, incomplete PostgreSQL schema |
 | Approval | Operator records the exact snapshot SHA-256 and accountable subject | Snapshot represents the approved source state | Any source change changes the snapshot hash |
 | Dry run | `MIGRATION_DRY_RUN=1 pnpm postgres:migrate-transition` | Computes source/destination role count and checksum without writes | Non-empty business tables; mismatched role mapping |
-| Apply | `MIGRATION_EXECUTION_APPROVED=1 MIGRATION_INITIATED_BY=<subject> MIGRATION_APPROVED_SOURCE_SNAPSHOT_SHA256=<hash> pnpm postgres:migrate-transition` | Writes only user-role assignments and immutable run/reconciliation evidence | Missing explicit approval, missing operator attribution, snapshot drift, checksum mismatch, or non-empty business tables |
+| Apply | `MIGRATION_EXECUTION_APPROVED=1 MIGRATION_INITIATED_BY=<subject> MIGRATION_APPROVED_SOURCE_SNAPSHOT_SHA256=<hash> pnpm postgres:migrate-transition` | Writes supported user-role, counterparty, and customer mappings plus immutable run/reconciliation evidence | Missing explicit approval, missing operator attribution, snapshot drift, checksum mismatch, unsupported table, or unsupported counterparty type |
 | Sign-off | Query `postgres_cutover_runs` and `postgres_cutover_table_reconciliations` | Run status is `verified`; each migrated table count and checksum agrees | Missing evidence, any mismatch, or unverified run |
 
 ## Deterministic identity and role mapping

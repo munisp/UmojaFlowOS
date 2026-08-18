@@ -1,6 +1,6 @@
 import mysql from "mysql2/promise";
 import pg from "pg";
-import { checksum, mapRoles } from "./cutover-lib.mjs";
+import { checksum, deterministicUuid, mapRoles } from "./cutover-lib.mjs";
 
 const sourceUrl = process.env.MYSQL_SOURCE_DATABASE_URL ?? process.env.DATABASE_URL;
 const targetUrl = process.env.POSTGRES_DATABASE_URL;
@@ -15,6 +15,8 @@ const target = targetUrl
 const businessTables = [
   "counterparties", "counterpartyAuthorizations", "customers", "beneficiaries", "paymentOrders", "paymentLegs", "liquidityPositions", "marketObservations", "complianceCases", "regulatoryReports", "regulatoryDeadlines", "alertPolicies", "activityEvents",
 ];
+const asIso = value => new Date(value).toISOString();
+const supportedCounterpartyTypes = new Set(["licensed_psp", "correspondent_bank", "stablecoin_provider", "fx_liquidity_provider", "custody_provider", "kyc_provider", "sanctions_provider", "chain_analytics_provider", "notification_provider", "regulatory_submission_provider"]);
 
 try {
   await target.connect();
@@ -25,8 +27,14 @@ try {
     sourceCounts[table] = Number(rows[0].count);
   }
   const [sourceUsers] = await source.query("SELECT openId, role FROM users ORDER BY openId");
+  const [sourceCounterparties] = await source.query("SELECT id, legalName, counterpartyType, jurisdiction, createdAt FROM counterparties ORDER BY id");
+  const [sourceCustomers] = await source.query("SELECT id, legalName, registrationIdentifier, kycStatus, createdAt FROM customers ORDER BY id");
   const mappedUsers = mapRoles(sourceUsers);
-  const sourceSnapshotSha256 = checksum({ userRoles: mappedUsers, businessTableCounts: sourceCounts });
+  const counterparties = sourceCounterparties.map(row => ({ id: deterministicUuid("counterparties", row.id), legalName: row.legalName, counterpartyType: row.counterpartyType, jurisdiction: row.jurisdiction, createdAt: asIso(row.createdAt) })).sort((a, b) => a.id.localeCompare(b.id));
+  const unsupportedCounterparty = counterparties.find(record => !supportedCounterpartyTypes.has(record.counterpartyType));
+  if (unsupportedCounterparty) throw new Error(`Cutover blocked: counterparty ${unsupportedCounterparty.id} has unsupported type '${unsupportedCounterparty.counterpartyType}'`);
+  const customers = sourceCustomers.map(row => ({ id: deterministicUuid("customers", row.id), legalName: row.legalName, registrationIdentifier: row.registrationIdentifier, kycStatus: row.kycStatus, createdAt: asIso(row.createdAt) })).sort((a, b) => a.id.localeCompare(b.id));
+  const sourceSnapshotSha256 = checksum({ userRoles: mappedUsers, businessTableCounts: sourceCounts, counterparties, customers });
   const { rows: targetTables } = await target.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public'");
   const requiredTargetTables = ["counterparties", "customers", "payment_orders", "payment_legs", "compliance_cases", "regulatory_reports", "activity_events"];
   const missingTargetTables = requiredTargetTables.filter(name => !targetTables.some(row => row.tablename === name));
