@@ -71,6 +71,33 @@ export async function listPostgresCounterparties() {
   }
 }
 
+export async function createPostgresCounterparty(
+  actor: { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" },
+  input: { legalName: string; counterpartyType: string; jurisdiction: string },
+) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{
+      id: string;
+      legalName: string;
+      counterpartyType: string;
+      jurisdiction: string;
+      createdAt: Date;
+    }>("INSERT INTO counterparties (legal_name, counterparty_type, jurisdiction) VALUES ($1, $2, $3) RETURNING id, legal_name AS \"legalName\", counterparty_type AS \"counterpartyType\", jurisdiction, created_at AS \"createdAt\"", [input.legalName, input.counterpartyType, input.jurisdiction]);
+    const counterparty = rows[0];
+    if (!counterparty) throw new Error("PostgreSQL counterparty insert did not return a record");
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1, $2, $3, $4, $5, $6::jsonb)", [actor.openId, actor.role, "counterparty.created", "counterparty", counterparty.id, JSON.stringify({ legalName: counterparty.legalName, counterpartyType: counterparty.counterpartyType, jurisdiction: counterparty.jurisdiction, source: "postgres-control-plane" })]);
+    await client.query("COMMIT");
+    return counterparty;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function listPostgresCounterpartyAuthorizations() {
   const client = await getPool().connect();
   try {
