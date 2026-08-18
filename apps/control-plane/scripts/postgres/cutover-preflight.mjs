@@ -30,6 +30,7 @@ try {
   const [sourceCounterparties] = await source.query("SELECT id, legalName, counterpartyType, jurisdiction, createdAt FROM counterparties ORDER BY id");
   const [sourceCounterpartyAuthorizations] = await source.query("SELECT id, counterpartyId, regulator, licenceReference, scopeDescription, evidenceUrl, validFrom, validTo, status, verifiedBy, verifiedAt FROM counterpartyAuthorizations ORDER BY id");
   const [sourceCustomers] = await source.query("SELECT id, legalName, registrationIdentifier, kycStatus, createdAt FROM customers ORDER BY id");
+  const [sourceBeneficiaries] = await source.query("SELECT id, customerId, legalName, countryCode, bankOrWalletReference, screeningState, createdAt FROM beneficiaries ORDER BY id");
   const mappedUsers = mapRoles(sourceUsers);
   const counterparties = sourceCounterparties.map(row => ({ id: deterministicUuid("counterparties", row.id), legalName: row.legalName, counterpartyType: row.counterpartyType, jurisdiction: row.jurisdiction, createdAt: asIso(row.createdAt) })).sort((a, b) => a.id.localeCompare(b.id));
   const unsupportedCounterparty = counterparties.find(record => !supportedCounterpartyTypes.has(record.counterpartyType));
@@ -37,7 +38,8 @@ try {
   const asDate = value => new Date(value).toISOString().slice(0, 10);
   const counterpartyAuthorizations = sourceCounterpartyAuthorizations.map(row => ({ id: deterministicUuid("counterpartyAuthorizations", row.id), counterpartyId: deterministicUuid("counterparties", row.counterpartyId), regulator: row.regulator, licenceReference: row.licenceReference, scopeDescription: row.scopeDescription, evidenceUri: row.evidenceUrl, validFrom: asDate(row.validFrom), validTo: row.validTo ? asDate(row.validTo) : null, status: row.status, verifiedBy: row.verifiedBy ?? null, verifiedAt: row.verifiedAt ? asIso(row.verifiedAt) : null })).sort((a, b) => a.id.localeCompare(b.id));
   const customers = sourceCustomers.map(row => ({ id: deterministicUuid("customers", row.id), legalName: row.legalName, registrationIdentifier: row.registrationIdentifier, kycStatus: row.kycStatus, createdAt: asIso(row.createdAt) })).sort((a, b) => a.id.localeCompare(b.id));
-  const sourceSnapshotSha256 = checksum({ userRoles: mappedUsers, businessTableCounts: sourceCounts, counterparties, counterpartyAuthorizations, customers });
+  const beneficiaries = sourceBeneficiaries.map(row => ({ id: deterministicUuid("beneficiaries", row.id), customerId: deterministicUuid("customers", row.customerId), legalName: row.legalName, countryCode: row.countryCode, bankOrWalletReference: row.bankOrWalletReference, screeningState: row.screeningState, createdAt: asIso(row.createdAt) })).sort((a, b) => a.id.localeCompare(b.id));
+  const sourceSnapshotSha256 = checksum({ userRoles: mappedUsers, businessTableCounts: sourceCounts, counterparties, counterpartyAuthorizations, customers, beneficiaries });
   const { rows: targetTables } = await target.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public'");
   const requiredTargetTables = ["counterparties", "customers", "payment_orders", "payment_legs", "compliance_cases", "regulatory_reports", "activity_events"];
   const missingTargetTables = requiredTargetTables.filter(name => !targetTables.some(row => row.tablename === name));
