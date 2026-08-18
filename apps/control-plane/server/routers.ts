@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { auditorProcedure } from "./_core/trpc";
-import { getPostgresCutoverReadiness, getPostgresReadiness } from "./postgres";
+import { getPostgresCutoverReadiness, getPostgresReadiness, listPostgresCounterparties } from "./postgres";
 import { umojaFlowRouter } from "./routers/umojaflowos";
 
 export const appRouter = router({
@@ -21,6 +21,7 @@ export const appRouter = router({
   postgres: router({
     readiness: auditorProcedure.query(() => getPostgresReadiness()),
     cutoverReadiness: auditorProcedure.query(() => getPostgresCutoverReadiness()),
+    counterparties: auditorProcedure.query(() => listPostgresCounterparties()),
   }),
   umoja: umojaFlowRouter,
 });

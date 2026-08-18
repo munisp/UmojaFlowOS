@@ -55,6 +55,22 @@ export async function getPostgresCutoverReadiness() {
   }
 }
 
+export async function listPostgresCounterparties() {
+  const client = await getPool().connect();
+  try {
+    const { rows } = await client.query<{
+      id: string;
+      legalName: string;
+      counterpartyType: string;
+      jurisdiction: string;
+      createdAt: Date;
+    }>("SELECT id, legal_name AS \"legalName\", counterparty_type AS \"counterpartyType\", jurisdiction, created_at AS \"createdAt\" FROM counterparties ORDER BY created_at DESC");
+    return rows;
+  } finally {
+    client.release();
+  }
+}
+
 export async function closePostgresPool() {
   if (pool) {
     await pool.end();
