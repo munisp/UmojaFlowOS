@@ -4,7 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, auditorProcedure, complianceProcedure, publicProcedure, router, treasuryProcedure } from "./_core/trpc";
 import { cancelPostgresRateLock, createPostgresComplianceCase, createPostgresCounterparty, createPostgresCounterpartyAuthorization, createPostgresCounterpartyRiskAssessment, createPostgresDocumentAnalysisJob, createPostgresKycDocumentUploadIntent, createPostgresRegulatoryReportDraft, createPostgresReviewerDecision, createPostgresSarStrFiling, createPostgresTreasuryRecommendation, createPostgresVerificationConsent, decidePostgresTreasuryRecommendation, escalatePostgresCounterpartyRiskAssessment, finalizePostgresKycDocumentUpload, getPostgresCutoverReadiness, getPostgresReadiness, listPostgresComplianceCases, listPostgresCounterparties, listPostgresCounterpartyAuthorizations, listPostgresCustomers, listPostgresDocumentAnalysisEvidence, listPostgresDocumentAnalysisJobs, listPostgresKycDocuments, listPostgresLiquidityPositions, listPostgresNotificationDeliveries, listPostgresRegulatoryDeadlines, listPostgresRegulatoryReports, listPostgresReviewerDecisions, listPostgresSarStrFilings, listPostgresVerificationConsents, persistPostgresDocumentAnalysisEvidence, recordPostgresLiquidityPosition, transitionPostgresCounterpartyAuthorization, transitionPostgresRegulatoryReport, transitionPostgresSarStrFiling, updatePostgresKycDocumentReview } from "./postgres";
 import { umojaFlowRouter } from "./routers/umojaflowos";
-import { parseNonExecutableComplianceEvent } from "./contracts/events";
+import { parseGoPaymentOrderValidatedEvent, parseNonExecutableComplianceEvent, parsePythonBronzeBatchManifest, parseRustNonExecutablePolicyDecisionEvent } from "./contracts/events";
 import { z } from "zod";
 
 export const appRouter = router({
@@ -73,6 +73,9 @@ export const appRouter = router({
   }),
 	  contracts: router({
 	    parseCompliancePolicyDecision: complianceProcedure.input(z.unknown()).mutation(({ input }) => parseNonExecutableComplianceEvent(input)),
+	    parseGoPaymentOrderValidated: complianceProcedure.input(z.unknown()).mutation(({ input }) => parseGoPaymentOrderValidatedEvent(input)),
+	    parseRustPolicyDecision: complianceProcedure.input(z.unknown()).mutation(({ input }) => parseRustNonExecutablePolicyDecisionEvent(input)),
+	    parsePythonBronzeManifest: complianceProcedure.input(z.unknown()).mutation(({ input }) => parsePythonBronzeBatchManifest(input)),
 	  }),
 	  umoja: umojaFlowRouter,
 });
