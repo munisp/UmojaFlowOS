@@ -43,4 +43,5 @@
 - [x] Apply and validate canonical PostgreSQL migrations locally without transferring any fabricated or provider-derived records.
 - [ ] Integrate provider-independent Go payment-engine, Rust risk/ledger, and Python report-validation contracts into the TypeScript control plane.
 - [ ] Add contract, unit, RBAC, and non-provider workflow tests for the completed multi-language service boundaries.
-- [ ] Surface the real PostgreSQL cutover-readiness state in the operator overview without presenting the local development instance as production.
+- [x] Surface the real PostgreSQL cutover-readiness state in the operator overview without presenting the local development instance as production.
+- [ ] Port the counterparty registry and licence-authorisation repository operations from MySQL/TiDB to canonical PostgreSQL UUID records with activity evidence.
