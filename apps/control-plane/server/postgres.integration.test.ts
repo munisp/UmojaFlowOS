@@ -12,7 +12,7 @@ describe.skipIf(!runIntegration)("local PostgreSQL canonical schema", () => {
     const readiness = await getPostgresReadiness();
     expect(readiness.connected).toBe(true);
     expect(readiness.database).toBe("umojaflowos_dev");
-    expect(readiness.tableCount).toBe(27);
+    expect(readiness.tableCount).toBe(31);
     expect(readiness.version).toContain("PostgreSQL");
   });
 
