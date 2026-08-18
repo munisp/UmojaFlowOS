@@ -6,7 +6,7 @@ DECLARE
     'customers', 'integration_connections', 'kyc_documents', 'kyc_document_upload_intents', 'legal_entities',
     'liquidity_positions', 'market_observations', 'notification_deliveries',
     'payment_legs', 'payment_orders', 'policy_decisions', 'rate_locks',
-    'regulatory_deadlines', 'regulatory_reports', 'sar_str_filings',
+    'postgres_cutover_runs', 'postgres_cutover_table_reconciliations', 'regulatory_deadlines', 'regulatory_reports', 'sar_str_filings',
     'scheduled_jobs', 'user_role_assignments'
   ];
 BEGIN
