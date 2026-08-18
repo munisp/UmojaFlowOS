@@ -7,10 +7,11 @@
     "dev": "NODE_ENV=development tsx watch server/_core/index.ts",
     "build": "vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
-    "check": "tsc --noEmit",
+    "check": "pnpm postgres:boundary && tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
     "test:postgres": "POSTGRES_INTEGRATION_TEST=1 vitest run server/postgres.integration.test.ts",
+    "postgres:boundary": "node scripts/postgres/validate-transitional-boundary.mjs",
     "postgres:cutover-preflight": "node scripts/postgres/cutover-preflight.mjs",
     "postgres:migrate-transition": "node scripts/postgres/migrate-transition.mjs",
     "db:push": "drizzle-kit generate && drizzle-kit migrate"

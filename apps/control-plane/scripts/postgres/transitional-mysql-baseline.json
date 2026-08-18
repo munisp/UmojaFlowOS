@@ -1,0 +1,9 @@
+{
+  "version": "2026-08-18",
+  "files": {
+    "drizzle/schema.ts": "f55ee14acb5781315563f6953dde1c8d280bdd42bf19b6cd5c8e6938d2974d7c",
+    "server/db.ts": "e3209a6f12b9cd19aaa6a4b5e6d89d87f64bf25e40ad9cb2df99ba0712d41c9d",
+    "server/routers/umojaflowos.ts": "9636bbdca9df074434ad0b9a90a55516d9120f247cc00e102f6c2242342a0818"
+  },
+  "migrationFiles": []
+}
