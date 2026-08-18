@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseGoPaymentOrderValidatedEvent, parseNonExecutableComplianceEvent, parseRustNonExecutablePolicyDecisionEvent } from "./events";
+import { parseGoPaymentOrderValidatedEvent, parseNonExecutableComplianceEvent, parsePythonBronzeBatchManifest, parseRustNonExecutablePolicyDecisionEvent } from "./events";
 
 const envelope = {
   eventId: "event-1",
@@ -26,5 +26,10 @@ describe("control-plane event contract", () => {
   it("accepts the exact Rust policy event only when external execution remains false", () => {
     expect(parseRustNonExecutablePolicyDecisionEvent({ event_id: "rust-event-1", correlation_id: "order-1", event_type: "umojaflowos.policy.decision.v1", schema_version: "v1", decision: "BLOCK", reason_codes: ["INPUT_UNAVAILABLE_EVENT_STREAM"], external_execution_authorized: false }).decision).toBe("BLOCK");
     expect(() => parseRustNonExecutablePolicyDecisionEvent({ event_id: "rust-event-1", correlation_id: "order-1", event_type: "umojaflowos.policy.decision.v1", schema_version: "v1", decision: "ALLOW", reason_codes: [], external_execution_authorized: true })).toThrow();
+  });
+
+  it("accepts the exact Python Bronze manifest and rejects an unverifiable checksum", () => {
+    expect(parsePythonBronzeBatchManifest({ dataset: "regulatory_reports", layer: "bronze", schema_version: "v1", record_count: 0, payload_sha256: "0".repeat(64) }).dataset).toBe("regulatory_reports");
+    expect(() => parsePythonBronzeBatchManifest({ dataset: "regulatory_reports", layer: "bronze", schema_version: "v1", record_count: 0, payload_sha256: "unverified" })).toThrow();
   });
 });

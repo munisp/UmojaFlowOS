@@ -52,3 +52,17 @@ export function parseGoPaymentOrderValidatedEvent(input: unknown): GoPaymentOrde
 export function parseRustNonExecutablePolicyDecisionEvent(input: unknown): RustPolicyDecisionEvent {
   return rustPolicyDecisionEventSchema.parse(input);
 }
+
+export const pythonBronzeBatchManifestSchema = z.object({
+  dataset: z.string().min(1),
+  layer: z.literal("bronze"),
+  schema_version: z.literal("v1"),
+  record_count: z.number().int().min(0),
+  payload_sha256: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+
+export type PythonBronzeBatchManifest = z.infer<typeof pythonBronzeBatchManifestSchema>;
+
+export function parsePythonBronzeBatchManifest(input: unknown): PythonBronzeBatchManifest {
+  return pythonBronzeBatchManifestSchema.parse(input);
+}
