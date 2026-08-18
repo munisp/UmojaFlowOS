@@ -4,6 +4,7 @@ import * as db from "../db";
 import { adminProcedure, auditorProcedure, complianceProcedure, router, treasuryProcedure } from "../_core/trpc";
 import { createHeartbeatJob } from "../_core/heartbeat";
 import { COOKIE_NAME } from "@shared/const";
+import { TRPCError } from "@trpc/server";
 
 const corridor = z.enum(["NIGERIA_NGN", "KENYA_KES", "SOUTH_AFRICA_ZAR"]);
 const currency = z.enum(["NGN", "KES", "ZAR", "USD", "USDC", "USDT"]);
@@ -107,13 +108,13 @@ export const umojaFlowRouter = router({
     listLegs: auditorProcedure.input(z.object({ paymentOrderId: z.number().int().positive().optional() }).optional()).query(({ input }) => db.listPaymentLegs(input?.paymentOrderId)),
     create: treasuryProcedure
       .input(z.object({ idempotencyKey: z.string().trim().min(16).max(255), customerId: z.number().int().positive(), beneficiaryId: z.number().int().positive(), corridor, sourceCurrency: currency, sourceAmount: decimal.refine(value => value !== "0", "Amount must be greater than zero"), targetCurrency: currency, targetAmount: decimal.optional() }).refine(value => value.sourceCurrency !== value.targetCurrency, "Source and target currencies must differ"))
-      .mutation(({ ctx, input }) => db.createPaymentOrder(actorOf(ctx.user), input)),
+      .mutation(() => { throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Transitional MySQL/TiDB payment drafting is disabled until the canonical PostgreSQL UUID workflow is implemented." }); }),
     createLeg: treasuryProcedure
       .input(z.object({ paymentOrderId: z.number().int().positive(), sequenceNumber: z.number().int().positive(), legKind: z.enum(["collection", "fx", "stablecoin_settlement", "payout", "reversal"]), counterpartyId: z.number().int().positive().optional() }))
-      .mutation(({ ctx, input }) => db.createPaymentLeg(actorOf(ctx.user), input)),
+      .mutation(() => { throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Transitional MySQL/TiDB payment-leg creation is disabled until the canonical PostgreSQL UUID workflow is implemented." }); }),
     transitionLeg: treasuryProcedure
       .input(z.object({ paymentLegId: z.number().int().positive(), status: z.enum(["blocked", "cancelled"]) }))
-      .mutation(({ ctx, input }) => db.transitionPaymentLeg(actorOf(ctx.user), input)),
+      .mutation(() => { throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Transitional MySQL/TiDB payment-leg transitions are disabled until the canonical PostgreSQL UUID workflow is implemented." }); }),
   }),
 
   compliance: router({

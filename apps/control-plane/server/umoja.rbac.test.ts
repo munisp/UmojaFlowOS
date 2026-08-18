@@ -20,6 +20,13 @@ function auditorContext(): TrpcContext {
   };
 }
 
+function adminContext(): TrpcContext {
+  return {
+    ...auditorContext(),
+    user: { ...auditorContext().user!, openId: "admin-user", role: "admin" },
+  };
+}
+
 describe("UmojaFlowOS role boundaries", () => {
   it("prevents an auditor from creating a counterparty", async () => {
     const caller = appRouter.createCaller(auditorContext());
@@ -48,6 +55,13 @@ describe("UmojaFlowOS role boundaries", () => {
   it("prevents an auditor from changing a payment-leg state", async () => {
     const caller = appRouter.createCaller(auditorContext());
     await expect(caller.umoja.payments.transitionLeg({ paymentLegId: 1, status: "blocked" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("fail-closes transitional payment drafts and payment-leg mutations for an otherwise authorized administrator", async () => {
+    const caller = appRouter.createCaller(adminContext());
+    await expect(caller.umoja.payments.create({ idempotencyKey: "source-backed-key-0001", customerId: 1, beneficiaryId: 1, corridor: "NIGERIA_NGN", sourceCurrency: "NGN", sourceAmount: "1.00", targetCurrency: "USD" })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    await expect(caller.umoja.payments.createLeg({ paymentOrderId: 1, sequenceNumber: 1, legKind: "collection" })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    await expect(caller.umoja.payments.transitionLeg({ paymentLegId: 1, status: "blocked" })).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
   });
 
   it("prevents an auditor from changing a counterparty licence lifecycle", async () => {

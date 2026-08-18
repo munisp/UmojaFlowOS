@@ -78,6 +78,35 @@ export async function listPostgresCustomers() {
   return rows;
 }
 
+export async function listPostgresBeneficiaries(customerId?: string) {
+  const { rows } = await getPool().query<{ id: string; customerId: string; legalName: string; countryCode: string; bankOrWalletReference: string; screeningState: string; createdAt: Date }>(`SELECT id, customer_id AS "customerId", legal_name AS "legalName", country_code AS "countryCode", bank_or_wallet_reference AS "bankOrWalletReference", screening_state AS "screeningState", created_at AS "createdAt" FROM beneficiaries ${customerId ? "WHERE customer_id=$1" : ""} ORDER BY created_at DESC LIMIT 200`, customerId ? [customerId] : []);
+  return rows;
+}
+
+export async function createPostgresCustomer(actor: Actor, input: { legalName: string; registrationIdentifier: string }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ id: string; legalName: string; registrationIdentifier: string; kycStatus: string; createdAt: Date }>(`INSERT INTO customers (legal_name, registration_identifier) VALUES ($1, $2) RETURNING id, legal_name AS "legalName", registration_identifier AS "registrationIdentifier", kyc_status AS "kycStatus", created_at AS "createdAt"`, [input.legalName, input.registrationIdentifier]);
+    const customer = rows[0]; if (!customer) throw new Error("PostgreSQL customer insert did not return a record");
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1, $2, $3, $4, $5, $6::jsonb)", [actor.openId, actor.role, "customer.created", "customer", customer.id, JSON.stringify({ legalName: customer.legalName, registrationIdentifier: customer.registrationIdentifier, source: "postgres-control-plane" })]);
+    await client.query("COMMIT"); return customer;
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
+export async function createPostgresBeneficiary(actor: Actor, input: { customerId: string; legalName: string; countryCode: string; bankOrWalletReference: string }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const customer = await client.query<{ id: string }>("SELECT id FROM customers WHERE id=$1 FOR KEY SHARE", [input.customerId]);
+    if (!customer.rows[0]) throw new Error("A canonical customer record is required before creating a beneficiary");
+    const { rows } = await client.query<{ id: string; customerId: string; legalName: string; countryCode: string; bankOrWalletReference: string; screeningState: string; createdAt: Date }>(`INSERT INTO beneficiaries (customer_id, legal_name, country_code, bank_or_wallet_reference) VALUES ($1, $2, $3, $4) RETURNING id, customer_id AS "customerId", legal_name AS "legalName", country_code AS "countryCode", bank_or_wallet_reference AS "bankOrWalletReference", screening_state AS "screeningState", created_at AS "createdAt"`, [input.customerId, input.legalName, input.countryCode, input.bankOrWalletReference]);
+    const beneficiary = rows[0]; if (!beneficiary) throw new Error("PostgreSQL beneficiary insert did not return a record");
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1, $2, $3, $4, $5, $6::jsonb)", [actor.openId, actor.role, "beneficiary.created", "beneficiary", beneficiary.id, JSON.stringify({ customerId: beneficiary.customerId, countryCode: beneficiary.countryCode, source: "postgres-control-plane" })]);
+    await client.query("COMMIT"); return beneficiary;
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
 export async function createPostgresCounterparty(
   actor: { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" },
   input: { legalName: string; counterpartyType: string; jurisdiction: string },
