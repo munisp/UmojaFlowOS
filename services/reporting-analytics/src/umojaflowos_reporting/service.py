@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from .reporting import ReportValidationError, build_evidence_manifest, validate_report_pack
 from .lakehouse import LakehouseContractError, build_bronze_manifest
+from .geospatial import GeospatialContractError, build_jurisdiction_aggregation
 
 
 class ReportPackRequest(BaseModel):
@@ -24,6 +25,14 @@ class LakehouseBatchRequest(BaseModel):
     dataset: str = Field(min_length=1, max_length=255)
     schema_version: str = Field(default="v1", min_length=1, max_length=64)
     records: list[dict[str, Any]]
+
+
+class GeospatialAggregationRequest(BaseModel):
+    jurisdiction: Literal["NG", "KE", "ZA"]
+    cohort_count: int = Field(ge=0)
+    h3_resolution: int = Field(ge=0, le=15)
+    metric_name: str = Field(min_length=1, max_length=255)
+    source_rows: list[dict[str, Any]]
 
 
 app = FastAPI(title="UmojaFlowOS Reporting Analytics", version="1.0.0")
@@ -51,4 +60,19 @@ def lakehouse_bronze_manifest(request: LakehouseBatchRequest) -> dict[str, Any]:
     try:
         return {"manifest": build_bronze_manifest(request.dataset, request.records, request.schema_version).__dict__, "storage": "disabled_without_governed_lakehouse"}
     except LakehouseContractError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/v1/geospatial/jurisdiction-aggregation")
+def geospatial_jurisdiction_aggregation(request: GeospatialAggregationRequest) -> dict[str, Any]:
+    try:
+        aggregation = build_jurisdiction_aggregation(
+            request.jurisdiction,
+            request.cohort_count,
+            request.h3_resolution,
+            request.metric_name,
+            request.source_rows,
+        )
+        return {"aggregation": aggregation.__dict__, "sedona_execution": "disabled_without_approved_spark_sedona_cluster", "geolibre_projection": "disabled_without_approved_aggregate_map_deployment"}
+    except GeospatialContractError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
