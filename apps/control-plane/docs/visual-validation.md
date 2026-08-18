@@ -27,3 +27,9 @@ The counterparty registry was reviewed after adding separate licence-evidence co
 ## 2026-08-18 PostgreSQL cutover-readiness review
 
 The overview displayed the live local PostgreSQL schema assessment as a separate activation-boundary item. The text correctly identified that 23 canonical tables were locally validated and explicitly stated that production deployment and service cutover remain separate gates. No production database, provider, payment, or submission capability was inferred from the local development result.
+
+## 2026-08-18 KYC and KYB document-free workflow review
+
+The compliance console was reviewed after adding the PostgreSQL-backed KYC and KYB evidence workflow. The layout presented a distinct authorised-document boundary, a reviewer-decision area, and a separate analysis-job ledger alongside existing compliance cases. Its zero state accurately states that no document, identity, business, or model result is manufactured in the absence of authorised material. The local Qwen3-VL development runtime is described as document-gated and evidence-only; the screen does not imply automated approval, rejection, or live provider activation.
+
+The completed review also confirmed separate panels for persisted analysis evidence and manual reviewer-decision history. Both render explicit zero states when no consent-backed evidence or human decision exists. This preserves the distinction among unavailable visual analysis, review-required evidence, and an attributable compliance-officer decision.

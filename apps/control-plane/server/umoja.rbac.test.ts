@@ -69,49 +69,35 @@ describe("UmojaFlowOS role boundaries", () => {
     await expect(caller.umoja.registry.transitionAuthorization({ authorizationId: 1, status: "verified" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("prevents an auditor from creating a SAR/STR filing", async () => {
+  it("prevents an auditor from escalating a PostgreSQL counterparty risk assessment", async () => {
     const caller = appRouter.createCaller(auditorContext());
-    await expect(caller.postgres.createSarStrFiling({
-      complianceCaseId: "00000000-0000-4000-8000-000000000001",
-      corridor: "SOUTH_AFRICA_ZAR",
-      filingType: "sar",
-      filingAuthority: "SARB",
-      sourceReference: "case-evidence-reference",
-    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.umoja.registry.escalatePostgresRiskAssessment({ assessmentId: "00000000-0000-4000-8000-000000000001", reason: "Independent administrator review is required." })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("prevents an auditor from transitioning a SAR/STR filing", async () => {
+  it("prevents an auditor from transitioning a PostgreSQL regulatory report", async () => {
     const caller = appRouter.createCaller(auditorContext());
-    await expect(caller.postgres.transitionSarStrFiling({
-      filingId: "00000000-0000-4000-8000-000000000002",
-      status: "under_review",
-    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.umoja.reporting.transitionPostgresReport({ reportId: "00000000-0000-4000-8000-000000000002", status: "under_review", statusReason: "Evidence package is ready for independent review." })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("prevents an auditor from changing a KYC document review state", async () => {
+  it("prevents an auditor from creating a canonical SAR/STR filing", async () => {
     const caller = appRouter.createCaller(auditorContext());
-    await expect(caller.postgres.updateKycDocumentReview({
-      documentId: "00000000-0000-4000-8000-000000000003",
-      reviewStatus: "under_review",
-      reviewNote: "Manual review initiated.",
-    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.postgres.createSarStrFiling({ complianceCaseId: "00000000-0000-4000-8000-000000000003", corridor: "SOUTH_AFRICA_ZAR", filingType: "sar", filingAuthority: "SARB", sourceReference: "case-evidence-reference" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("prevents an auditor from initiating a direct-to-S3 KYC document upload", async () => {
+  it("prevents an auditor from transitioning a canonical SAR/STR filing", async () => {
     const caller = appRouter.createCaller(auditorContext());
-    await expect(caller.postgres.createKycDocumentUploadIntent({
-      customerId: "00000000-0000-4000-8000-000000000004",
-      documentType: "identity_document",
-      originalFilename: "authorised-evidence.pdf",
-      mimeType: "application/pdf",
-      sizeBytes: 1024,
-      contentSha256: "a".repeat(64),
-    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.postgres.transitionSarStrFiling({ filingId: "00000000-0000-4000-8000-000000000004", status: "under_review" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
-  it("prevents an auditor from finalizing a direct-to-S3 KYC document upload", async () => {
+  it("prevents an auditor from changing a canonical KYC document review state", async () => {
     const caller = appRouter.createCaller(auditorContext());
-    await expect(caller.postgres.finalizeKycDocumentUpload({ uploadIntentId: "00000000-0000-4000-8000-000000000005" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.postgres.updateKycDocumentReview({ documentId: "00000000-0000-4000-8000-000000000005", reviewStatus: "under_review", reviewNote: "Manual review initiated." })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("allows an administrator through the treasury role boundary", async () => {
+    const caller = appRouter.createCaller(adminContext());
+    const outcome = await caller.umoja.markets.cancelRateLock({ rateLockId: 1 }).then(() => undefined).catch(error => error);
+    expect(outcome?.code).not.toBe("FORBIDDEN");
   });
 
   it("prevents an auditor from parsing Go, Rust, or Python service contracts", async () => {

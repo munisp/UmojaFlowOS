@@ -1,9 +1,12 @@
-.PHONY: check contracts-check go-check rust-check python-check typescript-check postgres-check
+.PHONY: check contracts-check infra-check go-check rust-check python-check typescript-check postgres-check
 
-check: contracts-check go-check rust-check python-check typescript-check
+check: contracts-check infra-check go-check rust-check python-check typescript-check
 
 contracts-check:
 	python3 contracts/scripts/validate_contracts.py
+
+infra-check:
+	python3 scripts/infra/validate_activation_contracts.py
 
 go-check:
 	cd services/payment-engine && go test ./...

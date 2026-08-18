@@ -43,5 +43,11 @@ function procedureForRoles(roles: OperatingRole[]) {
 
 export const adminProcedure = procedureForRoles(["admin"]);
 export const complianceProcedure = procedureForRoles(["admin", "compliance_officer"]);
+/**
+ * A SAR/STR filing is a personal regulatory attestation by a compliance
+ * officer, so administrator delegation is deliberately excluded here even
+ * though it is permitted for other compliance work.
+ */
+export const complianceOnlyProcedure = procedureForRoles(["compliance_officer"]);
 export const treasuryProcedure = procedureForRoles(["admin", "treasury_operator"]);
 export const auditorProcedure = procedureForRoles(["admin", "compliance_officer", "treasury_operator", "auditor"]);

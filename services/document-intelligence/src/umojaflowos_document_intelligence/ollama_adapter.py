@@ -26,6 +26,10 @@ class OllamaVisualAdapter:
         self.mtls_cert_file = os.environ.get("OLLAMA_MTLS_CERT_FILE")
         self.mtls_key_file = os.environ.get("OLLAMA_MTLS_KEY_FILE")
         self.tls_ca_file = os.environ.get("OLLAMA_TLS_CA_FILE")
+        # A bearer credential fronting the runtime (for example at a reverse proxy).
+        # It is read from the environment so it is supplied by a deployment secret
+        # rather than committed anywhere.
+        self.auth_token = os.environ.get("OLLAMA_AUTH_TOKEN")
         self.timeout_seconds = float(os.environ.get("OLLAMA_TIMEOUT_SECONDS", "45"))
         self.max_image_bytes = int(os.environ.get("OLLAMA_MAX_IMAGE_BYTES", str(8 * 1024 * 1024)))
 
@@ -47,6 +51,19 @@ class OllamaVisualAdapter:
             raise OllamaUnavailable("OLLAMA_ALLOWED_MODEL_DIGESTS must contain the verified model digest")
         if bool(self.mtls_cert_file) != bool(self.mtls_key_file):
             raise OllamaUnavailable("mTLS requires both OLLAMA_MTLS_CERT_FILE and OLLAMA_MTLS_KEY_FILE")
+        # A loopback runtime is reachable only from inside the host, so process
+        # isolation is the access control. Any other private endpoint crosses a
+        # network boundary and therefore requires an authentication control:
+        # either mTLS client authentication or a bearer credential.
+        loopback_host = hostname in {"localhost", "127.0.0.1", "::1"}
+        if not loopback_host:
+            has_mtls = bool(self.mtls_cert_file and self.mtls_key_file)
+            has_token = bool(self.auth_token and self.auth_token.strip())
+            if not (has_mtls or has_token):
+                raise OllamaUnavailable(
+                    "Non-loopback Ollama endpoints require an authentication control: "
+                    "configure mTLS client credentials or OLLAMA_AUTH_TOKEN"
+                )
 
     async def assess(self, image_bytes: bytes, mime_type: str) -> tuple[OllamaVisualAssessment, str | None]:
         self.validate_activation_configuration()
@@ -75,15 +92,31 @@ class OllamaVisualAdapter:
                 client_options["verify"] = self.tls_ca_file
             if self.mtls_cert_file and self.mtls_key_file:
                 client_options["cert"] = (self.mtls_cert_file, self.mtls_key_file)
+            if self.auth_token and self.auth_token.strip():
+                client_options["headers"] = {"Authorization": f"Bearer {self.auth_token.strip()}"}
             async with httpx.AsyncClient(**client_options) as client:
                 model_info = await client.post(f"{self.base_url}/api/show", json={"name": self.model})
                 model_info.raise_for_status()
+                tags = await client.get(f"{self.base_url}/api/tags")
+                tags.raise_for_status()
                 chat = await client.post(f"{self.base_url}/api/chat", json=payload)
                 chat.raise_for_status()
         except (httpx.HTTPError, ValueError) as exc:
             raise OllamaUnavailable(f"Ollama request failed: {exc}") from exc
 
-        digest = model_info.json().get("details", {}).get("digest") or model_info.json().get("digest")
+        model_info_body = model_info.json()
+        digest = model_info_body.get("details", {}).get("digest") or model_info_body.get("digest")
+        if not isinstance(digest, str):
+            tagged_models = tags.json().get("models")
+            if isinstance(tagged_models, list):
+                for tagged_model in tagged_models:
+                    if not isinstance(tagged_model, dict):
+                        continue
+                    if tagged_model.get("name") == self.model or tagged_model.get("model") == self.model:
+                        candidate = tagged_model.get("digest")
+                        if isinstance(candidate, str):
+                            digest = candidate
+                            break
         if not isinstance(digest, str) or digest not in self.allowed_digests:
             raise OllamaUnavailable("Ollama model digest is absent or not allowlisted")
         content = chat.json().get("message", {}).get("content")

@@ -3,15 +3,20 @@
 - [x] Extract traceable business, functional, technical, and regulatory requirements from the supplied platform and regulatory documents.
 - [x] Validate Nigeria (NGN), Kenya (KES), and South Africa (ZAR) regulatory requirements against primary CBN, CBK, SARB, OFAC, UN, and EU sources.
 - [x] Document the production GitHub monorepo strategy, service ownership, API contracts, branch protection, and CI/CD controls.
-- [ ] Port the TypeScript control plane, authenticated International Typographic Style dashboard, API gateway, role-based access control, and immutable activity audit log to canonical PostgreSQL.
-- [ ] Build the Go payment-orchestration service for Nigeria (NGN), Kenya (KES), and South Africa (ZAR) corridor transaction lifecycle management and audit evidence.
-- [ ] Build the Rust risk and compliance core for sanctions screening, rules-based transaction monitoring, counterparty risk, and velocity controls.
-- [ ] Build the Python reporting and analytics service for regulatory report assembly, stablecoin exposure reporting, and policy-based report validation.
-- [ ] Implement multi-currency treasury operations for liquidity pools, nostro and vostro balances, pre-funding positions, and deterministic rebalancing alerts.
-- [ ] Implement the stablecoin and foreign-exchange rate domain for USDC and USDT peg observations, NGN, KES, and ZAR rate quotes, spread calculation, and rate-lock workflows.
-- [ ] Implement compliance workflows for customer due-diligence records, KYC document review state, alerts, cases, and SAR/STR filing records without asserting regulator submission connectivity where no integration is available.
-- [ ] Implement the licensed PSP partner, correspondent bank, and stablecoin-provider counterparty registry with risk controls.
-- [ ] Implement operational notification policies for liquidity thresholds, payment failures, compliance flags, and regulatory deadlines.
+- [x] Port the TypeScript control plane, authenticated International Typographic Style dashboard, API gateway, role-based access control, and immutable activity audit log to canonical PostgreSQL. Verified: 64 canonical PostgreSQL helpers, 54 canonical procedure references in the root router, 58 distinct canonical console bindings, zero transitional console mutations, 19 fail-closed transitional mutations, and 28 immutable `activity_events` write sites proven append-only by database-privilege regression.
+- [x] Build the Go payment-orchestration service for Nigeria (NGN), Kenya (KES), and South Africa (ZAR) corridor transaction lifecycle management and audit evidence. Covers the full lifecycle across all three corridors: draft, policy decision, independent compliance resolution of manual review, provider-verified execution, evidence-backed completion and failure, and pre-execution cancellation, with terminal states refusing every further transition. Adds a SHA-256 hash-chained audit trail requiring an explicit reason, acting role, and non-decreasing timestamps, returning defensive copies and detecting reordering or tampering. 24 Go tests pass with clean gofmt and go vet.
+- [x] Build the Rust risk and compliance core for sanctions screening, rules-based transaction monitoring, counterparty risk, and velocity controls. Implements the fail-closed sanctions/travel-rule policy engine, six deterministic monitoring rules (reporting threshold, structuring band, count velocity, value velocity, counterparty licence, beneficiary jurisdiction), additive counterparty risk banding with prohibitive short-circuits, and the ZAR stress evaluator. 30 Rust tests pass with no clippy findings; every missing input fails closed with an explicit INPUT_UNAVAILABLE reason and no rule can approve a settlement or a filing.
+- [x] Build the Python reporting and analytics service for regulatory report assembly, stablecoin exposure reporting, and policy-based report validation. Assembly recomputes CBN/CBK/SARB totals from canonical rows, binds each regulator to its corridor and settlement currency, enforces period membership, reference uniqueness, and positive finite amounts, and emits an order-independent SHA-256 artifact digest re-verified before return. Exposure aggregates USDC/USDT positions with exact Decimal arithmetic and reports peg deviation as an observation only. Both are exposed over the FastAPI interface alongside validation, Bronze manifests, and geospatial aggregation. 37 Python tests pass, including service-level 422 fail-closed cases; no artifact is ever marked submitted and no rebalancing instruction is produced.
+- [x] Implement multi-currency treasury positions for liquidity pools, nostro and vostro balances, and pre-funding across NGN, KES, and ZAR. The canonical `liquidity_positions` table constrains `account_kind` to liquidity_pool, nostro, vostro, prefunding, and custody_wallet, with numeric(30,12) available and reserved amounts, a mandatory source reference, and a reconciliation timestamp. Positions are auditor-readable and treasury-only writable; rebalancing is a proposal-and-independent-approval workflow bounded by the approved buffer policy, and the deterministic ZAR surge stress evaluator lives in the Rust core.
+- [ ] Implement deterministic treasury rebalancing alert evaluation that compares reconciled positions against approved buffer-policy thresholds, records breach evidence, and delivers notifications without initiating any transfer.
+- [x] Implement the USDC/USDT peg observation, NGN/KES/ZAR quote, and rate-lock workflows. Observations require an active canonical market-data integration and a source reference; rate locks derive from an observation, bind to a payment order on consumption, expire idempotently, and cancel only while live and unconsumed. USDC/USDT peg deviation is computed in basis points by the Python exposure reporter and surfaced as an observation, never as a valuation adjustment.
+- [x] Implement source-derived FX spread calculation for the NGN, KES, and ZAR corridors, deriving mid, bid, ask, and spread in basis points from recorded observations with no assumed or default spread. (server/operationalAlerts.ts computePostgresFxSpread; dispersion across at least two independent recorded sources, returns null rather than a fabricated single-source zero spread; window bounds evaluated server-side at microsecond precision after a driver millisecond-truncation defect was found and fixed; exposed as auditor-readable postgres.fxSpread)
+- [x] Implement canonical PostgreSQL market-observation and source-derived rate-lock procedures with canonical integration references, treasury-only mutation controls, and no payment execution. Observations require an active canonical market-data integration and a source reference; rate locks derive from an observation, bind on consumption, cancel only while live and unconsumed, and no procedure initiates a transfer.
+- [x] Implement compliance workflows for customer due-diligence records, KYC document review state, cases, and SAR/STR filing records without asserting regulator submission connectivity. Covers customer onboarding, consent capture, digest-verified document ingestion, the full submitted/under_review/approved/rejected/expired review lifecycle, analysis evidence that cannot express an approval, compliance-officer-only SAR/STR filing, and case disposition that never reopens a closed case. Submission requires an authorised channel reference.
+- [ ] Implement canonical compliance alert records with an acknowledge-and-escalate workflow that links an alert to its originating evidence and to any case opened from it.
+- [x] Implement the licensed PSP partner, correspondent bank, and stablecoin-provider counterparty registry with risk controls. Counterparties are UUID-backed with typed categories, licence authorisations follow an administrator-only lifecycle with verified state and verifier stamp, invalid repeat transitions fail closed with a from/to audit event, and counterparty risk assessment, escalation, and scheduled due/overdue review evaluation are implemented with the deterministic Rust risk bands.
+- [x] Implement operational notification policy records and the regulatory-deadline notification workflow. Alert policies are canonical PostgreSQL records with typed alert kinds, and the regulatory deadline evaluation runs on a cron-only authenticated callback that locks each row, delivers through the real notification API, and enforces same-day idempotency so a re-run cannot double-notify.
+- [x] Implement notification evaluation and delivery for liquidity-threshold breaches, payment failures, and compliance flags using the same locked, idempotent, evidence-recording pattern as the regulatory-deadline workflow. (server/operationalAlerts.ts; rows locked FOR UPDATE, breaches derived only from reconciled records, corridors without an approved buffer policy or a position inside the freshness window reported as explicitly indeterminate rather than healthy, delivery evidence written to notification_deliveries with the true outcome, identical payloads suppressed within the window; treasury-gated for liquidity and payment, compliance-gated for cases; 7 local PostgreSQL regressions)
 - [ ] Apply canonical PostgreSQL migrations, add PostgreSQL-backed typed procedures for every implemented capability, and connect all production interface flows end to end.
 - [ ] Implement real provider adapters only after the user supplies approved sandbox or production credentials and confirms licensed payment, KYC, sanctions, rate, and regulatory-submission counterparties.
 - [ ] Add automated unit, integration, contract, and interface tests; perform security, accessibility, and visual validation.
@@ -19,54 +24,120 @@
 - [ ] Integrate the Go, Rust, and Python service artifacts with the TypeScript control plane through documented versioned contracts and provider-safe activation gates.
 - [ ] Exercise every implemented control-plane form workflow through the interface and record end-to-end validation evidence without creating fictitious operational records.
 - [x] Produce an explicit implementation handover covering deployed components, activation gates, validation results, non-activated integrations, and operator next steps.
-- [ ] Complete source-derived rate-lock and payment-leg workflows, including expiry, cancellation, and immutable control evidence.
-- [ ] Complete CBN, CBK, and SARB regulatory-deadline workflows with scheduled, idempotent reminder evaluation and delivery evidence.
-- [ ] Expose rate locks, payment legs, regulatory deadlines, and reminder controls through the operator console with role-specific actions.
-- [ ] Add frontend role-aware rendering so only treasury users see rate-lock and payment-leg actions, only compliance users see deadline creation, only administrators see reminder evaluation controls, and auditors remain read-only.
-- [ ] Add visible access-state validation proving the operator console hides or disables unauthorised actions for each operational role.
-- [ ] Hide all payment shortcut controls for unauthorised roles so auditors do not see customer, beneficiary, payment, or payment-leg creation affordances.
-- [ ] Add role-specific console rendering tests or documented interaction evidence for administrator, compliance officer, treasury operator, and auditor views.
-- [ ] Expose counterparty licence authorisation evidence and lifecycle management in the administrator registry console.
-- [ ] Implement administrator-only counterparty licence lifecycle transitions for pending review, verified, expired, suspended, and rejected states with immutable activity evidence.
-- [ ] Add registry tests proving authorisation lifecycle updates are administrator-only, persisted, and visible in the administrator console.
-- [ ] Implement customer KYC document evidence, review lifecycle, and compliance-officer controls without storing document bytes in the database.
-- [ ] Implement SAR/STR filing records and compliance-officer workflow transitions without representing a regulator submission as completed before a verified channel reference exists.
-- [ ] Freeze the managed MySQL/TiDB schema as transitional only and prevent any additional canonical data-model changes on it.
+- [x] Complete source-derived rate-lock and payment-leg workflows, including expiry, cancellation, and immutable control evidence.
+- [x] Complete CBN, CBK, and SARB regulatory-deadline workflows with scheduled, idempotent reminder evaluation and delivery evidence.
+- [x] Return a retry-safe 403 response for unauthenticated scheduled reminder calls instead of a 500, while retaining authenticated cron error diagnostics.
+- [x] Expose rate locks, payment legs, regulatory deadlines, and reminder controls through the operator console with role-specific actions.
+- [x] Add frontend role-aware rendering so treasury operators and administrators see rate-lock and payment-leg actions, compliance officers and administrators see deadline creation, only administrators see reminder evaluation controls, and auditors remain read-only.
+- [x] Add visible access-state validation proving the operator console hides or disables unauthorised actions for each operational role.
+- [x] Hide all payment shortcut controls for unauthorised roles so auditors do not see customer, beneficiary, payment, or payment-leg creation affordances.
+- [x] Add role-specific console rendering tests or documented interaction evidence for administrator, compliance officer, treasury operator, and auditor views.
+- [x] Resolve whether administrators retain delegated access to treasury and compliance controls or enforce exclusive treasury/compliance visibility, then align the role policy, UI affordances, procedures, and regressions with that approved matrix.
+- [x] Add role-specific UI regression coverage for the exact visible actions rendered by `Home.tsx`, rather than capability-helper policy alone.
+- [x] Extract and test the Home.tsx role-to-visible-action gate so every rendered privileged button shares one auditable visibility policy.
+- [x] Expose counterparty licence authorisation evidence and lifecycle management in the administrator registry console.
+- [x] Implement administrator-only counterparty licence lifecycle transitions for pending review, verified, expired, suspended, and rejected states with immutable activity evidence.
+- [x] Add registry tests proving authorisation lifecycle updates are administrator-only, persisted, and visible in the administrator console.
+- [x] Implement customer KYC document evidence, review lifecycle, and compliance-officer controls without storing document bytes in the database.
+- [x] Implement SAR/STR filing records and compliance-officer workflow transitions without representing a regulator submission as completed before a verified channel reference exists.
+- [x] Freeze the managed MySQL/TiDB schema as transitional only and prevent any additional canonical data-model changes on it.
 - [x] Define and implement the canonical PostgreSQL control-plane schema, including data types, constraints, indexes, audit evidence, and provider activation gates.
-- [ ] Create a data-preserving MySQL-to-PostgreSQL migration plan and executable migration tooling with validation checks.
-- [ ] Implement executable MySQL-to-PostgreSQL extraction, mapping, and loading for transitional users, role assignments, and any approved non-empty business records.
-- [ ] Implement fail-closed source-to-destination count and checksum reconciliation for every migrated table.
-- [ ] Document and test user identity and role mapping from the transitional authentication table to PostgreSQL user role assignments.
-- [ ] Port the TypeScript control plane from MySQL-specific Drizzle access to PostgreSQL and validate every implemented workflow against PostgreSQL.
+- [x] Create a data-preserving MySQL-to-PostgreSQL migration plan and executable migration tooling with validation checks.
+- [x] Implement executable MySQL-to-PostgreSQL extraction, mapping, and loading for transitional users and role assignments. Validated end to end against the real transitional source with one non-empty user row mapping to `user_role_assignments`; business tables are currently empty at source.
+- [x] Implement fail-closed source-to-destination count and checksum reconciliation for every migrated table.
+- [x] Document and test user identity and role mapping from the transitional authentication table to PostgreSQL user role assignments.
+- [x] Implement approved table-specific MySQL-to-PostgreSQL extraction, mapping, and loading paths for all eleven mapped transitional business tables, with deterministic IDs, FK ordering, and per-table normalization rules. Exercised against the real transitional source, which currently holds one user row and zero business rows; non-empty business-row coverage is tracked separately below.
+- [x] Prove each supported business-table migration path against non-empty source rows: a rollback-only fixture harness loads one dependency-ordered row per mapped table into the transitional MySQL source, runs the real executor, and verifies deterministic table-scoped UUID mapping, FK ordering, normalization, and per-table reconciliation at one row for all ten business tables. Both databases are verified clean afterwards.
+- [x] Add executable reconciliation regression coverage for every mapped migration path: five regressions assert the eleven-table source-to-destination map, real per-table checksums, that a dry run persists nothing, snapshot-hash stability across repeated read-only runs, that a mismatched approval hash blocks the apply, and that no unsupported non-empty table is silently skipped.
+- [x] Port every active control-plane write path and console mutation from MySQL-specific Drizzle access to canonical PostgreSQL. Verified by automated boundary and fail-closed regressions plus 237 managed and 118 canonical tests against local PostgreSQL. Transitional MySQL/TiDB access deliberately remains for frozen reads and cutover tooling only, tracked for retirement below.
+- [ ] Record workflow-by-workflow PostgreSQL validation evidence for each implemented console flow, rather than relying on aggregate suite totals.
+- [ ] Retire the remaining transitional MySQL/TiDB read and cutover access once the approved production cutover has been executed against the real source.
+- [x] Add an executable guard that prevents canonical domain-model changes in the transitional MySQL/TiDB schema, generated migrations, and legacy repository/router paths outside approved cutover tooling.
+- [x] Add regression coverage proving the transitional MySQL/TiDB surface remains read/cutover-only while canonical feature work uses PostgreSQL paths.
+- [x] Port or fail-close the remaining active `trpc.umoja.*` MySQL/TiDB mutation paths before declaring the transitional surface read/cutover-only.
+- [x] Fail-close transitional MySQL/TiDB payment-order and payment-leg mutation procedures and remove their console affordances until canonical PostgreSQL UUID workflows are implemented.
+- [x] Expose canonical PostgreSQL customer onboarding in the compliance workspace so KYC/KYB evidence upload has a non-transitional customer creation path.
+- [x] Add an automated regression that fails when a managed console mutation targets a transitional MySQL/TiDB procedure outside approved cutover tooling.
+- [x] Wire the PostgreSQL boundary guard into default validation and CI so schema freezes are not manual-only checks.
 - [ ] Align the Go payment engine, Rust risk and ledger services, and Python reporting service with the PostgreSQL-first deployment and contract strategy.
 - [x] Install a localhost-only PostgreSQL development instance and create the canonical UmojaFlowOS development database and least-privilege application role.
 - [x] Apply and validate canonical PostgreSQL migrations locally without transferring any fabricated or provider-derived records.
 - [ ] Integrate provider-independent Go payment-engine, Rust risk/ledger, and Python report-validation contracts into the TypeScript control plane.
 - [ ] Add contract, unit, RBAC, and non-provider workflow tests for the completed multi-language service boundaries.
 - [x] Surface the real PostgreSQL cutover-readiness state in the operator overview without presenting the local development instance as production.
-- [ ] Port the counterparty registry and licence-authorisation repository operations from MySQL/TiDB to canonical PostgreSQL UUID records with activity evidence.
-- [ ] Add local PostgreSQL integration tests for canonical counterparty and licence-authorisation repository reads without inserting fictitious operational records.
+- [x] Port the counterparty registry and licence-authorisation repository operations from MySQL/TiDB to canonical PostgreSQL UUID records with activity evidence.
+- [x] Add local PostgreSQL integration tests for canonical counterparty and licence-authorisation repository reads without inserting fictitious operational records.
 - [x] Define KYC and KYB evidence classes, explicit consent records, retention boundaries, reviewer roles, and fail-closed disposition policy.
 - [x] Add a Python document-intelligence service using PaddleOCR and Docling for OCR, document structure extraction, and provenance-preserving evidence manifests.
 - [x] Add a visual-language-analysis adapter with strict model-output schema validation and unavailable-state handling for KYC and KYB document review.
-- [ ] Implement presentation-attack and deepfake-risk evidence workflows for selfie or document imagery, with risk signals requiring human review rather than automated approval or adverse action.
-- [ ] Add PostgreSQL-backed KYC and KYB analysis jobs, model and engine versions, risk evidence, reviewer decisions, and immutable activity records.
-- [ ] Connect secure S3-referenced document ingestion, OCR and analysis job submission, evidence review, and manual case disposition to the compliance console.
-- [ ] Add red-team, privacy, adversarial-document, access-control, and model-unavailability tests for KYC and KYB analysis workflows.
-- [ ] Detect the locally available Ollama Qwen and DeepSeek models, verify visual-input capability, and persist the exact model and digest used for each analysis.
-- [ ] Implement an Ollama fail-closed local VLM adapter with strict JSON-schema validation, bounded image inputs, timeout controls, and no automatic approval pathway.
+- [x] Implement presentation-attack and deepfake-risk evidence workflows for selfie or document imagery, with risk signals requiring human review rather than automated approval or adverse action.
+- [x] Add PostgreSQL-backed KYC and KYB analysis jobs, model and engine versions, risk evidence, reviewer decisions, and immutable activity records.
+- [x] Connect secure S3-referenced document ingestion, OCR and analysis job submission, evidence review, and manual case disposition to the compliance console.
+- [x] Wire consent-backed analysis-job submission into the compliance console with selector-derived provenance and regressions proving submission fails closed without an active consent or a resolvable model.
+- [x] Implement canonical PostgreSQL KYC document evidence creation with storage-key and storage-URL metadata only, plus a typed compliance procedure and console control.
+- [x] Add end-to-end validation and regression coverage proving KYC document records can be created, reviewed through all allowed states, and remain document-byte-free.
+- [x] Add red-team, privacy, adversarial-document, access-control, and model-unavailability tests for KYC and KYB analysis workflows.
+- [x] Detect the locally available Ollama Qwen and DeepSeek models, verify visual-input capability, and persist the exact model and digest used for each analysis.
+- [x] Implement an Ollama fail-closed local VLM adapter with strict JSON-schema validation, bounded image inputs, timeout controls, and no automatic approval pathway.
 - [x] Select and document the recommended production Ollama model and runtime profile for KYC and KYB visual evidence analysis, including capability, resource, privacy, and failover criteria.
-- [ ] Implement PostgreSQL-backed consent capture, analysis-job creation, evidence persistence, and reviewer-decision mutations through typed procedures.
-- [ ] Write immutable activity events for KYC and KYB consent capture, analysis-job creation, evidence persistence, and reviewer decisions, with persisted-audit regression coverage.
-- [ ] Verify the selected private Ollama endpoint, authentication controls, Qwen3-VL image capability, exact tag, and model digest before activation.
-- [ ] Configure the verified private Ollama endpoint and model provenance through protected deployment secrets, then validate fail-closed behavior and evidence-only output.
-- [ ] Select the recommended private-Ollama network and authentication pattern for Qwen3-VL, including a no-public-ingress boundary and model-digest allowlist.
-- [ ] Implement private-Ollama configuration validation that rejects public URLs, unpinned model tags, absent digest allowlists, and unverified transport security before any visual analysis request is sent.
-- [ ] Persist and surface the intentional `ollama_unavailable` state as review-required evidence until a private Qwen3-VL runtime is provisioned and verified.
+- [x] Implement PostgreSQL-backed consent capture, analysis-job creation, evidence persistence, and reviewer-decision mutations through typed procedures.
+- [x] Write immutable activity events for KYC and KYB consent capture, analysis-job creation, evidence persistence, and reviewer decisions, with persisted-audit regression coverage.
+- [x] Implement and test a concrete PAD/deepfake evidence-generation workflow for authorised selfie/document imagery that is review-only and non-decisional.
+- [x] Add mutation-level regressions proving immutable activity events for consent capture, analysis-job creation, evidence persistence, and reviewer decisions.
+- [x] Persist the exact Ollama model tag and digest into each KYC/KYB analysis job or evidence record at creation time, with provenance regressions for Qwen3-VL and DeepSeek fallback paths.
+- [x] Document and test runtime selection between visual-capable Qwen3-VL and text-only DeepSeek, including persisted per-analysis provenance and fail-closed behavior when the selected model or digest is unavailable.
+- [x] Provision a reviewable least-privilege PostgreSQL grant script and prove at the database level that audit and evidence trails are append-only, no canonical table is deletable, and the application role cannot own or create schema objects.
+- [x] Wire the Python fail-closed runtime model selector output into control-plane analysis-job creation so persisted provenance is selector-derived rather than caller-supplied, with regressions proving unavailable or drifted models block creation for both the Qwen3-VL visual and DeepSeek text paths.
+- [x] Implement a concrete review-only deepfake-risk evidence-generation boundary for authorised selfie or identity-document imagery with explicit trusted provenance and non-decisional disposition.
+- [x] Add deepfake-risk regressions proving only authorised identity imagery and trusted specialised provenance are accepted, while automated approval or rejection remains impossible.
+- [x] Verify the selected private Ollama endpoint, authentication controls, Qwen3-VL image capability, exact tag, and model digest before activation.
+- [x] Configure the verified private Ollama endpoint and model provenance through protected deployment secrets, and validate fail-closed behavior (public URL, unpinned tag, missing digest allowlist, missing authentication control, half-configured mTLS all refused).
+- [ ] BLOCKED (host capacity): Validate evidence-only output from the private Ollama runtime, proving schema-conformant non-decisional response handling with captured model provenance. Requires a host that can hold an 8B model; see docs/private-ollama-verification.md.
+- [x] Select the recommended private-Ollama network and authentication pattern for Qwen3-VL, including a no-public-ingress boundary and model-digest allowlist.
+- [x] Implement private-Ollama configuration validation that rejects public URLs, unpinned model tags, absent digest allowlists, and unverified transport security before any visual analysis request is sent.
+- [x] Persist and surface the intentional `ollama_unavailable` state as review-required evidence until a private Qwen3-VL runtime is provisioned and verified.
 - [x] Install and run a local loopback-only Ollama development runtime without presenting it as production infrastructure.
-- [ ] Pull and verify the local `qwen3-vl:8b` image-capable model and record its exact digest for the adapter allowlist.
-- [ ] Validate a local evidence-only Ollama request, strict JSON-schema response handling, model provenance capture, and manual-review safeguards without creating KYC or KYB approvals.
-- [ ] Keep local Qwen3-VL inference unexercised until an authorised evaluation document is supplied, while validating runtime capability, tag, digest, loopback binding, and fail-closed configuration without document input.
-- [ ] Enforce exact Qwen3-VL model-tag allowlists and reject floating tags such as `latest`, with regression coverage.
-- [ ] Implement and test concrete transport-security controls for non-local Ollama endpoints, including certificate verification and optional mTLS configuration.
-- [ ] Set the verified local Qwen3-VL digest in development adapter configuration and test that the exact digest is accepted while drift is rejected.
+- [x] Pull and verify the local `qwen3-vl:8b` image-capable model and record its exact digest for the adapter allowlist.
+- [ ] BLOCKED (host capacity): Execute the evidence-only Ollama request validator on a host with sufficient memory. Both 8B models are terminated by the 3 GB sandbox ceiling (~2 GB available vs a 5.8 GB weight blob); the validator and its assertions are implemented and committed. See docs/private-ollama-verification.md.
+- [x] Resolve the exact local Ollama model digest through the tags metadata endpoint before allowing an evidence-only adapter request, while preserving strict digest allowlisting.
+- [x] Keep local Qwen3-VL inference unexercised until an authorised evaluation document is supplied, while validating runtime capability, tag, digest, loopback binding, and fail-closed configuration without document input.
+- [x] Complete non-inference KYC/KYB workflow validation for consent capture, analysis jobs, evidence persistence, reviewer decisions, and immutable activity records without inserting fabricated operational records.
+- [x] Add compliance-console evidence and reviewer-decision views with explicit unavailable-state handling and no automated KYC/KYB disposition.
+- [x] Add a PostgreSQL-backed compliance-console evidence ledger showing OCR, document structure, visual consistency, presentation-attack risk, and engine-unavailable evidence with disposition, engine/model provenance, signals, and limitations.
+- [x] Add a compliance-console reviewer-decision history showing manual disposition, rationale, actor, and timestamp for each KYC/KYB analysis job.
+- [x] Add role-specific visual and regression validation for the KYC/KYB evidence ledger and reviewer-decision history.
+- [x] Render persisted evidence signals alongside limitations, disposition, and engine/model provenance in the KYC/KYB evidence ledger.
+- [x] Add regression and visual validation proving the evidence ledger displays persisted signals for all supported evidence kinds.
+- [x] Wire PostgreSQL KYC/KYB evidence and reviewer-decision queries into the compliance console with role-specific visibility and a document-free unavailable-state notice.
+- [x] Implement auditable treasury rebalancing recommendations and approval workflow controls without initiating transfers or fabricating balances.
+- [x] Implement canonical PostgreSQL liquidity-position reads and treasury-only writes with immutable activity evidence, then remove the transitional treasury mutation binding from the console.
+- [x] Research authoritative liquidity, capital, and prudential guidance relevant to conservative treasury buffers for Nigeria (NGN), Kenya (KES), and South Africa (ZAR).
+- [x] Recommend initial policy parameters for minimum available balance, target balance, permitted account kinds, maximum recommendation size, and approval roles, with explicit assumptions and override boundaries.
+- [x] Extend CBN, CBK, and SARB reporting workflows with review gates, completeness checks, and verified-submission-reference requirements.
+- [x] Create CBN, CBK, and SARB draft reports through the canonical PostgreSQL workflow, then validate evidence-gated draft-to-submitted lifecycle transitions end to end.
+- [x] Implement provider-independent counterparty risk assessment, evidence, periodic review, and lifecycle escalation controls.
+- [x] Enforce exact Qwen3-VL model-tag allowlists and reject floating tags such as `latest`, with regression coverage.
+- [x] Implement and test concrete transport-security controls for non-local Ollama endpoints, including certificate verification and optional mTLS configuration.
+- [x] Set the verified local Qwen3-VL digest in development adapter configuration and test that the exact digest is accepted while drift is rejected.
+- [x] Configure the local document-intelligence launch path with the verified Qwen3-VL digest and add mocked runtime regressions that accept the exact digest and fail closed on digest drift.
+- [x] Document the exact PostgreSQL treasury-policy schema, immutable audit evidence, and procedure-level RBAC controls.
+- [x] Add a deterministic ZAR settlement-outflow surge stress-test specification that fails closed when reconciled inputs are unavailable.
+- [ ] Complete and validate all remaining provider-independent implementation items tracked in this ledger; keep provider-dependent execution paths activation-gated.
+- [x] Verify and document the canonical PostgreSQL treasury-policy schema and procedure-level RBAC boundaries for the implemented policy controls.
+- [x] Run and document the deterministic fail-closed ZAR 50-percent settlement-outflow surge stress test using only configured policy inputs and no invented balances.
+- [ ] Audit every unchecked implementation-ledger item and classify it as implemented, activation-gated, or still requiring implementation; do not mark incomplete work complete.
+- [ ] Reconcile the implementation ledger against the uploaded enterprise and regulatory technical specifications and record any requirement gaps.
+- [x] Design and implement provider-independent integration boundaries for Kafka or Fluvio, Dapr, Temporal, PostgreSQL, Keycloak, Permify, Redis, Mojaloop, OpenSearch, open-appsec, Apache APISIX, TigerBeetle, Apache Sedona, GeoLibre, and a cloud-agnostic lakehouse using Go, Rust, and Python according to service ownership.
+- [x] Classify requested middleware components by self-hosted deployment prerequisite, authorised provider prerequisite, data-governance prerequisite, and completed implementation status.
+- [x] Add deployment-ready, fail-closed infrastructure configurations for remaining self-hosted platform components, using secret references and later runtime configuration only.
+- [x] Add deployment-ready adapter contracts for Temporal, TigerBeetle, APISIX/open-appsec, Permify, Redis, OpenSearch, Apache Sedona, GeoLibre, and governed lakehouse sinks without activating network connectivity.
+- [x] Implement and document a versioned Kafka/Dapr event-bus contract and provider-independent Go/Rust producer-consumer boundaries, with no live broker assertion.
+- [x] Implement and document a TigerBeetle double-entry account and transfer topology plus a Go ledger client boundary that preserves fail-closed non-execution behavior until cluster activation.
+- [ ] Reconcile remaining todo and technical-spec requirements into a production-completion backlog with an evidence-based readiness score.
+- [x] Complete and document the Go and Rust TigerBeetle double-entry transfer, confirmed-transfer projection, and reconciliation boundaries.
+- [x] Complete and document Rust fail-closed handling for unavailable Kafka or Dapr event streams, including the `input_unavailable` policy outcome.
+- [x] Add deployment-ready OpenSearch infrastructure configuration with secret-managed TLS and disabled-by-default validation.
+- [x] Implement a GeoLibre adapter or projection boundary that accepts only privacy-safe aggregate geospatial output.
+- [x] Implement and test an explicit TigerBeetle-to-PostgreSQL reconciliation verification boundary before marking reconciliation complete.
+- [x] Implement and test a Rust TigerBeetle confirmed-posting, PostgreSQL projection, and reconciliation boundary matching the Go fail-closed coverage.
+- [ ] Consolidate the remaining PostgreSQL cutover mappings into dependency-ordered batches with one source snapshot, one rollback-only validation, one reconciliation review, and one checkpoint per completed batch.

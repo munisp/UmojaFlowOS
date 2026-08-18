@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 type Regulator = "CBN" | "CBK" | "SARB";
 type Corridor = "NIGERIA_NGN" | "KENYA_KES" | "SOUTH_AFRICA_ZAR";
 
-export function RegulatoryDeadlineTable({ rows, loading }: { rows: Array<{ id: number; regulator: string; corridor: string; title: string; dueAt: Date; status: string; lastRemindedAt: Date | null }>; loading: boolean }) {
+export function RegulatoryDeadlineTable({ rows, loading }: { rows: Array<{ id: string; regulator: string; corridor: string; title: string; dueAt: Date; status: string; lastRemindedAt: Date | null }>; loading: boolean }) {
   if (loading) return <p className="px-5 py-8 text-sm text-black/55">Loading regulatory deadline records.</p>;
   if (!rows.length) return <p className="px-5 py-8 text-sm text-black/55">No deadline record exists until a compliance officer enters the source-backed CBN, CBK, or SARB obligation.</p>;
   return <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead className="border-b border-black/20 text-[10px] uppercase tracking-wider text-black/45"><tr><th className="px-5 py-3">Regulator</th><th className="px-4 py-3">Corridor</th><th className="px-4 py-3">Obligation</th><th className="px-4 py-3">Due</th><th className="px-4 py-3">State</th></tr></thead><tbody>{rows.map(row => <tr className="border-b border-black/10" key={row.id}><td className="px-5 py-3 font-bold">{row.regulator}</td><td className="px-4 py-3">{row.corridor.replaceAll("_", " ")}</td><td className="px-4 py-3">{row.title}</td><td className="px-4 py-3">{new Date(row.dueAt).toLocaleString()}</td><td className="px-4 py-3 font-bold uppercase">{row.status}</td></tr>)}</tbody></table></div>;

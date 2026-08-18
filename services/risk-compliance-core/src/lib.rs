@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 pub mod eventing;
+pub mod treasury_stress;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]

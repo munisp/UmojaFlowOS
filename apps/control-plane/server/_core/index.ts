@@ -8,6 +8,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { regulatoryDeadlineReminders } from "../scheduled/regulatoryDeadlineReminders";
+import { counterpartyRiskReviews } from "../scheduled/counterpartyRiskReviews";
 import { serveStatic, setupVite } from "./vite";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -38,6 +39,7 @@ async function startServer() {
   registerStorageProxy(app);
   registerOAuthRoutes(app);
   app.post("/api/scheduled/regulatory-deadline-reminders", regulatoryDeadlineReminders);
+  app.post("/api/scheduled/counterparty-risk-reviews", counterpartyRiskReviews);
   // tRPC API
   app.use(
     "/api/trpc",

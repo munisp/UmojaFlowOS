@@ -107,6 +107,76 @@ func (o *Order) Complete(providerFinalityReference string) error {
 	return nil
 }
 
+// ResolveManualReview records a human compliance decision on an order that a
+// policy evaluation escalated. Only a compliance officer may resolve it, and
+// the reviewer may not be the party that submitted the order.
+func (o *Order) ResolveManualReview(approve bool, reviewerRole, reviewerID, submitterID, reason string) error {
+	if o.Status != ManualReview {
+		return fmt.Errorf("manual review cannot be resolved from %s", o.Status)
+	}
+	if reviewerRole != "compliance_officer" {
+		return errors.New("only a compliance officer may resolve a manual review")
+	}
+	if strings.TrimSpace(reviewerID) == "" {
+		return errors.New("reviewer identity is required")
+	}
+	if reviewerID == submitterID {
+		return errors.New("the submitter may not resolve their own manual review")
+	}
+	if strings.TrimSpace(reason) == "" {
+		return errors.New("an explicit review reason is required")
+	}
+	if approve {
+		o.Status = Approved
+	} else {
+		o.Status = Blocked
+	}
+	return nil
+}
+
+// Fail records a terminal failure reported by an authorised provider. It
+// requires a provider failure reference so a failure can never be asserted
+// without evidence.
+func (o *Order) Fail(providerFailureReference, reason string) error {
+	if o.Status != Executing {
+		return fmt.Errorf("failure cannot be recorded from %s", o.Status)
+	}
+	if strings.TrimSpace(providerFailureReference) == "" {
+		return errors.New("provider failure reference is required")
+	}
+	if strings.TrimSpace(reason) == "" {
+		return errors.New("an explicit failure reason is required")
+	}
+	o.Status = Failed
+	return nil
+}
+
+// Cancel withdraws an order before execution begins. Once execution has
+// started, cancellation is refused because the provider owns the outcome.
+func (o *Order) Cancel(reason string) error {
+	switch o.Status {
+	case PendingPolicyDecision, ManualReview, Approved:
+		// cancellable
+	default:
+		return fmt.Errorf("cancellation is not permitted from %s", o.Status)
+	}
+	if strings.TrimSpace(reason) == "" {
+		return errors.New("an explicit cancellation reason is required")
+	}
+	o.Status = Cancelled
+	return nil
+}
+
+// IsTerminal reports whether the order can no longer transition.
+func (o *Order) IsTerminal() bool {
+	switch o.Status {
+	case Completed, Failed, Cancelled, Blocked:
+		return true
+	default:
+		return false
+	}
+}
+
 func isSupportedCorridor(corridor Corridor) bool {
 	return corridor == NigeriaNGN || corridor == KenyaKES || corridor == SouthAfricaZAR
 }
