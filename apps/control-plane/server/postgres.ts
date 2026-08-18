@@ -205,6 +205,22 @@ export async function listPostgresKycDocuments() {
   }
 }
 
+export async function updatePostgresKycDocumentReview(actor: Actor, input: { documentId: string; reviewStatus: "under_review" | "approved" | "rejected" | "expired"; reviewNote: string }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const current = await client.query<{ reviewStatus: string }>("SELECT review_status AS \"reviewStatus\" FROM kyc_documents WHERE id=$1 FOR UPDATE", [input.documentId]);
+    const document = current.rows[0];
+    if (!document) throw new Error("KYC document was not found");
+    const allowed: Record<string, string[]> = { submitted: ["under_review", "expired"], under_review: ["approved", "rejected", "expired"], approved: ["expired"], rejected: [], expired: [] };
+    if (!allowed[document.reviewStatus]?.includes(input.reviewStatus)) throw new Error("invalid KYC document review lifecycle transition");
+    await client.query("UPDATE kyc_documents SET review_status=$1, review_note=$2, reviewed_by=$3, reviewed_at=now() WHERE id=$4", [input.reviewStatus, input.reviewNote, actor.openId, input.documentId]);
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "kyc_document.review_transitioned", "kyc_document", input.documentId, JSON.stringify({ from: document.reviewStatus, to: input.reviewStatus, reviewNoteLength: input.reviewNote.trim().length, documentBytesPersisted: false })]);
+    await client.query("COMMIT");
+    return { id: input.documentId, reviewStatus: input.reviewStatus };
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
 export async function listPostgresSarStrFilings() {
   const client = await getPool().connect();
   try {

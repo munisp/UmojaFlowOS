@@ -73,4 +73,13 @@ describe("UmojaFlowOS role boundaries", () => {
       status: "under_review",
     })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
+
+  it("prevents an auditor from changing a KYC document review state", async () => {
+    const caller = appRouter.createCaller(auditorContext());
+    await expect(caller.postgres.updateKycDocumentReview({
+      documentId: "00000000-0000-4000-8000-000000000003",
+      reviewStatus: "under_review",
+      reviewNote: "Manual review initiated.",
+    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 });
