@@ -21,7 +21,10 @@ class OllamaVisualAdapter:
     def __init__(self) -> None:
         self.base_url = os.environ.get("OLLAMA_BASE_URL", "").rstrip("/")
         self.model = os.environ.get("OLLAMA_VISION_MODEL", "qwen3-vl:8b")
+        self.allowed_models = {model.strip() for model in os.environ.get("OLLAMA_ALLOWED_VISION_MODELS", "qwen3-vl:8b").split(",") if model.strip()}
         self.allowed_digests = {digest.strip() for digest in os.environ.get("OLLAMA_ALLOWED_MODEL_DIGESTS", "").split(",") if digest.strip()}
+        self.mtls_cert_file = os.environ.get("OLLAMA_MTLS_CERT_FILE")
+        self.mtls_key_file = os.environ.get("OLLAMA_MTLS_KEY_FILE")
         self.timeout_seconds = float(os.environ.get("OLLAMA_TIMEOUT_SECONDS", "45"))
         self.max_image_bytes = int(os.environ.get("OLLAMA_MAX_IMAGE_BYTES", str(8 * 1024 * 1024)))
 
@@ -35,10 +38,12 @@ class OllamaVisualAdapter:
             raise OllamaUnavailable("Ollama endpoint must use HTTPS unless it is an explicitly private local hostname")
         if not private_host:
             raise OllamaUnavailable("Ollama endpoint must be a private or internal hostname; public ingress is prohibited")
-        if not self.model.startswith("qwen3-vl:"):
-            raise OllamaUnavailable("Only a pinned qwen3-vl model tag may be used for visual evidence")
+        if self.model not in self.allowed_models or self.model.endswith(":latest"):
+            raise OllamaUnavailable("Ollama visual evidence requires an exact allowlisted Qwen3-VL model tag")
         if not self.allowed_digests:
             raise OllamaUnavailable("OLLAMA_ALLOWED_MODEL_DIGESTS must contain the verified model digest")
+        if bool(self.mtls_cert_file) != bool(self.mtls_key_file):
+            raise OllamaUnavailable("mTLS requires both OLLAMA_MTLS_CERT_FILE and OLLAMA_MTLS_KEY_FILE")
 
     async def assess(self, image_bytes: bytes, mime_type: str) -> tuple[OllamaVisualAssessment, str | None]:
         self.validate_activation_configuration()

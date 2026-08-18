@@ -302,6 +302,33 @@ export async function createPostgresDocumentAnalysisJob(actor: Actor, input: { c
   } finally { client.release(); }
 }
 
+export async function persistPostgresDocumentAnalysisEvidence(actor: Actor, input: { analysisJobId: string; kind: "ocr" | "document_structure" | "visual_consistency" | "presentation_attack_risk" | "engine_unavailable"; disposition: "review_required" | "insufficient_evidence" | "unavailable"; engineName: string; engineVersion: string; modelTag?: string; modelDigest?: string; promptPolicyVersion?: string; evidenceSha256?: string; signals: unknown[]; limitations: string[] }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ id: string }>("INSERT INTO document_analysis_evidence (analysis_job_id, kind, disposition, engine_name, engine_version, model_tag, model_digest, prompt_policy_version, evidence_sha256, signals, limitations) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb) RETURNING id", [input.analysisJobId, input.kind, input.disposition, input.engineName, input.engineVersion, input.modelTag ?? null, input.modelDigest ?? null, input.promptPolicyVersion ?? null, input.evidenceSha256 ?? null, JSON.stringify(input.signals), JSON.stringify(input.limitations)]);
+    const evidence = rows[0];
+    if (!evidence) throw new Error("PostgreSQL analysis evidence insert did not return a record");
+    await client.query("UPDATE document_analysis_jobs SET state=$1, completed_at=now() WHERE id=$2", [input.disposition === "unavailable" ? "unavailable" : "review_required", input.analysisJobId]);
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "document_analysis_evidence.persisted", "document_analysis_evidence", evidence.id, JSON.stringify({ analysisJobId: input.analysisJobId, kind: input.kind, disposition: input.disposition, engineName: input.engineName, modelTag: input.modelTag ?? null, modelDigest: input.modelDigest ?? null })]);
+    await client.query("COMMIT");
+    return evidence;
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
+export async function createPostgresReviewerDecision(actor: Actor, input: { analysisJobId: string; disposition: "approved" | "rejected" | "needs_information" | "escalated"; rationale: string }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ id: string }>("INSERT INTO verification_reviewer_decisions (analysis_job_id, disposition, rationale, decided_by) VALUES ($1,$2,$3,$4) RETURNING id", [input.analysisJobId, input.disposition, input.rationale, actor.openId]);
+    const decision = rows[0];
+    if (!decision) throw new Error("PostgreSQL reviewer decision insert did not return a record");
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "verification_reviewer_decision.created", "verification_reviewer_decision", decision.id, JSON.stringify({ analysisJobId: input.analysisJobId, disposition: input.disposition })]);
+    await client.query("COMMIT");
+    return decision;
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
 export async function closePostgresPool() {
   if (pool) {
     await pool.end();

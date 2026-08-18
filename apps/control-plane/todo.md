@@ -58,3 +58,15 @@
 - [x] Select and document the recommended production Ollama model and runtime profile for KYC and KYB visual evidence analysis, including capability, resource, privacy, and failover criteria.
 - [ ] Implement PostgreSQL-backed consent capture, analysis-job creation, evidence persistence, and reviewer-decision mutations through typed procedures.
 - [ ] Write immutable activity events for KYC and KYB consent capture, analysis-job creation, evidence persistence, and reviewer decisions, with persisted-audit regression coverage.
+- [ ] Verify the selected private Ollama endpoint, authentication controls, Qwen3-VL image capability, exact tag, and model digest before activation.
+- [ ] Configure the verified private Ollama endpoint and model provenance through protected deployment secrets, then validate fail-closed behavior and evidence-only output.
+- [ ] Select the recommended private-Ollama network and authentication pattern for Qwen3-VL, including a no-public-ingress boundary and model-digest allowlist.
+- [ ] Implement private-Ollama configuration validation that rejects public URLs, unpinned model tags, absent digest allowlists, and unverified transport security before any visual analysis request is sent.
+- [ ] Persist and surface the intentional `ollama_unavailable` state as review-required evidence until a private Qwen3-VL runtime is provisioned and verified.
+- [x] Install and run a local loopback-only Ollama development runtime without presenting it as production infrastructure.
+- [ ] Pull and verify the local `qwen3-vl:8b` image-capable model and record its exact digest for the adapter allowlist.
+- [ ] Validate a local evidence-only Ollama request, strict JSON-schema response handling, model provenance capture, and manual-review safeguards without creating KYC or KYB approvals.
+- [ ] Keep local Qwen3-VL inference unexercised until an authorised evaluation document is supplied, while validating runtime capability, tag, digest, loopback binding, and fail-closed configuration without document input.
+- [ ] Enforce exact Qwen3-VL model-tag allowlists and reject floating tags such as `latest`, with regression coverage.
+- [ ] Implement and test concrete transport-security controls for non-local Ollama endpoints, including certificate verification and optional mTLS configuration.
+- [ ] Set the verified local Qwen3-VL digest in development adapter configuration and test that the exact digest is accepted while drift is rejected.
