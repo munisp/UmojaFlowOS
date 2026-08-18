@@ -31,6 +31,8 @@ This is deliberately transport-neutral. A Kafka adapter implements `Publish` by 
 
 Until an adapter is wired to a deployed broker/runtime, `DisabledPublisher.Publish` returns an error. The unit test proves both the traceability requirement and that disabled transport cannot emit an event.
 
+`DaprPublisher` is the concrete HTTP adapter. It refuses a missing Dapr base URL, missing pub/sub component name, missing topic, or a non-absolute URL. Once configured, it serializes the envelope and performs `POST /v1.0/publish/{pubsub}/{topic}` with `application/json`; any non-2xx response or connection failure returns an error to the caller. The Dapr component, rather than Go domain code, selects Kafka and carries broker endpoint, TLS, SASL, topic ACL, retention, and secret configuration.
+
 ## Rust ledger-gateway event consumer boundary
 
 `services/ledger-gateway/src/eventing.rs` defines the identical semantic envelope and validates it before any ledger projection:
@@ -48,6 +50,8 @@ pub fn validate_payment_event(event: &EventEnvelope) -> Result<(), EventError> {
 ```
 
 The `EventConsumer` trait is the integration point for a Kafka consumer or Dapr subscriber. It receives a topic and validated envelope, permitting an adapter to reject unrecognized types, wrong schema versions, duplicate event identities, or malformed payloads before invoking a ledger command.
+
+The Rust Axum gateway exposes `POST /events/payment-order-validated` as the Dapr subscription endpoint. It calls `validate_payment_event`; a missing identity or unsupported type/version returns HTTP 422 with `ledger_projection: "not_started"`. A valid envelope returns acceptance with `ledger_projection: "disabled_without_deployed_tigerbeetle"`. Thus event reception is distinct from monetary posting until a real TigerBeetle cluster and projection/idempotency store are deployed.
 
 ## TigerBeetle account and double-entry transfer topology
 
