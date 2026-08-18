@@ -30,3 +30,13 @@ def test_ollama_assessment_cannot_encode_an_approval_or_rejection() -> None:
             "limitations": ["Human review remains required."],
             "decision": "approved",
         })
+
+
+def test_presentation_attack_signal_remains_review_only_evidence() -> None:
+    assessment = OllamaVisualAssessment.model_validate({
+        "visual_consistency": "insufficient_evidence",
+        "presentation_attack_risk": "review_signal",
+        "signals": [{"code": "capture_anomaly", "severity": "medium", "rationale": "Visual anomaly requires human examination.", "provenance": "ollama_vlm"}],
+        "limitations": ["This evidence is not a liveness determination or an automated adverse action."],
+    })
+    assert assessment.presentation_attack_risk == "review_signal"
