@@ -1,0 +1,76 @@
+routes:
+  - id: control-plane-api
+    uri: /api/*
+    upstream:
+      type: roundrobin
+      nodes:
+        control-plane: 1
+      scheme: http
+    plugins:
+      openid-connect:
+        bearer_only: true
+        discovery: ${KEYCLOAK_OIDC_DISCOVERY_URL}
+        client_id: umojaflowos-gateway
+        realm: umojaflowos
+        ssl_verify: true
+        timeout: 3000
+  - id: payment-engine-api
+    uri: /payment-engine/*
+    upstream:
+      type: roundrobin
+      nodes:
+        payment-engine: 1
+      scheme: http
+    plugins:
+      openid-connect:
+        bearer_only: true
+        discovery: ${KEYCLOAK_OIDC_DISCOVERY_URL}
+        client_id: umojaflowos-gateway
+        realm: umojaflowos
+        ssl_verify: true
+        timeout: 3000
+  - id: risk-compliance-api
+    uri: /risk-compliance/*
+    upstream:
+      type: roundrobin
+      nodes:
+        risk-compliance-core: 1
+      scheme: http
+    plugins:
+      openid-connect:
+        bearer_only: true
+        discovery: ${KEYCLOAK_OIDC_DISCOVERY_URL}
+        client_id: umojaflowos-gateway
+        realm: umojaflowos
+        ssl_verify: true
+        timeout: 3000
+  - id: ledger-gateway-api
+    uri: /ledger-gateway/*
+    upstream:
+      type: roundrobin
+      nodes:
+        ledger-gateway: 1
+      scheme: http
+    plugins:
+      openid-connect:
+        bearer_only: true
+        discovery: ${KEYCLOAK_OIDC_DISCOVERY_URL}
+        client_id: umojaflowos-gateway
+        realm: umojaflowos
+        ssl_verify: true
+        timeout: 3000
+  - id: reporting-api
+    uri: /reporting/*
+    upstream:
+      type: roundrobin
+      nodes:
+        reporting-analytics: 1
+      scheme: http
+    plugins:
+      openid-connect:
+        bearer_only: true
+        discovery: ${KEYCLOAK_OIDC_DISCOVERY_URL}
+        client_id: umojaflowos-gateway
+        realm: umojaflowos
+        ssl_verify: true
+        timeout: 3000
