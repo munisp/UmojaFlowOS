@@ -19,6 +19,23 @@ type StartResult struct {
 	ExternalExecutionStarted bool
 }
 
+type TemporalConfig struct {
+	Namespace   string
+	TaskQueue   string
+	Address     string
+	TLSRequired bool
+}
+
+func (c TemporalConfig) Validate() error {
+	if strings.TrimSpace(c.Namespace) == "" || strings.TrimSpace(c.TaskQueue) == "" || strings.TrimSpace(c.Address) == "" {
+		return errors.New("temporal namespace, task queue, and address are required")
+	}
+	if !c.TLSRequired {
+		return errors.New("temporal transport must require TLS")
+	}
+	return nil
+}
+
 // EvaluateStart is deterministic workflow logic intended to run inside a Temporal workflow.
 // It never invokes a payment provider; provider invocation belongs in an activity after policy and credential gates pass.
 func EvaluateStart(input StartInput) (StartResult, error) {

@@ -19,3 +19,12 @@ func TestWorkflowDoesNotStartExternalExecutionWithoutVerifiedProvider(t *testing
 		t.Fatalf("unexpected result: %#v", result)
 	}
 }
+
+func TestTemporalConfigFailsClosedWithoutTLS(t *testing.T) {
+	if err := (TemporalConfig{Namespace: "umojaflowos", TaskQueue: "payment-orders", Address: "temporal:7233"}).Validate(); err == nil {
+		t.Fatal("plaintext Temporal configuration was accepted")
+	}
+	if err := (TemporalConfig{Namespace: "umojaflowos", TaskQueue: "payment-orders", Address: "temporal:7233", TLSRequired: true}).Validate(); err != nil {
+		t.Fatalf("valid Temporal configuration rejected: %v", err)
+	}
+}
