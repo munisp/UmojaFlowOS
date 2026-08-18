@@ -11,8 +11,8 @@ const approved = process.env.MIGRATION_EXECUTION_APPROVED === "1";
 const initiatedBy = process.env.MIGRATION_INITIATED_BY;
 if (!dryRun && (!approved || !initiatedBy)) throw new Error("Apply is blocked: set MIGRATION_EXECUTION_APPROVED=1 and MIGRATION_INITIATED_BY to an accountable operator subject");
 
-const businessTables = ["counterparties", "counterpartyAuthorizations", "integrationConnections", "customers", "beneficiaries", "paymentOrders", "paymentLegs", "liquidityPositions", "marketObservations", "rateLocks", "complianceCases", "regulatoryReports", "regulatoryDeadlines", "alertPolicies", "activityEvents"];
-const currentlyMappedBusinessTables = new Set(["counterparties", "counterpartyAuthorizations", "integrationConnections", "customers", "beneficiaries", "marketObservations", "paymentOrders", "paymentLegs", "rateLocks"]);
+const businessTables = ["counterparties", "counterpartyAuthorizations", "integrationConnections", "corridorPolicies", "customers", "beneficiaries", "kycDocuments", "paymentOrders", "paymentLegs", "liquidityPositions", "marketObservations", "rateLocks", "complianceCases", "sarStrFilings", "regulatoryReports", "regulatoryDeadlines", "alertPolicies", "notificationDeliveries", "scheduledJobs", "activityEvents"];
+const currentlyMappedBusinessTables = new Set(["counterparties", "counterpartyAuthorizations", "integrationConnections", "customers", "beneficiaries", "liquidityPositions", "marketObservations", "paymentOrders", "paymentLegs", "rateLocks"]);
 const supportedCounterpartyTypes = new Set(["licensed_psp", "correspondent_bank", "stablecoin_provider", "fx_liquidity_provider", "custody_provider", "kyc_provider", "sanctions_provider", "chain_analytics_provider", "notification_provider", "regulatory_submission_provider"]);
 const asIso = value => new Date(value).toISOString();
 
@@ -59,6 +59,10 @@ function mapRateLocks(rows) {
   return rows.map(row => ({ id: deterministicUuid("rateLocks", row.id), marketObservationId: deterministicUuid("marketObservations", row.marketObservationId), paymentOrderId: row.paymentOrderId === null ? null : deterministicUuid("paymentOrders", row.paymentOrderId), corridor: row.corridor, baseAsset: row.baseAsset, quoteAsset: row.quoteAsset, lockedRate: String(row.lockedRate), expiresAt: asIso(row.expiresAt), status: row.status, createdBy: row.createdBy, createdAt: asIso(row.createdAt) })).sort((a, b) => a.id.localeCompare(b.id));
 }
 
+function mapLiquidityPositions(rows) {
+  return rows.map(row => ({ id: deterministicUuid("liquidityPositions", row.id), corridor: row.corridor, currency: row.currency, accountKind: row.accountKind, accountReference: row.accountReference, availableAmount: String(row.availableAmount), reservedAmount: String(row.reservedAmount), sourceReference: row.sourceReference, reconciledAt: asIso(row.reconciledAt), recordedBy: row.recordedBy, createdAt: asIso(row.createdAt) })).sort((a, b) => a.id.localeCompare(b.id));
+}
+
 async function reconcileTable(targetClient, runId, sourceTable, destinationTable, sourceRecords, destinationRecords) {
   const sourceChecksum = checksum(sourceRecords), destinationChecksum = checksum(destinationRecords);
   if (sourceRecords.length !== destinationRecords.length || sourceChecksum !== destinationChecksum) throw new Error(`Cutover reconciliation failed for ${sourceTable}: source count/checksum does not match ${destinationTable}`);
@@ -88,6 +92,12 @@ async function migrateRateLocks(records, runId) {
   if (!dryRun) for (const record of records) await target.query("INSERT INTO rate_locks (id, market_observation_id, payment_order_id, corridor, base_asset, quote_asset, locked_rate, status, expires_at, created_by, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (id) DO NOTHING", [record.id, record.marketObservationId, record.paymentOrderId, record.corridor, record.baseAsset, record.quoteAsset, record.lockedRate, record.status, record.expiresAt, record.createdBy, record.createdAt]);
   const { rows } = await target.query("SELECT id, market_observation_id AS \"marketObservationId\", payment_order_id AS \"paymentOrderId\", corridor, base_asset AS \"baseAsset\", quote_asset AS \"quoteAsset\", locked_rate AS \"lockedRate\", status, expires_at AS \"expiresAt\", created_by AS \"createdBy\", created_at AS \"createdAt\" FROM rate_locks WHERE id = ANY($1::uuid[]) ORDER BY id", [records.map(record => record.id)]);
   return reconcileTable(target, runId, "rateLocks", "rate_locks", records, rows.map(row => ({ ...row, lockedRate: String(row.lockedRate), expiresAt: asIso(row.expiresAt), createdAt: asIso(row.createdAt) })));
+}
+
+async function migrateLiquidityPositions(records, runId) {
+  if (!dryRun) for (const record of records) await target.query("INSERT INTO liquidity_positions (id, corridor, currency, account_kind, account_reference, available_amount, reserved_amount, source_reference, reconciled_at, recorded_by, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (id) DO NOTHING", [record.id, record.corridor, record.currency, record.accountKind, record.accountReference, record.availableAmount, record.reservedAmount, record.sourceReference, record.reconciledAt, record.recordedBy, record.createdAt]);
+  const { rows } = await target.query("SELECT id, corridor, currency, account_kind AS \"accountKind\", account_reference AS \"accountReference\", available_amount AS \"availableAmount\", reserved_amount AS \"reservedAmount\", source_reference AS \"sourceReference\", reconciled_at AS \"reconciledAt\", recorded_by AS \"recordedBy\", created_at AS \"createdAt\" FROM liquidity_positions WHERE id = ANY($1::uuid[]) ORDER BY id", [records.map(record => record.id)]);
+  return reconcileTable(target, runId, "liquidityPositions", "liquidity_positions", records, rows.map(row => ({ ...row, availableAmount: String(row.availableAmount), reservedAmount: String(row.reservedAmount), reconciledAt: asIso(row.reconciledAt), createdAt: asIso(row.createdAt) })));
 }
 
 async function migratePaymentOrders(records, runId) {
@@ -122,6 +132,10 @@ async function migrateCounterpartyAuthorizations(records, runId) {
 }
 
 try {
+  const [sourceTableRows] = await source.query(`SELECT table_name AS tableName FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN (${businessTables.map(() => "?").join(", ")})`, businessTables);
+  const availableSourceTables = new Set(sourceTableRows.map(row => row.tableName));
+  const missingMappedSourceTables = [...currentlyMappedBusinessTables].filter(table => !availableSourceTables.has(table));
+  if (missingMappedSourceTables.length) throw new Error(`Cutover blocked: mapped transitional tables are absent from the source schema: ${missingMappedSourceTables.join(", ")}`);
   const [sourceUsers] = await source.query("SELECT openId, role FROM users ORDER BY openId");
   const [sourceCounterparties] = await source.query("SELECT id, legalName, counterpartyType, jurisdiction, createdAt FROM counterparties ORDER BY id");
   const [sourceCounterpartyAuthorizations] = await source.query("SELECT id, counterpartyId, regulator, licenceReference, scopeDescription, evidenceUrl, validFrom, validTo, status, verifiedBy, verifiedAt FROM counterpartyAuthorizations ORDER BY id");
@@ -132,12 +146,13 @@ try {
   const [sourcePaymentOrders] = await source.query("SELECT id, idempotencyKey, customerId, beneficiaryId, corridor, sourceCurrency, sourceAmount, targetCurrency, targetAmount, status, policyDecisionReference, providerFinalityReference, createdBy, createdAt, updatedAt FROM paymentOrders ORDER BY id");
   const [sourcePaymentLegs] = await source.query("SELECT id, paymentOrderId, sequenceNumber, legKind, counterpartyId, status, providerInstructionReference, providerFinalityReference FROM paymentLegs ORDER BY id");
   const [sourceRateLocks] = await source.query("SELECT id, marketObservationId, paymentOrderId, corridor, baseAsset, quoteAsset, lockedRate, expiresAt, status, createdBy, createdAt FROM rateLocks ORDER BY id");
-  const mappedUsers = mapRoles(sourceUsers), counterparties = mapCounterparties(sourceCounterparties), counterpartyAuthorizations = mapCounterpartyAuthorizations(sourceCounterpartyAuthorizations), integrationConnections = mapIntegrationConnections(sourceIntegrationConnections), marketObservations = mapMarketObservations(sourceMarketObservations), customers = mapCustomers(sourceCustomers), beneficiaries = mapBeneficiaries(sourceBeneficiaries), paymentOrders = mapPaymentOrders(sourcePaymentOrders), paymentLegs = mapPaymentLegs(sourcePaymentLegs), rateLocks = mapRateLocks(sourceRateLocks);
+  const [sourceLiquidityPositions] = await source.query("SELECT id, corridor, currency, accountKind, accountReference, availableAmount, reservedAmount, sourceReference, reconciledAt, recordedBy, createdAt FROM liquidityPositions ORDER BY id");
+  const mappedUsers = mapRoles(sourceUsers), counterparties = mapCounterparties(sourceCounterparties), counterpartyAuthorizations = mapCounterpartyAuthorizations(sourceCounterpartyAuthorizations), integrationConnections = mapIntegrationConnections(sourceIntegrationConnections), marketObservations = mapMarketObservations(sourceMarketObservations), customers = mapCustomers(sourceCustomers), beneficiaries = mapBeneficiaries(sourceBeneficiaries), paymentOrders = mapPaymentOrders(sourcePaymentOrders), paymentLegs = mapPaymentLegs(sourcePaymentLegs), rateLocks = mapRateLocks(sourceRateLocks), liquidityPositions = mapLiquidityPositions(sourceLiquidityPositions);
   const sourceCounts = {};
-  for (const table of businessTables) { const [rows] = await source.query(`SELECT COUNT(*) AS count FROM \`${table}\``); sourceCounts[table] = Number(rows[0].count); }
+  for (const table of businessTables) { if (!availableSourceTables.has(table)) { sourceCounts[table] = 0; continue; } const [rows] = await source.query(`SELECT COUNT(*) AS count FROM \`${table}\``); sourceCounts[table] = Number(rows[0].count); }
   const unsupportedNonEmptyTables = Object.entries(sourceCounts).filter(([table, count]) => count > 0 && !currentlyMappedBusinessTables.has(table)).map(([table]) => table);
   if (unsupportedNonEmptyTables.length) throw new Error(`Cutover blocked: approved extraction, mapping, loading, and reconciliation are not implemented for non-empty transitional tables: ${unsupportedNonEmptyTables.join(", ")}; no source business data was written`);
-  const sourceSnapshotSha256 = checksum({ userRoles: mappedUsers, businessTableCounts: sourceCounts, counterparties, counterpartyAuthorizations, integrationConnections, marketObservations, customers, beneficiaries, paymentOrders, paymentLegs, rateLocks });
+  const sourceSnapshotSha256 = checksum({ userRoles: mappedUsers, businessTableCounts: sourceCounts, counterparties, counterpartyAuthorizations, integrationConnections, marketObservations, customers, beneficiaries, paymentOrders, paymentLegs, rateLocks, liquidityPositions });
   if (!dryRun && process.env.MIGRATION_APPROVED_SOURCE_SNAPSHOT_SHA256 !== sourceSnapshotSha256) throw new Error(`Apply is blocked: MIGRATION_APPROVED_SOURCE_SNAPSHOT_SHA256 must exactly match the current read-only source snapshot (${sourceSnapshotSha256})`);
   await target.connect(); await target.query("BEGIN");
   let runId = null;
@@ -149,7 +164,7 @@ try {
   }
   const { rows: targetUsers } = await target.query("SELECT user_subject AS \"userSubject\", role FROM user_role_assignments WHERE user_subject = ANY($1::text[]) AND revoked_at IS NULL ORDER BY user_subject, role", [mappedUsers.map(record => record.userSubject)]);
   const userReconciliation = await reconcileTable(target, runId, "users", "user_role_assignments", mappedUsers, targetUsers);
-  const businessReconciliations = [await migrateCounterparties(counterparties, runId), await migrateIntegrationConnections(integrationConnections, runId), await migrateMarketObservations(marketObservations, runId), await migrateCounterpartyAuthorizations(counterpartyAuthorizations, runId), await migrateCustomers(customers, runId), await migrateBeneficiaries(beneficiaries, runId), await migratePaymentOrders(paymentOrders, runId), await migratePaymentLegs(paymentLegs, runId), await migrateRateLocks(rateLocks, runId)];
+  const businessReconciliations = [await migrateCounterparties(counterparties, runId), await migrateIntegrationConnections(integrationConnections, runId), await migrateMarketObservations(marketObservations, runId), await migrateCounterpartyAuthorizations(counterpartyAuthorizations, runId), await migrateCustomers(customers, runId), await migrateBeneficiaries(beneficiaries, runId), await migratePaymentOrders(paymentOrders, runId), await migratePaymentLegs(paymentLegs, runId), await migrateRateLocks(rateLocks, runId), await migrateLiquidityPositions(liquidityPositions, runId)];
   if (!dryRun) await target.query("UPDATE postgres_cutover_runs SET status='verified', completed_at=now() WHERE id=$1", [runId]);
   await target.query(dryRun ? "ROLLBACK" : "COMMIT");
   process.stdout.write(`${JSON.stringify({ migrated: !dryRun, sourceSnapshotSha256, reconciliations: [userReconciliation, ...businessReconciliations], businessTableCounts: sourceCounts, unsupportedBusinessTablesBlocked: unsupportedNonEmptyTables }, null, 2)}\n`);

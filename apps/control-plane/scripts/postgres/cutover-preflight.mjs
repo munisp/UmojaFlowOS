@@ -13,7 +13,7 @@ const target = targetUrl
   : new pg.Client({ host: "/var/run/postgresql", database: "umojaflowos_dev", user: process.env.POSTGRES_LOCAL_USER ?? "ubuntu" });
 
 const businessTables = [
-  "counterparties", "counterpartyAuthorizations", "integrationConnections", "customers", "beneficiaries", "paymentOrders", "paymentLegs", "liquidityPositions", "marketObservations", "rateLocks", "complianceCases", "regulatoryReports", "regulatoryDeadlines", "alertPolicies", "activityEvents",
+  "counterparties", "counterpartyAuthorizations", "integrationConnections", "corridorPolicies", "customers", "beneficiaries", "kycDocuments", "paymentOrders", "paymentLegs", "liquidityPositions", "marketObservations", "rateLocks", "complianceCases", "sarStrFilings", "regulatoryReports", "regulatoryDeadlines", "alertPolicies", "notificationDeliveries", "scheduledJobs", "activityEvents",
 ];
 const asIso = value => new Date(value).toISOString();
 const supportedCounterpartyTypes = new Set(["licensed_psp", "correspondent_bank", "stablecoin_provider", "fx_liquidity_provider", "custody_provider", "kyc_provider", "sanctions_provider", "chain_analytics_provider", "notification_provider", "regulatory_submission_provider"]);
@@ -21,8 +21,11 @@ const supportedCounterpartyTypes = new Set(["licensed_psp", "correspondent_bank"
 try {
   await target.connect();
   const [sourceRows] = await source.query(`SELECT table_name AS tableName, table_rows AS estimatedRows FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN (${businessTables.map(() => "?").join(", ")})`, businessTables);
+  const availableSourceTables = new Set(sourceRows.map(row => row.tableName));
+  const absentSourceTables = businessTables.filter(table => !availableSourceTables.has(table));
   const sourceCounts = {};
   for (const table of businessTables) {
+    if (!availableSourceTables.has(table)) { sourceCounts[table] = 0; continue; }
     const [rows] = await source.query(`SELECT COUNT(*) AS count FROM \`${table}\``);
     sourceCounts[table] = Number(rows[0].count);
   }
@@ -36,6 +39,7 @@ try {
   const [sourcePaymentOrders] = await source.query("SELECT id, idempotencyKey, customerId, beneficiaryId, corridor, sourceCurrency, sourceAmount, targetCurrency, targetAmount, status, policyDecisionReference, providerFinalityReference, createdBy, createdAt, updatedAt FROM paymentOrders ORDER BY id");
   const [sourcePaymentLegs] = await source.query("SELECT id, paymentOrderId, sequenceNumber, legKind, counterpartyId, status, providerInstructionReference, providerFinalityReference FROM paymentLegs ORDER BY id");
   const [sourceRateLocks] = await source.query("SELECT id, marketObservationId, paymentOrderId, corridor, baseAsset, quoteAsset, lockedRate, expiresAt, status, createdBy, createdAt FROM rateLocks ORDER BY id");
+  const [sourceLiquidityPositions] = await source.query("SELECT id, corridor, currency, accountKind, accountReference, availableAmount, reservedAmount, sourceReference, reconciledAt, recordedBy, createdAt FROM liquidityPositions ORDER BY id");
   const mappedUsers = mapRoles(sourceUsers);
   const counterparties = sourceCounterparties.map(row => ({ id: deterministicUuid("counterparties", row.id), legalName: row.legalName, counterpartyType: row.counterpartyType, jurisdiction: row.jurisdiction, createdAt: asIso(row.createdAt) })).sort((a, b) => a.id.localeCompare(b.id));
   const unsupportedCounterparty = counterparties.find(record => !supportedCounterpartyTypes.has(record.counterpartyType));
@@ -52,13 +56,14 @@ try {
   }).sort((a, b) => a.id.localeCompare(b.id));
   const paymentLegs = sourcePaymentLegs.map(row => ({ id: deterministicUuid("paymentLegs", row.id), paymentOrderId: deterministicUuid("paymentOrders", row.paymentOrderId), sequenceNumber: row.sequenceNumber, legKind: row.legKind, counterpartyId: row.counterpartyId === null ? null : deterministicUuid("counterparties", row.counterpartyId), status: row.status, providerInstructionReference: row.providerInstructionReference ?? null, providerFinalityReference: row.providerFinalityReference ?? null })).sort((a, b) => a.id.localeCompare(b.id));
   const rateLocks = sourceRateLocks.map(row => ({ id: deterministicUuid("rateLocks", row.id), marketObservationId: deterministicUuid("marketObservations", row.marketObservationId), paymentOrderId: row.paymentOrderId === null ? null : deterministicUuid("paymentOrders", row.paymentOrderId), corridor: row.corridor, baseAsset: row.baseAsset, quoteAsset: row.quoteAsset, lockedRate: String(row.lockedRate), expiresAt: asIso(row.expiresAt), status: row.status, createdBy: row.createdBy, createdAt: asIso(row.createdAt) })).sort((a, b) => a.id.localeCompare(b.id));
-  const sourceSnapshotSha256 = checksum({ userRoles: mappedUsers, businessTableCounts: sourceCounts, counterparties, counterpartyAuthorizations, integrationConnections, marketObservations, customers, beneficiaries, paymentOrders, paymentLegs, rateLocks });
+  const liquidityPositions = sourceLiquidityPositions.map(row => ({ id: deterministicUuid("liquidityPositions", row.id), corridor: row.corridor, currency: row.currency, accountKind: row.accountKind, accountReference: row.accountReference, availableAmount: String(row.availableAmount), reservedAmount: String(row.reservedAmount), sourceReference: row.sourceReference, reconciledAt: asIso(row.reconciledAt), recordedBy: row.recordedBy, createdAt: asIso(row.createdAt) })).sort((a, b) => a.id.localeCompare(b.id));
+  const sourceSnapshotSha256 = checksum({ userRoles: mappedUsers, businessTableCounts: sourceCounts, counterparties, counterpartyAuthorizations, integrationConnections, marketObservations, customers, beneficiaries, paymentOrders, paymentLegs, rateLocks, liquidityPositions });
   const { rows: targetTables } = await target.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public'");
   const requiredTargetTables = ["counterparties", "customers", "payment_orders", "payment_legs", "compliance_cases", "regulatory_reports", "activity_events"];
   const missingTargetTables = requiredTargetTables.filter(name => !targetTables.some(row => row.tablename === name));
   if (missingTargetTables.length) throw new Error(`PostgreSQL canonical schema is incomplete: ${missingTargetTables.join(", ")}`);
   const nonEmptyBusinessTables = Object.entries(sourceCounts).filter(([, count]) => count > 0).map(([table]) => table);
-  process.stdout.write(`${JSON.stringify({ ready: nonEmptyBusinessTables.length === 0, sourceCounts, sourceSnapshotSha256, mappedUserRoleCount: mappedUsers.length, nonEmptyBusinessTables, sourceTableMetadata: sourceRows, targetSchemaVerified: true, activationBoundary: nonEmptyBusinessTables.length ? "Business-data migration remains blocked until each non-empty table has an approved mapping and destination reconciliation contract." : "Only approved user-role assignments may be migrated after an accountable operator confirms this exact snapshot hash." }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ ready: nonEmptyBusinessTables.length === 0, sourceCounts, sourceSnapshotSha256, mappedUserRoleCount: mappedUsers.length, nonEmptyBusinessTables, absentSourceTables, sourceTableMetadata: sourceRows, targetSchemaVerified: true, activationBoundary: nonEmptyBusinessTables.length ? "Business-data migration remains blocked until each non-empty table has an approved mapping and destination reconciliation contract." : "Only approved user-role assignments may be migrated after an accountable operator confirms this exact snapshot hash." }, null, 2)}\n`);
 } finally {
   source.destroy();
   await target.end();
