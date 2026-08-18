@@ -231,6 +231,14 @@ export async function listPostgresLiquidityPositions() {
   } finally { client.release(); }
 }
 
+export async function listPostgresRegulatoryReports() {
+  const client = await getPool().connect();
+  try {
+    const { rows } = await client.query<{ id: string; regulator: string; corridor: string; reportType: string; periodStart: Date; periodEnd: Date; status: string; artifactUri: string | null; submissionReference: string | null }>("SELECT id, regulator, corridor, report_type AS \"reportType\", period_start AS \"periodStart\", period_end AS \"periodEnd\", status, artifact_uri AS \"artifactUri\", submission_reference AS \"submissionReference\" FROM regulatory_reports ORDER BY period_end DESC, created_at DESC");
+    return rows;
+  } finally { client.release(); }
+}
+
 export async function listPostgresNotificationDeliveries() {
   const client = await getPool().connect();
   try {

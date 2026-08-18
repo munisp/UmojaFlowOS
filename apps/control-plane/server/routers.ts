@@ -2,7 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, auditorProcedure, complianceProcedure, publicProcedure, router, treasuryProcedure } from "./_core/trpc";
-import { cancelPostgresRateLock, createPostgresCounterparty, createPostgresCounterpartyAuthorization, createPostgresCounterpartyRiskAssessment, createPostgresDocumentAnalysisJob, createPostgresRegulatoryReportDraft, createPostgresReviewerDecision, createPostgresTreasuryRecommendation, createPostgresVerificationConsent, decidePostgresTreasuryRecommendation, escalatePostgresCounterpartyRiskAssessment, getPostgresCutoverReadiness, getPostgresReadiness, listPostgresCounterparties, listPostgresCounterpartyAuthorizations, listPostgresDocumentAnalysisJobs, listPostgresKycDocuments, listPostgresLiquidityPositions, listPostgresNotificationDeliveries, listPostgresRegulatoryDeadlines, listPostgresSarStrFilings, persistPostgresDocumentAnalysisEvidence, recordPostgresLiquidityPosition, transitionPostgresRegulatoryReport } from "./postgres";
+import { cancelPostgresRateLock, createPostgresCounterparty, createPostgresCounterpartyAuthorization, createPostgresCounterpartyRiskAssessment, createPostgresDocumentAnalysisJob, createPostgresRegulatoryReportDraft, createPostgresReviewerDecision, createPostgresTreasuryRecommendation, createPostgresVerificationConsent, decidePostgresTreasuryRecommendation, escalatePostgresCounterpartyRiskAssessment, getPostgresCutoverReadiness, getPostgresReadiness, listPostgresCounterparties, listPostgresCounterpartyAuthorizations, listPostgresDocumentAnalysisJobs, listPostgresKycDocuments, listPostgresLiquidityPositions, listPostgresNotificationDeliveries, listPostgresRegulatoryDeadlines, listPostgresRegulatoryReports, listPostgresSarStrFilings, persistPostgresDocumentAnalysisEvidence, recordPostgresLiquidityPosition, transitionPostgresRegulatoryReport } from "./postgres";
 import { umojaFlowRouter } from "./routers/umojaflowos";
 import { parseNonExecutableComplianceEvent } from "./contracts/events";
 import { z } from "zod";
@@ -28,6 +28,7 @@ export const appRouter = router({
     sarStrFilings: auditorProcedure.query(() => listPostgresSarStrFilings()),
     regulatoryDeadlines: auditorProcedure.query(() => listPostgresRegulatoryDeadlines()),
     liquidityPositions: auditorProcedure.query(() => listPostgresLiquidityPositions()),
+    regulatoryReports: auditorProcedure.query(() => listPostgresRegulatoryReports()),
     notificationDeliveries: auditorProcedure.query(() => listPostgresNotificationDeliveries()),
     documentAnalysisJobs: auditorProcedure.query(() => listPostgresDocumentAnalysisJobs()),
     createVerificationConsent: complianceProcedure.input(z.object({ scope: z.enum(["kyc", "kyb"]), subjectReference: z.string().trim().min(3).max(255), consentVersion: z.string().trim().min(1).max(128), purpose: z.string().trim().min(10).max(1000), grantedAt: z.coerce.date(), expiresAt: z.coerce.date().optional() })).mutation(({ ctx, input }) => createPostgresVerificationConsent({ openId: ctx.user.openId, role: ctx.user.role }, input)),
