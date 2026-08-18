@@ -416,6 +416,41 @@ export async function cancelPostgresRateLock(actor: Actor, rateLockId: string) {
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
 }
 
+export async function createPostgresTreasuryRecommendation(actor: Actor, input: { bufferPolicyId: string; reconciledAvailableBalance: string; reconciledAt: Date; balanceSourceReference: string; verifiedNearTermFundingGap: string; fundingGapSourceReference: string; expiresAt: Date }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const policy = await client.query<{ corridor: string; currency: string; daily: string; minimumPct: string; targetPct: string; capPct: string; effectiveFrom: Date; effectiveTo: Date | null }>("SELECT corridor, currency, approved_daily_outflow::text AS daily, minimum_buffer_pct::text AS \"minimumPct\", target_buffer_pct::text AS \"targetPct\", max_recommendation_pct_of_target::text AS \"capPct\", effective_from AS \"effectiveFrom\", effective_to AS \"effectiveTo\" FROM treasury_buffer_policies WHERE id=$1 FOR UPDATE", [input.bufferPolicyId]);
+    const p = policy.rows[0], now = new Date();
+    if (!p || p.effectiveFrom > now || (p.effectiveTo && p.effectiveTo <= now)) throw new Error("active approved treasury buffer policy is required");
+    if (input.reconciledAt > now || now.getTime() - input.reconciledAt.getTime() > 86_400_000) throw new Error("reconciled balance is unavailable or stale; recommendation generation fails closed");
+    if (input.expiresAt <= now) throw new Error("recommendation expiry must be in the future");
+    const available = Number(input.reconciledAvailableBalance), gap = Number(input.verifiedNearTermFundingGap), daily = Number(p.daily), minimum = daily * Number(p.minimumPct), target = daily * Number(p.targetPct), cap = target * Number(p.capPct);
+    if (![available, gap, daily, minimum, target, cap].every(Number.isFinite) || available < 0 || gap < 0) throw new Error("invalid reconciled evidence; recommendation generation fails closed");
+    const recommendation = Math.max(0, Math.min(target - available, cap, gap));
+    const evidence = { bufferPolicyId: input.bufferPolicyId, balanceSourceReference: input.balanceSourceReference, fundingGapSourceReference: input.fundingGapSourceReference, formula: "min(target - available, target * cap_pct, verified_funding_gap)", executionInitiated: false };
+    const { rows } = await client.query<{ id: string }>("INSERT INTO treasury_rebalancing_recommendations (buffer_policy_id,corridor,currency,reconciled_available_balance,reconciled_at,balance_source_reference,verified_near_term_funding_gap,funding_gap_source_reference,minimum_buffer_amount,target_buffer_amount,computed_recommendation_amount,calculation_evidence,proposed_by,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14) RETURNING id", [input.bufferPolicyId, p.corridor, p.currency, available, input.reconciledAt, input.balanceSourceReference, gap, input.fundingGapSourceReference, minimum, target, recommendation, JSON.stringify(evidence), actor.openId, input.expiresAt]);
+    const record = rows[0]; if (!record) throw new Error("treasury recommendation insert did not return a record");
+    await client.query("INSERT INTO activity_events (actor_subject,actor_role,action,object_type,object_id,metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "treasury_recommendation.proposed", "treasury_rebalancing_recommendation", record.id, JSON.stringify({ ...evidence, recommendationAmount: recommendation })]);
+    await client.query("COMMIT"); return { id: record.id, minimumBufferAmount: String(minimum), targetBufferAmount: String(target), recommendationAmount: String(recommendation), status: "proposed" as const };
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
+export async function decidePostgresTreasuryRecommendation(actor: Actor, input: { recommendationId: string; decision: "approved" | "rejected"; decisionReason: string }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ proposedBy: string; expiresAt: Date }>("SELECT proposed_by AS \"proposedBy\", expires_at AS \"expiresAt\" FROM treasury_rebalancing_recommendations WHERE id=$1 AND status='proposed' FOR UPDATE", [input.recommendationId]);
+    const record = rows[0];
+    if (!record) throw new Error("only proposed recommendations may be decided");
+    if (record.proposedBy === actor.openId) throw new Error("independent approval is required; proposer cannot decide recommendation");
+    if (record.expiresAt <= new Date()) throw new Error("expired recommendation cannot be decided");
+    await client.query("UPDATE treasury_rebalancing_recommendations SET status=$1, decided_by=$2, decided_at=now(), decision_reason=$3 WHERE id=$4", [input.decision, actor.openId, input.decisionReason, input.recommendationId]);
+    await client.query("INSERT INTO activity_events (actor_subject,actor_role,action,object_type,object_id,metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, `treasury_recommendation.${input.decision}`, "treasury_rebalancing_recommendation", input.recommendationId, JSON.stringify({ decisionReason: input.decisionReason, executionInitiated: false })]);
+    await client.query("COMMIT"); return { id: input.recommendationId, status: input.decision };
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
 export async function closePostgresPool() {
   if (pool) {
     await pool.end();
