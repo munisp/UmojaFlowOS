@@ -281,6 +281,25 @@ export async function listPostgresDocumentAnalysisJobs() {
   }
 }
 
+export async function listPostgresVerificationConsents() {
+  const client = await getPool().connect();
+  try {
+    const { rows } = await client.query<{
+      id: string;
+      scope: string;
+      subjectReference: string;
+      consentVersion: string;
+      purpose: string;
+      grantedAt: Date;
+      expiresAt: Date | null;
+      capturedBy: string;
+    }>("SELECT id, scope, subject_reference AS \"subjectReference\", consent_version AS \"consentVersion\", purpose, granted_at AS \"grantedAt\", expires_at AS \"expiresAt\", captured_by AS \"capturedBy\" FROM verification_consents ORDER BY granted_at DESC");
+    return rows;
+  } finally {
+    client.release();
+  }
+}
+
 type Actor = { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" };
 
 export async function createPostgresVerificationConsent(actor: Actor, input: { scope: "kyc" | "kyb"; subjectReference: string; consentVersion: string; purpose: string; grantedAt: Date; expiresAt?: Date }) {
