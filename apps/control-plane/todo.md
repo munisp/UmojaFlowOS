@@ -34,6 +34,9 @@
 - [ ] Freeze the managed MySQL/TiDB schema as transitional only and prevent any additional canonical data-model changes on it.
 - [x] Define and implement the canonical PostgreSQL control-plane schema, including data types, constraints, indexes, audit evidence, and provider activation gates.
 - [ ] Create a data-preserving MySQL-to-PostgreSQL migration plan and executable migration tooling with validation checks.
+- [ ] Implement executable MySQL-to-PostgreSQL extraction, mapping, and loading for transitional users, role assignments, and any approved non-empty business records.
+- [ ] Implement fail-closed source-to-destination count and checksum reconciliation for every migrated table.
+- [ ] Document and test user identity and role mapping from the transitional authentication table to PostgreSQL user role assignments.
 - [ ] Port the TypeScript control plane from MySQL-specific Drizzle access to PostgreSQL and validate every implemented workflow against PostgreSQL.
 - [ ] Align the Go payment engine, Rust risk and ledger services, and Python reporting service with the PostgreSQL-first deployment and contract strategy.
 - [x] Install a localhost-only PostgreSQL development instance and create the canonical UmojaFlowOS development database and least-privilege application role.
