@@ -48,3 +48,34 @@ message PolicyDecision {
   string policy_version = 4;
   string evaluated_at_rfc3339 = 5;
 }
+
+message EventEnvelope {
+  string event_id = 1;
+  string event_type = 2;
+  string event_version = 3;
+  string correlation_id = 4;
+  string idempotency_key = 5;
+  string occurred_at_rfc3339 = 6;
+}
+
+message PaymentOrderValidated {
+  EventEnvelope envelope = 1;
+  PaymentOrder order = 2;
+  string policy_version = 3;
+}
+
+message CompliancePolicyDecisionEvent {
+  EventEnvelope envelope = 1;
+  string order_id = 2;
+  PolicyDecision decision = 3;
+  bool external_execution_authorized = 4;
+}
+
+message LedgerPostingCommand {
+  EventEnvelope envelope = 1;
+  string command_id = 2;
+  string debit_account_reference = 3;
+  string credit_account_reference = 4;
+  Money amount = 5;
+  bool tigerbeetle_cluster_configured = 6;
+}
