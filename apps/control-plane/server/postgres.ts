@@ -34,7 +34,7 @@ export async function getPostgresReadiness() {
 }
 
 const canonicalTables = [
-  "activity_events", "alert_policies", "beneficiaries", "compliance_cases", "corridor_policies", "counterparties", "counterparty_authorizations", "customers", "integration_connections", "kyc_documents", "legal_entities", "liquidity_positions", "market_observations", "notification_deliveries", "payment_legs", "payment_orders", "policy_decisions", "rate_locks", "regulatory_deadlines", "regulatory_reports", "sar_str_filings", "scheduled_jobs", "user_role_assignments",
+  "activity_events", "alert_policies", "beneficiaries", "compliance_cases", "corridor_policies", "counterparties", "counterparty_authorizations", "customers", "document_analysis_evidence", "document_analysis_jobs", "integration_connections", "kyc_documents", "legal_entities", "liquidity_positions", "market_observations", "notification_deliveries", "payment_legs", "payment_orders", "policy_decisions", "rate_locks", "regulatory_deadlines", "regulatory_reports", "sar_str_filings", "scheduled_jobs", "user_role_assignments", "verification_consents", "verification_reviewer_decisions",
 ] as const;
 
 export async function getPostgresCutoverReadiness() {
@@ -236,6 +236,29 @@ export async function listPostgresNotificationDeliveries() {
       payloadHash: string;
       createdAt: Date;
     }>("SELECT id, alert_policy_id AS \"alertPolicyId\", alert_type AS \"alertType\", delivery_state AS \"deliveryState\", destination, correlation_id AS \"correlationId\", payload_hash AS \"payloadHash\", created_at AS \"createdAt\" FROM notification_deliveries ORDER BY created_at DESC");
+    return rows;
+  } finally {
+    client.release();
+  }
+}
+
+export async function listPostgresDocumentAnalysisJobs() {
+  const client = await getPool().connect();
+  try {
+    const { rows } = await client.query<{
+      id: string;
+      consentId: string;
+      kycDocumentId: string | null;
+      caseKind: string;
+      documentClass: string;
+      sourceSha256: string;
+      sourceUri: string;
+      mimeType: string;
+      state: string;
+      submittedBy: string;
+      submittedAt: Date;
+      completedAt: Date | null;
+    }>("SELECT id, consent_id AS \"consentId\", kyc_document_id AS \"kycDocumentId\", case_kind AS \"caseKind\", document_class AS \"documentClass\", source_sha256 AS \"sourceSha256\", source_uri AS \"sourceUri\", mime_type AS \"mimeType\", state, submitted_by AS \"submittedBy\", submitted_at AS \"submittedAt\", completed_at AS \"completedAt\" FROM document_analysis_jobs ORDER BY submitted_at DESC");
     return rows;
   } finally {
     client.release();
