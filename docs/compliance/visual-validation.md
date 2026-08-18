@@ -23,3 +23,7 @@ The CBN, CBK, and SARB reporting module displayed separate report and deadline a
 ## 2026-08-17 counterparty licence-evidence review
 
 The counterparty registry was reviewed after adding separate licence-evidence controls. The administrator view presented independent counterparty and licence actions, a counterparty register, and an authorisation-evidence register. The layout remained legible at the desktop viewport, and both empty states accurately represented the absence of persisted operational data rather than fabricated provider or licence records.
+
+## 2026-08-18 PostgreSQL cutover-readiness review
+
+The overview displayed the live local PostgreSQL schema assessment as a separate activation-boundary item. The text correctly identified that 23 canonical tables were locally validated and explicitly stated that production deployment and service cutover remain separate gates. No production database, provider, payment, or submission capability was inferred from the local development result.
