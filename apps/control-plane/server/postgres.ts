@@ -227,6 +227,57 @@ export async function listPostgresSarStrFilings() {
   }
 }
 
+export async function listPostgresComplianceCases() {
+  const { rows } = await getPool().query<{ id: string; caseType: string; status: string; severity: string; sourceReference: string; openedAt: Date }>("SELECT id, case_type AS \"caseType\", status, severity, source_reference AS \"sourceReference\", opened_at AS \"openedAt\" FROM compliance_cases ORDER BY opened_at DESC LIMIT 200");
+  return rows;
+}
+
+export async function createPostgresComplianceCase(actor: Actor, input: { caseType: "kyc" | "sanctions" | "transaction_monitoring" | "travel_rule" | "counterparty" | "sar_str"; severity: "low" | "medium" | "high" | "critical"; sourceReference: string; decisionReason?: string }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ id: string; status: string }>("INSERT INTO compliance_cases (case_type, severity, source_reference, decision_reason) VALUES ($1,$2,$3,$4) RETURNING id, status", [input.caseType, input.severity, input.sourceReference, input.decisionReason ?? null]);
+    const complianceCase = rows[0];
+    if (!complianceCase) throw new Error("PostgreSQL compliance case insert did not return a record");
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "compliance_case.opened", "compliance_case", complianceCase.id, JSON.stringify({ caseType: input.caseType, severity: input.severity, sourceReference: input.sourceReference, hasDecisionReason: Boolean(input.decisionReason?.trim()) })]);
+    await client.query("COMMIT");
+    return complianceCase;
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
+export async function createPostgresSarStrFiling(actor: Actor, input: { complianceCaseId: string; corridor: "NIGERIA_NGN" | "KENYA_KES" | "SOUTH_AFRICA_ZAR"; filingType: "sar" | "str"; filingAuthority: string; sourceReference: string }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const caseResult = await client.query<{ id: string }>("SELECT id FROM compliance_cases WHERE id=$1 FOR UPDATE", [input.complianceCaseId]);
+    if (!caseResult.rows[0]) throw new Error("SAR/STR filing requires an existing compliance case");
+    const { rows } = await client.query<{ id: string; status: string }>("INSERT INTO sar_str_filings (compliance_case_id, corridor, filing_type, filing_authority, source_reference, created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, status", [input.complianceCaseId, input.corridor, input.filingType, input.filingAuthority, input.sourceReference, actor.openId]);
+    const filing = rows[0];
+    if (!filing) throw new Error("PostgreSQL SAR/STR filing insert did not return a record");
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "sar_str_filing.draft_created", "sar_str_filing", filing.id, JSON.stringify({ complianceCaseId: input.complianceCaseId, corridor: input.corridor, filingType: input.filingType, filingAuthority: input.filingAuthority, sourceReference: input.sourceReference })]);
+    await client.query("COMMIT");
+    return filing;
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
+export async function transitionPostgresSarStrFiling(actor: Actor, input: { filingId: string; status: "under_review" | "approved_for_submission" | "pending_submission" | "submitted" | "submission_unavailable" | "rejected"; submissionReference?: string }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const current = await client.query<{ status: string; submissionReference: string | null }>("SELECT status, submission_reference AS \"submissionReference\" FROM sar_str_filings WHERE id=$1 FOR UPDATE", [input.filingId]);
+    const filing = current.rows[0];
+    if (!filing) throw new Error("SAR/STR filing was not found");
+    const allowed: Record<string, string[]> = { draft: ["under_review"], under_review: ["approved_for_submission", "rejected"], approved_for_submission: ["pending_submission"], pending_submission: ["submitted", "submission_unavailable"], submission_unavailable: ["pending_submission"], rejected: [] };
+    if (!allowed[filing.status]?.includes(input.status)) throw new Error("invalid SAR/STR workflow transition");
+    const submissionReference = input.submissionReference ?? filing.submissionReference;
+    if (input.status === "submitted" && !submissionReference?.trim()) throw new Error("verified submission reference is required before submitted status");
+    await client.query("UPDATE sar_str_filings SET status=$1, submission_reference=$2, updated_at=now() WHERE id=$3", [input.status, submissionReference ?? null, input.filingId]);
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "sar_str_filing.transitioned", "sar_str_filing", input.filingId, JSON.stringify({ from: filing.status, to: input.status, hasSubmissionReference: Boolean(submissionReference?.trim()), providerSubmissionActivated: false })]);
+    await client.query("COMMIT");
+    return { id: input.filingId, status: input.status };
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
 export async function listPostgresRegulatoryDeadlines() {
   const client = await getPool().connect();
   try {

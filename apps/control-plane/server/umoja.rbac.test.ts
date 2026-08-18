@@ -54,4 +54,23 @@ describe("UmojaFlowOS role boundaries", () => {
     const caller = appRouter.createCaller(auditorContext());
     await expect(caller.umoja.registry.transitionAuthorization({ authorizationId: 1, status: "verified" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
+
+  it("prevents an auditor from creating a SAR/STR filing", async () => {
+    const caller = appRouter.createCaller(auditorContext());
+    await expect(caller.postgres.createSarStrFiling({
+      complianceCaseId: "00000000-0000-4000-8000-000000000001",
+      corridor: "SOUTH_AFRICA_ZAR",
+      filingType: "sar",
+      filingAuthority: "SARB",
+      sourceReference: "case-evidence-reference",
+    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("prevents an auditor from transitioning a SAR/STR filing", async () => {
+    const caller = appRouter.createCaller(auditorContext());
+    await expect(caller.postgres.transitionSarStrFiling({
+      filingId: "00000000-0000-4000-8000-000000000002",
+      status: "under_review",
+    })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 });
