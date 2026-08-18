@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+pub mod eventing;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Posting {
