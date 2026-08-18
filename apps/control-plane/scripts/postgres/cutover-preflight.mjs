@@ -13,7 +13,7 @@ const target = targetUrl
   : new pg.Client({ host: "/var/run/postgresql", database: "umojaflowos_dev", user: process.env.POSTGRES_LOCAL_USER ?? "ubuntu" });
 
 const businessTables = [
-  "counterparties", "counterpartyAuthorizations", "integrationConnections", "customers", "beneficiaries", "paymentOrders", "paymentLegs", "liquidityPositions", "marketObservations", "complianceCases", "regulatoryReports", "regulatoryDeadlines", "alertPolicies", "activityEvents",
+  "counterparties", "counterpartyAuthorizations", "integrationConnections", "customers", "beneficiaries", "paymentOrders", "paymentLegs", "liquidityPositions", "marketObservations", "rateLocks", "complianceCases", "regulatoryReports", "regulatoryDeadlines", "alertPolicies", "activityEvents",
 ];
 const asIso = value => new Date(value).toISOString();
 const supportedCounterpartyTypes = new Set(["licensed_psp", "correspondent_bank", "stablecoin_provider", "fx_liquidity_provider", "custody_provider", "kyc_provider", "sanctions_provider", "chain_analytics_provider", "notification_provider", "regulatory_submission_provider"]);

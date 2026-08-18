@@ -11,7 +11,7 @@ const approved = process.env.MIGRATION_EXECUTION_APPROVED === "1";
 const initiatedBy = process.env.MIGRATION_INITIATED_BY;
 if (!dryRun && (!approved || !initiatedBy)) throw new Error("Apply is blocked: set MIGRATION_EXECUTION_APPROVED=1 and MIGRATION_INITIATED_BY to an accountable operator subject");
 
-const businessTables = ["counterparties", "counterpartyAuthorizations", "integrationConnections", "customers", "beneficiaries", "paymentOrders", "paymentLegs", "liquidityPositions", "marketObservations", "complianceCases", "regulatoryReports", "regulatoryDeadlines", "alertPolicies", "activityEvents"];
+const businessTables = ["counterparties", "counterpartyAuthorizations", "integrationConnections", "customers", "beneficiaries", "paymentOrders", "paymentLegs", "liquidityPositions", "marketObservations", "rateLocks", "complianceCases", "regulatoryReports", "regulatoryDeadlines", "alertPolicies", "activityEvents"];
 const currentlyMappedBusinessTables = new Set(["counterparties", "counterpartyAuthorizations", "integrationConnections", "customers", "beneficiaries", "marketObservations", "paymentOrders", "paymentLegs"]);
 const supportedCounterpartyTypes = new Set(["licensed_psp", "correspondent_bank", "stablecoin_provider", "fx_liquidity_provider", "custody_provider", "kyc_provider", "sanctions_provider", "chain_analytics_provider", "notification_provider", "regulatory_submission_provider"]);
 const asIso = value => new Date(value).toISOString();
