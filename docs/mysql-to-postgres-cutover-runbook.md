@@ -2,7 +2,7 @@
 
 ## Scope and non-negotiable boundary
 
-PostgreSQL is UmojaFlowOS's canonical control-plane store. The legacy MySQL/TiDB schema is transitional only. The executable tooling has deterministic, reconciled mappings for active user-role assignments, counterparties, counterparty authorisations, customers, and beneficiaries. It **does not** transfer payments, balances, KYC documents, rates, screening results, cases, reports, or provider outcomes without a separately reviewed table mapping and destination reconciliation contract.
+PostgreSQL is UmojaFlowOS's canonical control-plane store. The legacy MySQL/TiDB schema is transitional only. The executable tooling has deterministic, reconciled mappings for active user-role assignments, counterparties, counterparty authorisations, integration connections, customers, and beneficiaries. It **does not** transfer payments, balances, KYC documents, rates, screening results, cases, reports, or provider outcomes without a separately reviewed table mapping and destination reconciliation contract.
 
 | Cutover stage | Command | Required outcome | Fail-closed condition |
 |---|---|---|---|

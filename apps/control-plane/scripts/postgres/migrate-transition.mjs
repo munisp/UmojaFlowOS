@@ -11,8 +11,8 @@ const approved = process.env.MIGRATION_EXECUTION_APPROVED === "1";
 const initiatedBy = process.env.MIGRATION_INITIATED_BY;
 if (!dryRun && (!approved || !initiatedBy)) throw new Error("Apply is blocked: set MIGRATION_EXECUTION_APPROVED=1 and MIGRATION_INITIATED_BY to an accountable operator subject");
 
-const businessTables = ["counterparties", "counterpartyAuthorizations", "customers", "beneficiaries", "paymentOrders", "paymentLegs", "liquidityPositions", "marketObservations", "complianceCases", "regulatoryReports", "regulatoryDeadlines", "alertPolicies", "activityEvents"];
-const currentlyMappedBusinessTables = new Set(["counterparties", "counterpartyAuthorizations", "customers", "beneficiaries"]);
+const businessTables = ["counterparties", "counterpartyAuthorizations", "integrationConnections", "customers", "beneficiaries", "paymentOrders", "paymentLegs", "liquidityPositions", "marketObservations", "complianceCases", "regulatoryReports", "regulatoryDeadlines", "alertPolicies", "activityEvents"];
+const currentlyMappedBusinessTables = new Set(["counterparties", "counterpartyAuthorizations", "integrationConnections", "customers", "beneficiaries"]);
 const supportedCounterpartyTypes = new Set(["licensed_psp", "correspondent_bank", "stablecoin_provider", "fx_liquidity_provider", "custody_provider", "kyc_provider", "sanctions_provider", "chain_analytics_provider", "notification_provider", "regulatory_submission_provider"]);
 const asIso = value => new Date(value).toISOString();
 
@@ -36,6 +36,10 @@ function mapBeneficiaries(rows) {
   return rows.map(row => ({ id: deterministicUuid("beneficiaries", row.id), customerId: deterministicUuid("customers", row.customerId), legalName: row.legalName, countryCode: row.countryCode, bankOrWalletReference: row.bankOrWalletReference, screeningState: row.screeningState, createdAt: asIso(row.createdAt) })).sort((a, b) => a.id.localeCompare(b.id));
 }
 
+function mapIntegrationConnections(rows) {
+  return rows.map(row => ({ id: deterministicUuid("integrationConnections", row.id), counterpartyId: deterministicUuid("counterparties", row.counterpartyId), category: row.category, environment: row.environment, documentationUrl: row.documentationUrl, secretReference: row.secretReference ?? null, state: row.state, lastHealthCheckedAt: row.lastHealthCheckedAt ? asIso(row.lastHealthCheckedAt) : null, lastHealthResult: row.lastHealthResult ?? null, createdAt: asIso(row.createdAt) })).sort((a, b) => a.id.localeCompare(b.id));
+}
+
 async function reconcileTable(targetClient, runId, sourceTable, destinationTable, sourceRecords, destinationRecords) {
   const sourceChecksum = checksum(sourceRecords), destinationChecksum = checksum(destinationRecords);
   if (sourceRecords.length !== destinationRecords.length || sourceChecksum !== destinationChecksum) throw new Error(`Cutover reconciliation failed for ${sourceTable}: source count/checksum does not match ${destinationTable}`);
@@ -47,6 +51,12 @@ async function migrateCounterparties(records, runId) {
   if (!dryRun) for (const record of records) await target.query("INSERT INTO counterparties (id, legal_name, counterparty_type, jurisdiction, created_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING", [record.id, record.legalName, record.counterpartyType, record.jurisdiction, record.createdAt]);
   const { rows } = await target.query("SELECT id, legal_name AS \"legalName\", counterparty_type AS \"counterpartyType\", jurisdiction, created_at AS \"createdAt\" FROM counterparties WHERE id = ANY($1::uuid[]) ORDER BY id", [records.map(record => record.id)]);
   return reconcileTable(target, runId, "counterparties", "counterparties", records, rows.map(row => ({ ...row, createdAt: asIso(row.createdAt) })));
+}
+
+async function migrateIntegrationConnections(records, runId) {
+  if (!dryRun) for (const record of records) await target.query("INSERT INTO integration_connections (id, counterparty_id, category, environment, documentation_url, secret_reference, state, last_health_checked_at, last_health_result, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10) ON CONFLICT (id) DO NOTHING", [record.id, record.counterpartyId, record.category, record.environment, record.documentationUrl, record.secretReference, record.state, record.lastHealthCheckedAt, record.lastHealthResult ? JSON.stringify(record.lastHealthResult) : null, record.createdAt]);
+  const { rows } = await target.query("SELECT id, counterparty_id AS \"counterpartyId\", category, environment, documentation_url AS \"documentationUrl\", secret_reference AS \"secretReference\", state, last_health_checked_at AS \"lastHealthCheckedAt\", last_health_result AS \"lastHealthResult\", created_at AS \"createdAt\" FROM integration_connections WHERE id = ANY($1::uuid[]) ORDER BY id", [records.map(record => record.id)]);
+  return reconcileTable(target, runId, "integrationConnections", "integration_connections", records, rows.map(row => ({ ...row, lastHealthCheckedAt: row.lastHealthCheckedAt ? asIso(row.lastHealthCheckedAt) : null, createdAt: asIso(row.createdAt) })));
 }
 
 async function migrateCustomers(records, runId) {
@@ -72,14 +82,15 @@ try {
   const [sourceUsers] = await source.query("SELECT openId, role FROM users ORDER BY openId");
   const [sourceCounterparties] = await source.query("SELECT id, legalName, counterpartyType, jurisdiction, createdAt FROM counterparties ORDER BY id");
   const [sourceCounterpartyAuthorizations] = await source.query("SELECT id, counterpartyId, regulator, licenceReference, scopeDescription, evidenceUrl, validFrom, validTo, status, verifiedBy, verifiedAt FROM counterpartyAuthorizations ORDER BY id");
+  const [sourceIntegrationConnections] = await source.query("SELECT id, counterpartyId, category, environment, documentationUrl, secretReference, state, lastHealthCheckedAt, lastHealthResult, createdAt FROM integrationConnections ORDER BY id");
   const [sourceCustomers] = await source.query("SELECT id, legalName, registrationIdentifier, kycStatus, createdAt FROM customers ORDER BY id");
   const [sourceBeneficiaries] = await source.query("SELECT id, customerId, legalName, countryCode, bankOrWalletReference, screeningState, createdAt FROM beneficiaries ORDER BY id");
-  const mappedUsers = mapRoles(sourceUsers), counterparties = mapCounterparties(sourceCounterparties), counterpartyAuthorizations = mapCounterpartyAuthorizations(sourceCounterpartyAuthorizations), customers = mapCustomers(sourceCustomers), beneficiaries = mapBeneficiaries(sourceBeneficiaries);
+  const mappedUsers = mapRoles(sourceUsers), counterparties = mapCounterparties(sourceCounterparties), counterpartyAuthorizations = mapCounterpartyAuthorizations(sourceCounterpartyAuthorizations), integrationConnections = mapIntegrationConnections(sourceIntegrationConnections), customers = mapCustomers(sourceCustomers), beneficiaries = mapBeneficiaries(sourceBeneficiaries);
   const sourceCounts = {};
   for (const table of businessTables) { const [rows] = await source.query(`SELECT COUNT(*) AS count FROM \`${table}\``); sourceCounts[table] = Number(rows[0].count); }
   const unsupportedNonEmptyTables = Object.entries(sourceCounts).filter(([table, count]) => count > 0 && !currentlyMappedBusinessTables.has(table)).map(([table]) => table);
   if (unsupportedNonEmptyTables.length) throw new Error(`Cutover blocked: approved extraction, mapping, loading, and reconciliation are not implemented for non-empty transitional tables: ${unsupportedNonEmptyTables.join(", ")}; no source business data was written`);
-  const sourceSnapshotSha256 = checksum({ userRoles: mappedUsers, businessTableCounts: sourceCounts, counterparties, counterpartyAuthorizations, customers, beneficiaries });
+  const sourceSnapshotSha256 = checksum({ userRoles: mappedUsers, businessTableCounts: sourceCounts, counterparties, counterpartyAuthorizations, integrationConnections, customers, beneficiaries });
   if (!dryRun && process.env.MIGRATION_APPROVED_SOURCE_SNAPSHOT_SHA256 !== sourceSnapshotSha256) throw new Error(`Apply is blocked: MIGRATION_APPROVED_SOURCE_SNAPSHOT_SHA256 must exactly match the current read-only source snapshot (${sourceSnapshotSha256})`);
   await target.connect(); await target.query("BEGIN");
   let runId = null;
@@ -91,7 +102,7 @@ try {
   }
   const { rows: targetUsers } = await target.query("SELECT user_subject AS \"userSubject\", role FROM user_role_assignments WHERE user_subject = ANY($1::text[]) AND revoked_at IS NULL ORDER BY user_subject, role", [mappedUsers.map(record => record.userSubject)]);
   const userReconciliation = await reconcileTable(target, runId, "users", "user_role_assignments", mappedUsers, targetUsers);
-  const businessReconciliations = [await migrateCounterparties(counterparties, runId), await migrateCounterpartyAuthorizations(counterpartyAuthorizations, runId), await migrateCustomers(customers, runId), await migrateBeneficiaries(beneficiaries, runId)];
+  const businessReconciliations = [await migrateCounterparties(counterparties, runId), await migrateIntegrationConnections(integrationConnections, runId), await migrateCounterpartyAuthorizations(counterpartyAuthorizations, runId), await migrateCustomers(customers, runId), await migrateBeneficiaries(beneficiaries, runId)];
   if (!dryRun) await target.query("UPDATE postgres_cutover_runs SET status='verified', completed_at=now() WHERE id=$1", [runId]);
   await target.query(dryRun ? "ROLLBACK" : "COMMIT");
   process.stdout.write(`${JSON.stringify({ migrated: !dryRun, sourceSnapshotSha256, reconciliations: [userReconciliation, ...businessReconciliations], businessTableCounts: sourceCounts, unsupportedBusinessTablesBlocked: unsupportedNonEmptyTables }, null, 2)}\n`);
