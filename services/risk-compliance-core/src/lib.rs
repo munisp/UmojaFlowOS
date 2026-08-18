@@ -44,6 +44,13 @@ pub struct PolicyResult {
     pub reason_codes: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum EventStreamState {
+    Available,
+    InputUnavailable,
+}
+
 pub fn evaluate(input: &PolicyInput) -> PolicyResult {
     let mut reasons = Vec::new();
     if !input.regulated_entity_authorized {
@@ -83,4 +90,17 @@ pub fn evaluate(input: &PolicyInput) -> PolicyResult {
         decision: Decision::Allow,
         reason_codes: Vec::new(),
     }
+}
+
+pub fn evaluate_event_stream_input(
+    input: &PolicyInput,
+    stream_state: EventStreamState,
+) -> PolicyResult {
+    if stream_state == EventStreamState::InputUnavailable {
+        return PolicyResult {
+            decision: Decision::Block,
+            reason_codes: vec!["INPUT_UNAVAILABLE_EVENT_STREAM".to_string()],
+        };
+    }
+    evaluate(input)
 }
