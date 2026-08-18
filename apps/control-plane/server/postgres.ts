@@ -87,10 +87,10 @@ export async function listPostgresCounterpartyAuthorizations() {
       status: string;
       verifiedBy: string | null;
       verifiedAt: Date | null;
-    }>(`SELECT authorization.id, authorization.counterparty_id AS "counterpartyId", counterparty.legal_name AS "legalName", authorization.regulator, authorization.licence_reference AS "licenceReference", authorization.scope_description AS "scopeDescription", authorization.evidence_uri AS "evidenceUri", authorization.valid_from::text AS "validFrom", authorization.valid_to::text AS "validTo", authorization.status, authorization.verified_by AS "verifiedBy", authorization.verified_at AS "verifiedAt"
-       FROM counterparty_authorizations authorization
-       JOIN counterparties counterparty ON counterparty.id = authorization.counterparty_id
-       ORDER BY authorization.valid_to NULLS LAST, authorization.valid_from DESC`);
+    }>(`SELECT cpa.id, cpa.counterparty_id AS "counterpartyId", counterparty.legal_name AS "legalName", cpa.regulator, cpa.licence_reference AS "licenceReference", cpa.scope_description AS "scopeDescription", cpa.evidence_uri AS "evidenceUri", cpa.valid_from::text AS "validFrom", cpa.valid_to::text AS "validTo", cpa.status, cpa.verified_by AS "verifiedBy", cpa.verified_at AS "verifiedAt"
+       FROM counterparty_authorizations cpa
+       JOIN counterparties counterparty ON counterparty.id = cpa.counterparty_id
+       ORDER BY cpa.valid_to NULLS LAST, cpa.valid_from DESC`);
     return rows;
   } finally {
     client.release();

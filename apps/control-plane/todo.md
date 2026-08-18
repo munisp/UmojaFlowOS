@@ -45,3 +45,4 @@
 - [ ] Add contract, unit, RBAC, and non-provider workflow tests for the completed multi-language service boundaries.
 - [x] Surface the real PostgreSQL cutover-readiness state in the operator overview without presenting the local development instance as production.
 - [ ] Port the counterparty registry and licence-authorisation repository operations from MySQL/TiDB to canonical PostgreSQL UUID records with activity evidence.
+- [ ] Add local PostgreSQL integration tests for canonical counterparty and licence-authorisation repository reads without inserting fictitious operational records.
