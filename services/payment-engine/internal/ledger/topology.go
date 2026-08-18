@@ -3,6 +3,7 @@ package ledger
 import (
 	"context"
 	"errors"
+	"strings"
 )
 
 type AccountKind string
@@ -42,4 +43,28 @@ func (DisabledClient) CreateAccounts(context.Context, []Account) error {
 }
 func (DisabledClient) CreateTransfers(context.Context, []Transfer) error {
 	return errors.New("tigerbeetle cluster is not configured")
+}
+
+type ClusterConfig struct {
+	Addresses   []string
+	ClusterID   uint32
+	TLSRequired bool
+}
+
+func (c ClusterConfig) Validate() error {
+	if c.ClusterID == 0 {
+		return errors.New("tigerbeetle cluster id is required")
+	}
+	if !c.TLSRequired {
+		return errors.New("tigerbeetle transport must require TLS")
+	}
+	if len(c.Addresses) == 0 {
+		return errors.New("at least one tigerbeetle address is required")
+	}
+	for _, address := range c.Addresses {
+		if strings.TrimSpace(address) == "" {
+			return errors.New("tigerbeetle addresses must not be blank")
+		}
+	}
+	return nil
 }
