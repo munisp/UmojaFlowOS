@@ -403,6 +403,19 @@ export async function recordPostgresLiquidityPosition(actor: Actor, input: { cor
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
 }
 
+export async function cancelPostgresRateLock(actor: Actor, rateLockId: string) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ id: string; corridor: string }>("UPDATE rate_locks SET status='cancelled' WHERE id=$1 AND status='locked' AND expires_at > now() RETURNING id, corridor", [rateLockId]);
+    const lock = rows[0];
+    if (!lock) throw new Error("rate lock was not found, is no longer locked, or has expired");
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "rate_lock.cancelled", "rate_lock", lock.id, JSON.stringify({ corridor: lock.corridor, priorStatus: "locked" })]);
+    await client.query("COMMIT");
+    return { id: lock.id, status: "cancelled" as const };
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
 export async function closePostgresPool() {
   if (pool) {
     await pool.end();
