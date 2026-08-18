@@ -342,6 +342,27 @@ export async function createPostgresRegulatoryReportDraft(actor: Actor, input: {
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
 }
 
+export async function transitionPostgresRegulatoryReport(actor: Actor, input: { reportId: string; status: "under_review" | "approved" | "pending_submission" | "submitted"; statusReason: string; artifactUri?: string; evidenceManifest?: unknown; submissionReference?: string }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const current = await client.query<{ status: string; artifactUri: string | null; evidenceManifest: unknown | null; submissionReference: string | null }>("SELECT status, artifact_uri AS \"artifactUri\", evidence_manifest AS \"evidenceManifest\", submission_reference AS \"submissionReference\" FROM regulatory_reports WHERE id=$1 FOR UPDATE", [input.reportId]);
+    const report = current.rows[0];
+    if (!report) throw new Error("regulatory report was not found");
+    const allowed: Record<string, string[]> = { draft: ["under_review"], under_review: ["approved"], approved: ["pending_submission"], pending_submission: ["submitted"] };
+    if (!allowed[report.status]?.includes(input.status)) throw new Error("invalid regulatory report workflow transition");
+    const artifactUri = input.artifactUri ?? report.artifactUri;
+    const evidenceManifest = input.evidenceManifest ?? report.evidenceManifest;
+    const submissionReference = input.submissionReference ?? report.submissionReference;
+    if (!artifactUri || !evidenceManifest) throw new Error("artifact URI and evidence manifest are required before review, approval, or submission");
+    if (input.status === "submitted" && !submissionReference?.trim()) throw new Error("verified submission reference is required before submitted status");
+    await client.query("UPDATE regulatory_reports SET status=$1, status_reason=$2, artifact_uri=$3, evidence_manifest=$4::jsonb, submission_reference=$5, reviewed_by=CASE WHEN $1='under_review' THEN $6 ELSE reviewed_by END, reviewed_at=CASE WHEN $1='under_review' THEN now() ELSE reviewed_at END, approved_by=CASE WHEN $1='approved' THEN $6 ELSE approved_by END, approved_at=CASE WHEN $1='approved' THEN now() ELSE approved_at END WHERE id=$7", [input.status, input.statusReason, artifactUri, JSON.stringify(evidenceManifest), submissionReference ?? null, actor.openId, input.reportId]);
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "regulatory_report.transitioned", "regulatory_report", input.reportId, JSON.stringify({ from: report.status, to: input.status, statusReason: input.statusReason, artifactUri, hasEvidenceManifest: true, hasSubmissionReference: Boolean(submissionReference?.trim()) })]);
+    await client.query("COMMIT");
+    return { reportId: input.reportId, status: input.status };
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
 export async function closePostgresPool() {
   if (pool) {
     await pool.end();
