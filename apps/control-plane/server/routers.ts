@@ -2,7 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, auditorProcedure, complianceProcedure, publicProcedure, router } from "./_core/trpc";
-import { createPostgresCounterparty, createPostgresCounterpartyAuthorization, createPostgresDocumentAnalysisJob, createPostgresReviewerDecision, createPostgresVerificationConsent, getPostgresCutoverReadiness, getPostgresReadiness, listPostgresCounterparties, listPostgresCounterpartyAuthorizations, listPostgresDocumentAnalysisJobs, listPostgresKycDocuments, listPostgresNotificationDeliveries, listPostgresRegulatoryDeadlines, listPostgresSarStrFilings, persistPostgresDocumentAnalysisEvidence } from "./postgres";
+import { createPostgresCounterparty, createPostgresCounterpartyAuthorization, createPostgresDocumentAnalysisJob, createPostgresRegulatoryReportDraft, createPostgresReviewerDecision, createPostgresVerificationConsent, getPostgresCutoverReadiness, getPostgresReadiness, listPostgresCounterparties, listPostgresCounterpartyAuthorizations, listPostgresDocumentAnalysisJobs, listPostgresKycDocuments, listPostgresNotificationDeliveries, listPostgresRegulatoryDeadlines, listPostgresSarStrFilings, persistPostgresDocumentAnalysisEvidence } from "./postgres";
 import { umojaFlowRouter } from "./routers/umojaflowos";
 import { parseNonExecutableComplianceEvent } from "./contracts/events";
 import { z } from "zod";
@@ -47,8 +47,9 @@ export const appRouter = router({
       validFrom: z.coerce.date(),
       validTo: z.coerce.date().optional(),
       status: z.enum(["pending_review", "verified", "expired", "suspended", "rejected"]).default("pending_review"),
-	    })).mutation(({ ctx, input }) => createPostgresCounterpartyAuthorization({ openId: ctx.user.openId, role: ctx.user.role }, input)),
-	  }),
+    })).mutation(({ ctx, input }) => createPostgresCounterpartyAuthorization({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    createRegulatoryReportDraft: complianceProcedure.input(z.object({ regulator: z.enum(["CBN", "CBK", "SARB"]), corridor: z.enum(["NIGERIA_NGN", "KENYA_KES", "SOUTH_AFRICA_ZAR"]), reportType: z.string().trim().min(4).max(255), periodStart: z.coerce.date(), periodEnd: z.coerce.date(), legalEntityId: z.string().uuid() }).refine(input => input.periodEnd >= input.periodStart, { message: "period end must not precede period start" })).mutation(({ ctx, input }) => createPostgresRegulatoryReportDraft({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+  }),
 	  contracts: router({
 	    parseCompliancePolicyDecision: complianceProcedure.input(z.unknown()).mutation(({ input }) => parseNonExecutableComplianceEvent(input)),
 	  }),

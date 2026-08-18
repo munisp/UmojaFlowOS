@@ -329,6 +329,19 @@ export async function createPostgresReviewerDecision(actor: Actor, input: { anal
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
 }
 
+export async function createPostgresRegulatoryReportDraft(actor: Actor, input: { regulator: "CBN" | "CBK" | "SARB"; corridor: "NIGERIA_NGN" | "KENYA_KES" | "SOUTH_AFRICA_ZAR"; reportType: string; periodStart: Date; periodEnd: Date; legalEntityId: string }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ id: string; regulator: string; corridor: string; reportType: string; status: string }>("INSERT INTO regulatory_reports (regulator, corridor, report_type, period_start, period_end, legal_entity_id) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, regulator, corridor, report_type AS \"reportType\", status", [input.regulator, input.corridor, input.reportType, input.periodStart, input.periodEnd, input.legalEntityId]);
+    const report = rows[0];
+    if (!report) throw new Error("PostgreSQL regulatory report insert did not return a record");
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "regulatory_report.draft_created", "regulatory_report", report.id, JSON.stringify({ regulator: report.regulator, corridor: report.corridor, reportType: report.reportType, status: report.status, legalEntityId: input.legalEntityId })]);
+    await client.query("COMMIT");
+    return report;
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
 export async function closePostgresPool() {
   if (pool) {
     await pool.end();
