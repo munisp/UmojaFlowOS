@@ -46,13 +46,15 @@
 - [x] Surface the real PostgreSQL cutover-readiness state in the operator overview without presenting the local development instance as production.
 - [ ] Port the counterparty registry and licence-authorisation repository operations from MySQL/TiDB to canonical PostgreSQL UUID records with activity evidence.
 - [ ] Add local PostgreSQL integration tests for canonical counterparty and licence-authorisation repository reads without inserting fictitious operational records.
-- [ ] Define KYC and KYB evidence classes, explicit consent records, retention boundaries, reviewer roles, and fail-closed disposition policy.
-- [ ] Add a Python document-intelligence service using PaddleOCR and Docling for OCR, document structure extraction, and provenance-preserving evidence manifests.
-- [ ] Add a visual-language-analysis adapter with strict model-output schema validation and unavailable-state handling for KYC and KYB document review.
+- [x] Define KYC and KYB evidence classes, explicit consent records, retention boundaries, reviewer roles, and fail-closed disposition policy.
+- [x] Add a Python document-intelligence service using PaddleOCR and Docling for OCR, document structure extraction, and provenance-preserving evidence manifests.
+- [x] Add a visual-language-analysis adapter with strict model-output schema validation and unavailable-state handling for KYC and KYB document review.
 - [ ] Implement presentation-attack and deepfake-risk evidence workflows for selfie or document imagery, with risk signals requiring human review rather than automated approval or adverse action.
 - [ ] Add PostgreSQL-backed KYC and KYB analysis jobs, model and engine versions, risk evidence, reviewer decisions, and immutable activity records.
 - [ ] Connect secure S3-referenced document ingestion, OCR and analysis job submission, evidence review, and manual case disposition to the compliance console.
 - [ ] Add red-team, privacy, adversarial-document, access-control, and model-unavailability tests for KYC and KYB analysis workflows.
 - [ ] Detect the locally available Ollama Qwen and DeepSeek models, verify visual-input capability, and persist the exact model and digest used for each analysis.
 - [ ] Implement an Ollama fail-closed local VLM adapter with strict JSON-schema validation, bounded image inputs, timeout controls, and no automatic approval pathway.
-- [ ] Select and document the recommended production Ollama model and runtime profile for KYC and KYB visual evidence analysis, including capability, resource, privacy, and failover criteria.
+- [x] Select and document the recommended production Ollama model and runtime profile for KYC and KYB visual evidence analysis, including capability, resource, privacy, and failover criteria.
+- [ ] Implement PostgreSQL-backed consent capture, analysis-job creation, evidence persistence, and reviewer-decision mutations through typed procedures.
+- [ ] Write immutable activity events for KYC and KYB consent capture, analysis-job creation, evidence persistence, and reviewer decisions, with persisted-audit regression coverage.

@@ -1,8 +1,8 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { adminProcedure, auditorProcedure, publicProcedure, router } from "./_core/trpc";
-import { createPostgresCounterparty, createPostgresCounterpartyAuthorization, getPostgresCutoverReadiness, getPostgresReadiness, listPostgresCounterparties, listPostgresCounterpartyAuthorizations, listPostgresDocumentAnalysisJobs, listPostgresKycDocuments, listPostgresNotificationDeliveries, listPostgresRegulatoryDeadlines, listPostgresSarStrFilings } from "./postgres";
+import { adminProcedure, auditorProcedure, complianceProcedure, publicProcedure, router } from "./_core/trpc";
+import { createPostgresCounterparty, createPostgresCounterpartyAuthorization, createPostgresDocumentAnalysisJob, createPostgresVerificationConsent, getPostgresCutoverReadiness, getPostgresReadiness, listPostgresCounterparties, listPostgresCounterpartyAuthorizations, listPostgresDocumentAnalysisJobs, listPostgresKycDocuments, listPostgresNotificationDeliveries, listPostgresRegulatoryDeadlines, listPostgresSarStrFilings } from "./postgres";
 import { umojaFlowRouter } from "./routers/umojaflowos";
 import { z } from "zod";
 
@@ -28,6 +28,8 @@ export const appRouter = router({
     regulatoryDeadlines: auditorProcedure.query(() => listPostgresRegulatoryDeadlines()),
     notificationDeliveries: auditorProcedure.query(() => listPostgresNotificationDeliveries()),
     documentAnalysisJobs: auditorProcedure.query(() => listPostgresDocumentAnalysisJobs()),
+    createVerificationConsent: complianceProcedure.input(z.object({ scope: z.enum(["kyc", "kyb"]), subjectReference: z.string().trim().min(3).max(255), consentVersion: z.string().trim().min(1).max(128), purpose: z.string().trim().min(10).max(1000), grantedAt: z.coerce.date(), expiresAt: z.coerce.date().optional() })).mutation(({ ctx, input }) => createPostgresVerificationConsent({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    createDocumentAnalysisJob: complianceProcedure.input(z.object({ consentId: z.string().uuid(), kycDocumentId: z.string().uuid().optional(), caseKind: z.enum(["kyc", "kyb"]), documentClass: z.string().trim().min(3).max(128), sourceSha256: z.string().regex(/^[a-f0-9]{64}$/), sourceUri: z.string().url(), mimeType: z.enum(["application/pdf", "image/jpeg", "image/png", "image/webp", "image/tiff"]) })).mutation(({ ctx, input }) => createPostgresDocumentAnalysisJob({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     createCounterparty: adminProcedure.input(z.object({
       legalName: z.string().trim().min(2).max(255),
       counterpartyType: z.enum(["licensed_psp", "correspondent_bank", "stablecoin_provider", "fx_liquidity_provider", "custody_provider", "kyc_provider", "sanctions_provider", "chain_analytics_provider", "notification_provider", "regulatory_submission_provider"]),

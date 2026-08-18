@@ -265,6 +265,43 @@ export async function listPostgresDocumentAnalysisJobs() {
   }
 }
 
+type Actor = { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" };
+
+export async function createPostgresVerificationConsent(actor: Actor, input: { scope: "kyc" | "kyb"; subjectReference: string; consentVersion: string; purpose: string; grantedAt: Date; expiresAt?: Date }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ id: string; scope: string; subjectReference: string }>("INSERT INTO verification_consents (scope, subject_reference, consent_version, purpose, granted_at, expires_at, captured_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, scope, subject_reference AS \"subjectReference\"", [input.scope, input.subjectReference, input.consentVersion, input.purpose, input.grantedAt, input.expiresAt ?? null, actor.openId]);
+    const consent = rows[0];
+    if (!consent) throw new Error("PostgreSQL consent insert did not return a record");
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "verification_consent.captured", "verification_consent", consent.id, JSON.stringify({ scope: consent.scope, subjectReference: consent.subjectReference })]);
+    await client.query("COMMIT");
+    return consent;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally { client.release(); }
+}
+
+export async function createPostgresDocumentAnalysisJob(actor: Actor, input: { consentId: string; kycDocumentId?: string; caseKind: "kyc" | "kyb"; documentClass: string; sourceSha256: string; sourceUri: string; mimeType: string }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const consent = await client.query<{ id: string; scope: string; revokedAt: Date | null; expiresAt: Date | null }>("SELECT id, scope, revoked_at AS \"revokedAt\", expires_at AS \"expiresAt\" FROM verification_consents WHERE id=$1 FOR UPDATE", [input.consentId]);
+    const record = consent.rows[0];
+    if (!record || record.scope !== input.caseKind || record.revokedAt || (record.expiresAt && record.expiresAt <= new Date())) throw new Error("active consent matching the analysis scope is required");
+    const { rows } = await client.query<{ id: string; state: string }>("INSERT INTO document_analysis_jobs (consent_id, kyc_document_id, case_kind, document_class, source_sha256, source_uri, mime_type, submitted_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, state", [input.consentId, input.kycDocumentId ?? null, input.caseKind, input.documentClass, input.sourceSha256, input.sourceUri, input.mimeType, actor.openId]);
+    const job = rows[0];
+    if (!job) throw new Error("PostgreSQL analysis job insert did not return a record");
+    await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId, actor.role, "document_analysis_job.created", "document_analysis_job", job.id, JSON.stringify({ caseKind: input.caseKind, documentClass: input.documentClass, sourceSha256: input.sourceSha256, state: job.state })]);
+    await client.query("COMMIT");
+    return job;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally { client.release(); }
+}
+
 export async function closePostgresPool() {
   if (pool) {
     await pool.end();
