@@ -4,7 +4,8 @@ from hashlib import sha256
 import pytest
 from pydantic import ValidationError
 
-from umojaflowos_document_intelligence.contracts import AnalysisRequest, CaseKind, DocumentType, OllamaVisualAssessment
+from umojaflowos_document_intelligence.contracts import AnalysisDisposition, AnalysisRequest, CaseKind, DocumentType, EngineProvenance, EvidenceSignal, OllamaVisualAssessment
+from umojaflowos_document_intelligence.pad import PadEvidenceError, build_review_only_pad_evidence
 
 
 def test_analysis_request_requires_a_hash_matched_document_contract() -> None:
@@ -40,3 +41,44 @@ def test_presentation_attack_signal_remains_review_only_evidence() -> None:
         "limitations": ["This evidence is not a liveness determination or an automated adverse action."],
     })
     assert assessment.presentation_attack_risk == "review_signal"
+
+
+def test_specialized_pad_evidence_is_review_only_for_authorised_identity_imagery() -> None:
+    request = AnalysisRequest(
+        case_kind=CaseKind.KYC,
+        document_type=DocumentType.SELFIE_OR_CAPTURE,
+        consent_reference="consent-reference-123",
+        source_uri="https://storage.example.invalid/object",
+        source_sha256="a" * 64,
+        mime_type="image/jpeg",
+        filename="authorised-selfie.jpg",
+        submitted_at=datetime.now(UTC),
+    )
+    result = build_review_only_pad_evidence(
+        request,
+        [EvidenceSignal(code="capture_anomaly", severity="medium", rationale="Specialized engine detected a capture anomaly for reviewer examination.", provenance="specialized_pad")],
+        EngineProvenance(engine="specialized-pad", version="v1"),
+    )
+    assert result.disposition is AnalysisDisposition.REVIEW_REQUIRED
+    assert result.review_required is True
+    assert "No identity approval" in result.limitations[1]
+
+
+def test_pad_evidence_rejects_non_identity_imagery_and_untrusted_signal_provenance() -> None:
+    request = AnalysisRequest(
+        case_kind=CaseKind.KYB,
+        document_type=DocumentType.REGISTRATION_CERTIFICATE,
+        consent_reference="consent-reference-456",
+        source_uri="https://storage.example.invalid/object",
+        source_sha256="b" * 64,
+        mime_type="image/png",
+        filename="registration.png",
+        submitted_at=datetime.now(UTC),
+    )
+    engine = EngineProvenance(engine="specialized-pad", version="v1")
+    with pytest.raises(PadEvidenceError):
+        build_review_only_pad_evidence(request, [], engine)
+
+    authorized_request = request.model_copy(update={"document_type": DocumentType.IDENTITY_DOCUMENT})
+    with pytest.raises(PadEvidenceError):
+        build_review_only_pad_evidence(authorized_request, [EvidenceSignal(code="capture_anomaly", severity="low", rationale="Untrusted signal must be rejected.", provenance="ollama_vlm")], engine)
