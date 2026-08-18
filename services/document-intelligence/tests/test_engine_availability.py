@@ -25,6 +25,11 @@ def test_ollama_activation_rejects_public_or_unpinned_configuration(monkeypatch:
         OllamaVisualAdapter().validate_activation_configuration()
 
     monkeypatch.setenv("OLLAMA_BASE_URL", "https://ollama.internal")
+    monkeypatch.delenv("OLLAMA_TLS_CA_FILE", raising=False)
+    with pytest.raises(OllamaUnavailable, match="TLS_CA"):
+        OllamaVisualAdapter().validate_activation_configuration()
+
+    monkeypatch.setenv("OLLAMA_TLS_CA_FILE", "/tmp/ca.pem")
     monkeypatch.delenv("OLLAMA_ALLOWED_MODEL_DIGESTS")
     with pytest.raises(OllamaUnavailable, match="ALLOW"):
         OllamaVisualAdapter().validate_activation_configuration()
@@ -35,6 +40,11 @@ def test_ollama_activation_rejects_public_or_unpinned_configuration(monkeypatch:
         OllamaVisualAdapter().validate_activation_configuration()
 
     monkeypatch.setenv("OLLAMA_VISION_MODEL", "qwen3-vl:8b")
+    monkeypatch.setenv("OLLAMA_ALLOWED_VISION_MODELS", "qwen3-vl:7b")
+    with pytest.raises(OllamaUnavailable, match="exact allowlisted"):
+        OllamaVisualAdapter().validate_activation_configuration()
+
+    monkeypatch.setenv("OLLAMA_ALLOWED_VISION_MODELS", "qwen3-vl:8b")
     monkeypatch.setenv("OLLAMA_MTLS_CERT_FILE", "/tmp/client.crt")
     monkeypatch.delenv("OLLAMA_MTLS_KEY_FILE", raising=False)
     with pytest.raises(OllamaUnavailable, match="mTLS requires"):

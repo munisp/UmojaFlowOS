@@ -25,6 +25,7 @@ class OllamaVisualAdapter:
         self.allowed_digests = {digest.strip() for digest in os.environ.get("OLLAMA_ALLOWED_MODEL_DIGESTS", "").split(",") if digest.strip()}
         self.mtls_cert_file = os.environ.get("OLLAMA_MTLS_CERT_FILE")
         self.mtls_key_file = os.environ.get("OLLAMA_MTLS_KEY_FILE")
+        self.tls_ca_file = os.environ.get("OLLAMA_TLS_CA_FILE")
         self.timeout_seconds = float(os.environ.get("OLLAMA_TIMEOUT_SECONDS", "45"))
         self.max_image_bytes = int(os.environ.get("OLLAMA_MAX_IMAGE_BYTES", str(8 * 1024 * 1024)))
 
@@ -38,6 +39,8 @@ class OllamaVisualAdapter:
             raise OllamaUnavailable("Ollama endpoint must use HTTPS unless it is an explicitly private local hostname")
         if not private_host:
             raise OllamaUnavailable("Ollama endpoint must be a private or internal hostname; public ingress is prohibited")
+        if hostname not in {"localhost", "127.0.0.1", "::1"} and not self.tls_ca_file:
+            raise OllamaUnavailable("Non-local Ollama endpoints require OLLAMA_TLS_CA_FILE for certificate verification")
         if self.model not in self.allowed_models or self.model.endswith(":latest"):
             raise OllamaUnavailable("Ollama visual evidence requires an exact allowlisted Qwen3-VL model tag")
         if not self.allowed_digests:
@@ -67,7 +70,12 @@ class OllamaVisualAdapter:
             "messages": [{"role": "user", "content": prompt, "images": [base64.b64encode(image_bytes).decode("ascii")]}],
         }
         try:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            client_options: dict[str, object] = {"timeout": self.timeout_seconds}
+            if self.tls_ca_file:
+                client_options["verify"] = self.tls_ca_file
+            if self.mtls_cert_file and self.mtls_key_file:
+                client_options["cert"] = (self.mtls_cert_file, self.mtls_key_file)
+            async with httpx.AsyncClient(**client_options) as client:
                 model_info = await client.post(f"{self.base_url}/api/show", json={"name": self.model})
                 model_info.raise_for_status()
                 chat = await client.post(f"{self.base_url}/api/chat", json=payload)
