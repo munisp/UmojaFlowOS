@@ -8,7 +8,6 @@ import {
   createPostgresDocumentAnalysisJob,
   createPostgresVerificationConsent,
   listPostgresDocumentAnalysisJobs,
-  countPostgresRows,
 } from "./postgres";
 
 const RUN_INTEGRATION = process.env.POSTGRES_INTEGRATION_TEST === "1";
@@ -116,7 +115,13 @@ describeIntegration("analysis-job selector-derived provenance", () => {
   });
 
   it("writes no analysis job when the runtime is unreachable, for both modalities", async () => {
-    const before = await countPostgresRows("document_analysis_jobs");
+    // Scoped to this test's own consent rather than a global count: other test
+    // files run in parallel against the same database and legitimately create
+    // analysis jobs of their own, which would make a global count nondeterministic.
+    const consent = await consentFor("kyc");
+    const jobsForConsent = async () =>
+      (await listPostgresDocumentAnalysisJobs()).filter(row => row.consentId === consent.id).length;
+    const before = await jobsForConsent();
     const previousUrl = process.env.OLLAMA_BASE_URL;
     process.env.OLLAMA_BASE_URL = "http://127.0.0.1:1";
     try {
@@ -126,11 +131,14 @@ describeIntegration("analysis-job selector-derived provenance", () => {
     } finally {
       process.env.OLLAMA_BASE_URL = previousUrl;
     }
-    expect(await countPostgresRows("document_analysis_jobs")).toBe(before);
+    expect(await jobsForConsent()).toBe(before);
   });
 
   it("writes no analysis job when the model digest has drifted, for both modalities", async () => {
-    const before = await countPostgresRows("document_analysis_jobs");
+    const consent = await consentFor("kyb");
+    const jobsForConsent = async () =>
+      (await listPostgresDocumentAnalysisJobs()).filter(row => row.consentId === consent.id).length;
+    const before = await jobsForConsent();
     const previousDigests = process.env.OLLAMA_ALLOWED_MODEL_DIGESTS;
     process.env.OLLAMA_ALLOWED_MODEL_DIGESTS = "0".repeat(64);
     try {
@@ -140,7 +148,7 @@ describeIntegration("analysis-job selector-derived provenance", () => {
     } finally {
       process.env.OLLAMA_ALLOWED_MODEL_DIGESTS = previousDigests;
     }
-    expect(await countPostgresRows("document_analysis_jobs")).toBe(before);
+    expect(await jobsForConsent()).toBe(before);
   });
 
   it("rejects a job whose provenance does not match the resolver contract", async () => {

@@ -74,7 +74,10 @@ pub fn evaluate_monitoring(input: &MonitoringInput) -> MonitoringResult {
     let mut unavailable = false;
 
     // Rule TM-01: value at or above the corridor reporting threshold.
-    match (input.amount_minor_units, input.reporting_threshold_minor_units) {
+    match (
+        input.amount_minor_units,
+        input.reporting_threshold_minor_units,
+    ) {
         (Some(amount), Some(threshold)) => findings.push(finding(
             "TM-01-REPORTING-THRESHOLD",
             amount >= threshold,
@@ -82,7 +85,11 @@ pub fn evaluate_monitoring(input: &MonitoringInput) -> MonitoringResult {
         )),
         _ => {
             unavailable = true;
-            findings.push(finding("TM-01-REPORTING-THRESHOLD", false, "INPUT_UNAVAILABLE_REPORTING_THRESHOLD"));
+            findings.push(finding(
+                "TM-01-REPORTING-THRESHOLD",
+                false,
+                "INPUT_UNAVAILABLE_REPORTING_THRESHOLD",
+            ));
         }
     }
 
@@ -96,16 +103,27 @@ pub fn evaluate_monitoring(input: &MonitoringInput) -> MonitoringResult {
             // Deterministic band: within 10% below the threshold, repeated.
             let band_floor = threshold - threshold / 10;
             let triggered = amount < threshold && amount >= band_floor && count > 1;
-            findings.push(finding("TM-02-STRUCTURING-BAND", triggered, "REPEATED_VALUE_JUST_BELOW_THRESHOLD"));
+            findings.push(finding(
+                "TM-02-STRUCTURING-BAND",
+                triggered,
+                "REPEATED_VALUE_JUST_BELOW_THRESHOLD",
+            ));
         }
         _ => {
             unavailable = true;
-            findings.push(finding("TM-02-STRUCTURING-BAND", false, "INPUT_UNAVAILABLE_STRUCTURING_INPUTS"));
+            findings.push(finding(
+                "TM-02-STRUCTURING-BAND",
+                false,
+                "INPUT_UNAVAILABLE_STRUCTURING_INPUTS",
+            ));
         }
     }
 
     // Rule TM-03: transaction-count velocity.
-    match (input.customer_transactions_in_window, input.max_transactions_per_window) {
+    match (
+        input.customer_transactions_in_window,
+        input.max_transactions_per_window,
+    ) {
         (Some(count), Some(max)) => findings.push(finding(
             "TM-03-COUNT-VELOCITY",
             count > max,
@@ -113,7 +131,11 @@ pub fn evaluate_monitoring(input: &MonitoringInput) -> MonitoringResult {
         )),
         _ => {
             unavailable = true;
-            findings.push(finding("TM-03-COUNT-VELOCITY", false, "INPUT_UNAVAILABLE_COUNT_VELOCITY_LIMIT"));
+            findings.push(finding(
+                "TM-03-COUNT-VELOCITY",
+                false,
+                "INPUT_UNAVAILABLE_COUNT_VELOCITY_LIMIT",
+            ));
         }
     }
 
@@ -129,7 +151,11 @@ pub fn evaluate_monitoring(input: &MonitoringInput) -> MonitoringResult {
         )),
         _ => {
             unavailable = true;
-            findings.push(finding("TM-04-VALUE-VELOCITY", false, "INPUT_UNAVAILABLE_VALUE_VELOCITY_LIMIT"));
+            findings.push(finding(
+                "TM-04-VALUE-VELOCITY",
+                false,
+                "INPUT_UNAVAILABLE_VALUE_VELOCITY_LIMIT",
+            ));
         }
     }
 
@@ -142,7 +168,11 @@ pub fn evaluate_monitoring(input: &MonitoringInput) -> MonitoringResult {
         )),
         None => {
             unavailable = true;
-            findings.push(finding("TM-05-COUNTERPARTY-LICENCE", false, "INPUT_UNAVAILABLE_COUNTERPARTY_LICENCE"));
+            findings.push(finding(
+                "TM-05-COUNTERPARTY-LICENCE",
+                false,
+                "INPUT_UNAVAILABLE_COUNTERPARTY_LICENCE",
+            ));
         }
     }
 
@@ -155,7 +185,11 @@ pub fn evaluate_monitoring(input: &MonitoringInput) -> MonitoringResult {
         )),
         None => {
             unavailable = true;
-            findings.push(finding("TM-06-JURISDICTION", false, "INPUT_UNAVAILABLE_BENEFICIARY_JURISDICTION"));
+            findings.push(finding(
+                "TM-06-JURISDICTION",
+                false,
+                "INPUT_UNAVAILABLE_BENEFICIARY_JURISDICTION",
+            ));
         }
     }
 
@@ -168,7 +202,11 @@ pub fn evaluate_monitoring(input: &MonitoringInput) -> MonitoringResult {
 
     let escalate = findings.iter().any(|f| f.triggered);
     MonitoringResult {
-        decision: if escalate { Decision::ManualReview } else { Decision::Allow },
+        decision: if escalate {
+            Decision::ManualReview
+        } else {
+            Decision::Allow
+        },
         findings,
     }
 }
@@ -303,7 +341,10 @@ mod tests {
         // against a future field that could be read as an execution instruction.
         let json = serde_json::to_string(&evaluate_monitoring(&complete())).expect("serialize");
         for forbidden in ["execute", "settle", "submit", "file_report", "transfer"] {
-            assert!(!json.contains(forbidden), "monitoring result must not carry {forbidden}");
+            assert!(
+                !json.contains(forbidden),
+                "monitoring result must not carry {forbidden}"
+            );
         }
     }
 }

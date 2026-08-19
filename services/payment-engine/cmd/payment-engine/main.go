@@ -1,12 +1,15 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/domain"
+	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/eventing"
 )
 
 type validationRequest struct {
@@ -19,11 +22,29 @@ type validationRequest struct {
 	TargetAmount   string `json:"target_amount"`
 	PolicyOutcome  string `json:"policy_outcome,omitempty"`
 	PolicyVersion  string `json:"policy_version,omitempty"`
+	// CorrelationID ties the validation to the caller's request. Supplied by the
+	// control plane; generated here only when absent, never silently reused.
+	CorrelationID string `json:"correlation_id,omitempty"`
 }
 
-type validationResponse struct {
+// validationPayload is the body carried inside the versioned event envelope.
+// It states the resulting lifecycle status and restates, explicitly, that no
+// provider execution has been authorised.
+type validationPayload struct {
+	OrderID           string        `json:"order_id"`
+	Corridor          string        `json:"corridor"`
 	Status            domain.Status `json:"status"`
 	ProviderExecution string        `json:"provider_execution"`
+}
+
+// randomID produces an event identifier. It is not derived from the order so a
+// replayed validation is a distinct, individually traceable event.
+func randomID() (string, error) {
+	buffer := make([]byte, 16)
+	if _, err := rand.Read(buffer); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buffer), nil
 }
 
 func newHandler(now func() time.Time) http.Handler {
@@ -50,8 +71,37 @@ func newHandler(now func() time.Time) http.Handler {
 				return
 			}
 		}
+
+		correlationID := input.CorrelationID
+		if correlationID == "" {
+			generated, err := randomID()
+			if err != nil {
+				http.Error(w, "could not derive a correlation id", http.StatusInternalServerError)
+				return
+			}
+			correlationID = generated
+		}
+		eventID, err := randomID()
+		if err != nil {
+			http.Error(w, "could not derive an event id", http.StatusInternalServerError)
+			return
+		}
+
+		// The control plane parses this response with a strict versioned schema,
+		// so the route returns the published envelope rather than an ad-hoc body.
+		envelope, err := eventing.NewOrderValidated(eventID, correlationID, now(), validationPayload{
+			OrderID:           order.ID,
+			Corridor:          string(order.Corridor),
+			Status:            order.Status,
+			ProviderExecution: "disabled_without_verified_provider",
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(validationResponse{Status: order.Status, ProviderExecution: "disabled_without_verified_provider"})
+		_ = json.NewEncoder(w).Encode(envelope)
 	})
 	return mux
 }

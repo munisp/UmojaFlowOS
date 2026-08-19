@@ -59,7 +59,8 @@ GRANT INSERT, UPDATE ON TABLE
   payment_legs,
   rate_locks,
   scheduled_jobs,
-  treasury_rebalancing_recommendations
+  treasury_rebalancing_recommendations,
+  compliance_alerts
 TO :"app_role_ident";
 
 -- `treasury_stress_test_runs` is intentionally omitted: no application write

@@ -93,7 +93,10 @@ pub fn assess_counterparty_risk(input: &CounterpartyRiskInput) -> CounterpartyRi
 
     // Prohibitive findings short-circuit: no combination of other evidence can
     // downgrade these to an acceptable band.
-    if matches!(licence_status, LicenceStatus::Rejected | LicenceStatus::Suspended) {
+    if matches!(
+        licence_status,
+        LicenceStatus::Rejected | LicenceStatus::Suspended
+    ) {
         reasons.push(format!("LICENCE_{licence_status:?}").to_uppercase());
         return CounterpartyRiskAssessment {
             band: RiskBand::Prohibited,
@@ -182,7 +185,8 @@ mod tests {
     #[test]
     fn missing_evidence_yields_undetermined_never_low() {
         for mutate in [
-            (|i: &mut CounterpartyRiskInput| i.licence_status = None) as fn(&mut CounterpartyRiskInput),
+            (|i: &mut CounterpartyRiskInput| i.licence_status = None)
+                as fn(&mut CounterpartyRiskInput),
             |i: &mut CounterpartyRiskInput| i.sanctions_clear = None,
             |i: &mut CounterpartyRiskInput| i.adverse_findings_recorded = None,
             |i: &mut CounterpartyRiskInput| i.review_interval_days = None,
@@ -216,7 +220,9 @@ mod tests {
         input.licence_status = Some(LicenceStatus::Verified);
         let assessment = assess_counterparty_risk(&input);
         assert_eq!(assessment.band, RiskBand::Prohibited);
-        assert!(assessment.reason_codes.contains(&"SANCTIONS_NOT_CLEAR".to_string()));
+        assert!(assessment
+            .reason_codes
+            .contains(&"SANCTIONS_NOT_CLEAR".to_string()));
     }
 
     #[test]
@@ -235,7 +241,9 @@ mod tests {
         input.days_since_last_review = None;
         let assessment = assess_counterparty_risk(&input);
         assert!(assessment.review_required);
-        assert!(assessment.reason_codes.contains(&"NEVER_REVIEWED".to_string()));
+        assert!(assessment
+            .reason_codes
+            .contains(&"NEVER_REVIEWED".to_string()));
         assert_ne!(assessment.band, RiskBand::Low);
     }
 
@@ -245,7 +253,9 @@ mod tests {
         input.days_since_last_review = Some(400);
         let assessment = assess_counterparty_risk(&input);
         assert!(assessment.review_required);
-        assert!(assessment.reason_codes.contains(&"REVIEW_OVERDUE".to_string()));
+        assert!(assessment
+            .reason_codes
+            .contains(&"REVIEW_OVERDUE".to_string()));
     }
 
     #[test]

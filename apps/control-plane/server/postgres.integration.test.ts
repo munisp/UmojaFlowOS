@@ -15,7 +15,8 @@ describe.skipIf(!runIntegration)("local PostgreSQL canonical schema", () => {
     const readiness = await getPostgresReadiness();
     expect(readiness.connected).toBe(true);
     expect(readiness.database).toBe("umojaflowos_dev");
-    expect(readiness.tableCount).toBe(34);
+    // 35 canonical tables after migration 0011 added `compliance_alerts`.
+    expect(readiness.tableCount).toBe(35);
     expect(readiness.version).toContain("PostgreSQL");
   });
 

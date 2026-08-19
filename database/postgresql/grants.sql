@@ -59,7 +59,8 @@ GRANT INSERT, UPDATE ON TABLE
   payment_legs,
   rate_locks,
   scheduled_jobs,
-  treasury_rebalancing_recommendations
+  treasury_rebalancing_recommendations,
+  compliance_alerts
 TO :"app_role_ident";
 
 -- `treasury_stress_test_runs` is intentionally omitted: no application write
@@ -68,13 +69,10 @@ TO :"app_role_ident";
 
 -- Serialising the consent check in the analysis-job workflow uses
 -- `SELECT ... FOR UPDATE`, which PostgreSQL treats as a row-locking read and
--- therefore requires an explicit lock privilege. Granting only SELECT and
--- INSERT would make the guard fail with "permission denied", so the row-lock
--- privilege is granted here without granting UPDATE or DELETE: captured consent
--- records stay append-only and cannot be edited or removed by the application.
--- The grant is column scoped to `revoked_at`, the single legitimate consent
--- state change (withdrawal). Every other consent column, including scope,
--- subject reference, purpose and captured-by provenance, remains immutable.
+-- therefore requires an explicit lock privilege. The grant is column scoped to
+-- `revoked_at`, the single legitimate consent state change (withdrawal). Every
+-- other consent column, including scope, subject reference, purpose and
+-- captured-by provenance, remains immutable.
 GRANT UPDATE (revoked_at) ON TABLE verification_consents TO :"app_role_ident";
 
 COMMIT;

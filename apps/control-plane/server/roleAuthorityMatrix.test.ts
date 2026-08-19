@@ -29,7 +29,11 @@ describe("documented role authority matrix", () => {
 
   it("keeps counterparty risk escalation administrator-only", () => {
     expect(MATRIX).toMatch(/Escalate counterparty risk \| Yes \| No \| No \| No \|/);
-    const escalation = ROUTERS.match(/\n\s+escalate[A-Za-z]*:[^\n]+/g) ?? [];
+    // Scoped deliberately to counterparty-risk escalation. Other domains have
+    // their own escalation semantics: escalating a compliance alert into a case
+    // is an investigative step available to compliance officers, and is covered
+    // by the compliance alert regressions rather than this administrator rule.
+    const escalation = ROUTERS.match(/\n\s+escalateCounterparty[A-Za-z]*:[^\n]+/g) ?? [];
     expect(escalation.length).toBeGreaterThan(0);
     for (const procedure of escalation) {
       expect(procedure).toMatch(/adminProcedure|administratorProcedure/);

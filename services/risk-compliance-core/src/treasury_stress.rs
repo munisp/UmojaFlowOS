@@ -197,7 +197,9 @@ pub fn evaluate_stress_test(
     if computed_recommendation_amount > 0.0 {
         reason_codes.push("REBALANCING_RECOMMENDATION_REQUIRED".to_string());
     }
-    if computed_recommendation_amount >= recommendation_ceiling && shortfall_to_target > recommendation_ceiling {
+    if computed_recommendation_amount >= recommendation_ceiling
+        && shortfall_to_target > recommendation_ceiling
+    {
         reason_codes.push("RECOMMENDATION_CAPPED_BY_POLICY".to_string());
     }
 
@@ -319,8 +321,12 @@ mod tests {
         // Shortfall to target is 450,000 but the policy caps a single
         // recommendation at 40 percent of the stressed target (300,000).
         assert_eq!(outcome.computed_recommendation_amount, Some(300_000.0));
-        assert!(outcome.reason_codes.contains(&"STRESSED_MINIMUM_BUFFER_BREACHED".to_string()));
-        assert!(outcome.reason_codes.contains(&"RECOMMENDATION_CAPPED_BY_POLICY".to_string()));
+        assert!(outcome
+            .reason_codes
+            .contains(&"STRESSED_MINIMUM_BUFFER_BREACHED".to_string()));
+        assert!(outcome
+            .reason_codes
+            .contains(&"RECOMMENDATION_CAPPED_BY_POLICY".to_string()));
     }
 
     #[test]
@@ -349,7 +355,10 @@ mod tests {
         let outcome = evaluate_stress_test(&zar_policy(), &surge(), Some(&balance));
         let encoded = serde_json::to_string(&outcome).expect("outcome serialises");
         for forbidden in ["execute", "transfer", "settle", "instruction"] {
-            assert!(!encoded.contains(forbidden), "outcome must not imply execution: {forbidden}");
+            assert!(
+                !encoded.contains(forbidden),
+                "outcome must not imply execution: {forbidden}"
+            );
         }
     }
 }

@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
+pub mod counterparty_risk;
 pub mod eventing;
+pub mod monitoring;
 pub mod treasury_stress;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

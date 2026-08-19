@@ -1,5 +1,6 @@
 import { COOKIE_NAME } from "@shared/const";
 import { evaluatePostgresLiquidityThresholds, evaluatePostgresPaymentFailures, evaluatePostgresComplianceFlags, computePostgresFxSpread } from "./operationalAlerts";
+import { raisePostgresComplianceAlert, acknowledgePostgresComplianceAlert, escalatePostgresComplianceAlert, dismissPostgresComplianceAlert, listPostgresComplianceAlerts } from "./complianceAlerts";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, auditorProcedure, complianceOnlyProcedure, complianceProcedure, publicProcedure, router, treasuryProcedure } from "./_core/trpc";
@@ -11,6 +12,22 @@ import { transitionPostgresPaymentLeg, createPostgresPaymentLeg, createPostgresP
 import { listPostgresTreasuryRecommendations, listPostgresTreasuryBufferPolicies, listPostgresLegalEntities, transitionPostgresCounterpartyAuthorization, evaluatePostgresRegulatoryDeadlines, cancelPostgresRateLock, createPostgresAlertPolicy, createPostgresBeneficiary, createPostgresComplianceCase, createPostgresCorridorPolicy, createPostgresCounterparty, createPostgresCounterpartyAuthorization, createPostgresCounterpartyRiskAssessment, createPostgresCustomer, createPostgresDocumentAnalysisJob, createPostgresIntegrationConnection, createPostgresKycDocumentUploadIntent, createPostgresRateLock, createPostgresRegulatoryDeadline, createPostgresRegulatoryReport, createPostgresReviewerDecision, createPostgresSarStrFiling, createPostgresTreasuryRecommendation, createPostgresVerificationConsent, decidePostgresTreasuryRecommendation, escalatePostgresCounterpartyRiskAssessment, finalizePostgresKycDocumentUpload, getPostgresCutoverReadiness, getPostgresReadiness, listPostgresAlertPolicies, listPostgresBeneficiaries, listPostgresComplianceCases, listPostgresCorridorPolicies, listPostgresCounterparties, listPostgresCounterpartyAuthorizations, listPostgresCounterpartyRiskAssessments, listPostgresCustomers, listPostgresDocumentAnalysisEvidence, listPostgresDocumentAnalysisJobs, listPostgresIntegrationConnections, listPostgresKycDocuments, listPostgresLiquidityPositions, listPostgresMarketObservations, listPostgresNotificationDeliveries, listPostgresRateLocks, listPostgresRegulatoryDeadlines, listPostgresRegulatoryReports, listPostgresReviewerDecisions, listPostgresSarStrFilings, persistPostgresDocumentAnalysisEvidence, recordPostgresLiquidityPosition, recordPostgresMarketObservation, transitionPostgresRegulatoryReport, transitionPostgresSarStrFiling, updatePostgresKycDocumentReview } from "./postgres";
 import { umojaFlowRouter } from "./routers/umojaflowos";
 import { parseGoPaymentOrderValidatedEvent, parsePythonBronzeBatchManifest, parseRustNonExecutablePolicyDecisionEvent } from "./contracts/events";
+import {
+  describeServiceConfiguration,
+  evaluateMonitoringViaService,
+  assessCounterpartyRiskViaService,
+  monitoringInputSchema,
+  counterpartyRiskInputSchema,
+} from "./serviceBridge";
+import {
+  parseGoAuditTrailEnvelope,
+  parseRustMonitoringResult,
+  parseRustCounterpartyRisk,
+  parsePythonAssembledReport,
+  parsePythonStablecoinExposure,
+  parseRustLedgerValidation,
+  parseRustLedgerReconciliation,
+} from "./contracts/services";
 import { z } from "zod";
 
 export const appRouter = router({
@@ -42,6 +59,11 @@ export const appRouter = router({
     evaluateLiquidityThresholds: treasuryProcedure.mutation(({ ctx }) => evaluatePostgresLiquidityThresholds({ subject: ctx.user.openId, role: ctx.user.role })),
     evaluatePaymentFailures: treasuryProcedure.mutation(({ ctx }) => evaluatePostgresPaymentFailures({ subject: ctx.user.openId, role: ctx.user.role })),
     evaluateComplianceFlags: complianceProcedure.mutation(({ ctx }) => evaluatePostgresComplianceFlags({ subject: ctx.user.openId, role: ctx.user.role })),
+    complianceAlerts: auditorProcedure.input(z.object({ state: z.enum(["open","acknowledged","escalated","dismissed"]).optional(), limit: z.number().int().min(1).max(500).optional() }).optional()).query(({ input }) => listPostgresComplianceAlerts(input ?? {})),
+    raiseComplianceAlert: complianceProcedure.input(z.object({ alertPolicyId: z.string().uuid(), severity: z.enum(["low","medium","high","critical"]), sourceReference: z.string().trim().min(8).max(512), evidence: z.unknown(), detectedAt: z.coerce.date(), paymentOrderId: z.string().uuid().nullish(), customerId: z.string().uuid().nullish(), counterpartyId: z.string().uuid().nullish() })).mutation(({ ctx, input }) => raisePostgresComplianceAlert({ subject: ctx.user.openId, role: ctx.user.role }, input)),
+    acknowledgeComplianceAlert: complianceProcedure.input(z.object({ alertId: z.string().uuid(), note: z.string().trim().min(8).max(2000) })).mutation(({ ctx, input }) => acknowledgePostgresComplianceAlert({ subject: ctx.user.openId, role: ctx.user.role }, input)),
+    escalateComplianceAlert: complianceProcedure.input(z.object({ alertId: z.string().uuid(), caseId: z.string().uuid() })).mutation(({ ctx, input }) => escalatePostgresComplianceAlert({ subject: ctx.user.openId, role: ctx.user.role }, input)),
+    dismissComplianceAlert: complianceProcedure.input(z.object({ alertId: z.string().uuid(), reason: z.string().trim().min(8).max(2000) })).mutation(({ ctx, input }) => dismissPostgresComplianceAlert({ subject: ctx.user.openId, role: ctx.user.role }, input)),
     fxSpread: auditorProcedure.input(z.object({ baseAsset: z.enum(["NGN","KES","ZAR","USD","USDC","USDT"]), quoteAsset: z.enum(["NGN","KES","ZAR","USD","USDC","USDT"]), windowMinutes: z.number().int().min(1).max(1440).optional() })).query(({ input }) => computePostgresFxSpread(input.baseAsset, input.quoteAsset, { windowMinutes: input.windowMinutes })),
     alertPolicies: auditorProcedure.query(() => listPostgresAlertPolicies()),
     createIntegrationConnection: adminProcedure.input(z.object({ counterpartyId: z.string().uuid(), category: z.enum(["payment_rail", "fx_rate", "stablecoin_market_data", "kyc_kyb", "sanctions", "chain_analytics", "notification", "regulatory_submission"]), environment: z.enum(["sandbox", "production"]), documentationUrl: z.string().url() })).mutation(({ ctx, input }) => createPostgresIntegrationConnection({ openId: ctx.user.openId, role: ctx.user.role }, input)),
@@ -122,6 +144,24 @@ export const appRouter = router({
     parseGoPaymentOrderValidated: complianceProcedure.input(z.unknown()).mutation(({ input }) => parseGoPaymentOrderValidatedEvent(input)),
     parseRustPolicyDecision: complianceProcedure.input(z.unknown()).mutation(({ input }) => parseRustNonExecutablePolicyDecisionEvent(input)),
     parsePythonBronzeManifest: complianceProcedure.input(z.unknown()).mutation(({ input }) => parsePythonBronzeBatchManifest(input)),
+    // Versioned service-boundary contracts. Parsing is provider-independent and
+    // never authorises execution; see docs/service-contracts.md.
+    parseGoAuditTrail: complianceProcedure.input(z.unknown()).mutation(({ input }) => parseGoAuditTrailEnvelope(input)),
+    parseRustMonitoringResult: complianceProcedure.input(z.unknown()).mutation(({ input }) => parseRustMonitoringResult(input)),
+    parseRustCounterpartyRisk: complianceProcedure.input(z.unknown()).mutation(({ input }) => parseRustCounterpartyRisk(input)),
+    parsePythonAssembledReport: complianceProcedure.input(z.unknown()).mutation(({ input }) => parsePythonAssembledReport(input)),
+    parsePythonStablecoinExposure: complianceProcedure.input(z.unknown()).mutation(({ input }) => parsePythonStablecoinExposure(input)),
+    parseRustLedgerValidation: complianceProcedure.input(z.unknown()).mutation(({ input }) => parseRustLedgerValidation(input)),
+    parseRustLedgerReconciliation: complianceProcedure.input(z.unknown()).mutation(({ input }) => parseRustLedgerReconciliation(input)),
+    // Live service bridge. Each call is contract-validated and fails closed; see
+    // server/serviceBridge.ts and docs/service-contracts.md.
+    serviceConfiguration: auditorProcedure.query(() => describeServiceConfiguration()),
+    evaluateMonitoringViaService: complianceProcedure
+      .input(monitoringInputSchema)
+      .mutation(({ input }) => evaluateMonitoringViaService(input)),
+    assessCounterpartyRiskViaService: complianceProcedure
+      .input(counterpartyRiskInputSchema)
+      .mutation(({ input }) => assessCounterpartyRiskViaService(input)),
   }),
   umoja: umojaFlowRouter,
 });

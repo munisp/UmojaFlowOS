@@ -47,6 +47,12 @@ def test_ollama_assessment_rejects_runtime_digest_drift(monkeypatch: pytest.Monk
         async def __aexit__(self, *_): return None
         async def post(self, url: str, **_):
             return Response({"details": {"digest": "digest-drifted"}} if url.endswith("/api/show") else {"message": {"content": "{}"}})
+        # The adapter reads the tag inventory as a digest fallback when
+        # /api/show omits one, so the stub must answer GET as well. Without it
+        # the test failed on a missing attribute rather than on the drift it is
+        # meant to detect, which would have masked the real assertion.
+        async def get(self, url: str, **_):
+            return Response({"models": [{"name": "qwen3-vl:8b", "digest": "digest-drifted"}]})
     monkeypatch.setattr(ollama_adapter.httpx, "AsyncClient", lambda **_: Client())
     with pytest.raises(OllamaUnavailable, match="digest is absent or not allowlisted"):
         asyncio.run(OllamaVisualAdapter().assess(b"x", "image/png"))
@@ -70,6 +76,8 @@ def test_ollama_assessment_accepts_exact_verified_runtime_digest(monkeypatch: py
         async def __aexit__(self, *_): return None
         async def post(self, url: str, **_):
             return Response({"details": {"digest": verified_digest}} if url.endswith("/api/show") else {"message": {"content": __import__("json").dumps(payload)}})
+        async def get(self, url: str, **_):
+            return Response({"models": [{"name": "qwen3-vl:8b", "digest": verified_digest}]})
     monkeypatch.setattr(ollama_adapter.httpx, "AsyncClient", lambda **_: Client())
     assessment, digest = asyncio.run(OllamaVisualAdapter().assess(b"x", "image/png"))
     assert digest == verified_digest

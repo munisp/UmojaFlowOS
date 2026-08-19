@@ -81,6 +81,23 @@ class StablecoinExposureRequest(BaseModel):
 
 app = FastAPI(title="UmojaFlowOS Reporting Analytics", version="1.0.0")
 
+# Envelope identity published in docs/service-contracts.md and pinned by the
+# TypeScript control plane with strict literals. Changing any of these strings is
+# a breaking contract change and requires a new v2 envelope type, not an edit.
+SERVICE_NAME = "umojaflowos-reporting-analytics"
+CONTRACT_VERSION = "v1"
+ASSEMBLED_REPORT_ENVELOPE = "umojaflowos.reporting.assembled_report.v1"
+STABLECOIN_EXPOSURE_ENVELOPE = "umojaflowos.reporting.stablecoin_exposure.v1"
+
+# The assembler names corridors in prose ("Nigeria"); the cross-language contract
+# uses the platform's canonical corridor identifiers. Mapping here keeps the
+# assembler's own output unchanged while making the wire form unambiguous.
+CONTRACT_CORRIDOR_BY_REGULATOR = {
+    "CBN": "NIGERIA_NGN",
+    "CBK": "KENYA_KES",
+    "SARB": "SOUTH_AFRICA_ZAR",
+}
+
 
 @app.get("/healthz")
 def health() -> dict[str, str]:
@@ -138,8 +155,23 @@ def assemble_report(request: ReportAssemblyRequest) -> dict[str, Any]:
         # never leave this endpoint.
         validate_assembled_report(report)
         return {
-            "report": asdict(report),
-            "regulatory_submission": "disabled_without_verified_channel",
+            "service": SERVICE_NAME,
+            "contract_version": CONTRACT_VERSION,
+            "envelope_type": ASSEMBLED_REPORT_ENVELOPE,
+            "regulator": report.regulator,
+            "corridor": CONTRACT_CORRIDOR_BY_REGULATOR[report.regulator],
+            "settlement_currency": report.settlement_currency,
+            "report_type": report.report_type,
+            "period_start": report.period_start,
+            "period_end": report.period_end,
+            "regulated_entity_id": report.regulated_entity_id,
+            "generated_at": report.generated_at,
+            "totals": asdict(report.totals),
+            "artifact_digest": report.artifact_digest,
+            # The assembler produces a draft artifact only. It cannot declare a
+            # regulator submission: that state exists solely in the control plane
+            # once an authorised channel returns a reference.
+            "submission_state": "assembled_pending_review",
         }
     except (ReportAssemblyError, ReportValidationError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -178,19 +210,25 @@ def stablecoin_exposure(request: StablecoinExposureRequest) -> dict[str, Any]:
             max_observation_age=timedelta(minutes=request.max_observation_age_minutes),
         )
         return {
+            "service": SERVICE_NAME,
+            "contract_version": CONTRACT_VERSION,
+            "envelope_type": STABLECOIN_EXPOSURE_ENVELOPE,
             "generated_at": report.generated_at.isoformat(),
             "total_usd_equivalent": str(report.total_usd_equivalent),
             "corridor_exposures": [
                 {
-                    **{
-                        key: (str(value) if isinstance(value, Decimal) else value)
-                        for key, value in asdict(exposure).items()
-                    }
+                    key: (
+                        str(value)
+                        if isinstance(value, Decimal)
+                        else list(value)
+                        if isinstance(value, tuple)
+                        else value
+                    )
+                    for key, value in asdict(exposure).items()
                 }
                 for exposure in report.corridor_exposures
             ],
             "observations": list(report.observations),
-            "rebalancing_execution": "disabled_without_approved_treasury_instruction",
         }
     except ExposureReportError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
