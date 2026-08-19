@@ -29,20 +29,29 @@ import {
   parseRustCounterpartyRisk,
   parsePythonAssembledReport,
   parsePythonStablecoinExposure,
+  parseRustLedgerValidation,
+  parseRustLedgerReconciliation,
   type RustMonitoringResult,
   type RustCounterpartyRisk,
   type PythonAssembledReport,
   type PythonStablecoinExposure,
+  type RustLedgerValidation,
+  type RustLedgerReconciliation,
 } from "./contracts/services";
 import { parseGoPaymentOrderValidatedEvent } from "./contracts/events";
 
-export type ServiceName = "payment-engine" | "risk-compliance-core" | "reporting-analytics";
+export type ServiceName =
+  | "payment-engine"
+  | "risk-compliance-core"
+  | "reporting-analytics"
+  | "ledger-gateway";
 
 /** Environment variable that carries each service's base URL. */
 const ENDPOINT_ENV: Record<ServiceName, string> = {
   "payment-engine": "UMOJA_PAYMENT_ENGINE_URL",
   "risk-compliance-core": "UMOJA_RISK_CORE_URL",
   "reporting-analytics": "UMOJA_REPORTING_URL",
+  "ledger-gateway": "UMOJA_LEDGER_GATEWAY_URL",
 };
 
 /** Default request timeout. A hung service must not hang an operator request. */
@@ -290,6 +299,81 @@ export function validatePaymentOrderViaService(
     "/v1/orders/validate",
     input,
     parseGoPaymentOrderValidatedEvent,
+    options,
+  );
+}
+
+export const ledgerPostingSchema = z
+  .object({
+    account_id: z.string().min(1),
+    currency: z.string().min(1),
+    debit_minor: z.number().int().min(0),
+    credit_minor: z.number().int().min(0),
+  })
+  .strict();
+
+export type LedgerPosting = z.infer<typeof ledgerPostingSchema>;
+
+/**
+ * Ask the Rust ledger gateway whether a posting set balances per currency.
+ *
+ * This is a verification call, not a posting call. The gateway holds no database
+ * client and cannot write to TigerBeetle or PostgreSQL; the returned envelope is
+ * re-derived independently by `parseRustLedgerValidation`, so agreement between
+ * the two implementations is the actual control rather than the service's claim.
+ */
+export function validateLedgerPostingsViaService(
+  postings: LedgerPosting[],
+  options?: CallOptions,
+): Promise<BridgeOutcome<RustLedgerValidation>> {
+  return callService(
+    "ledger-gateway",
+    "/v1/postings/validate",
+    z.array(ledgerPostingSchema).min(1).parse(postings),
+    parseRustLedgerValidation,
+    options,
+  );
+}
+
+export const ledgerReconciliationInputSchema = z
+  .object({
+    confirmed_fact: z
+      .object({
+        transfer_id: z.number().int().min(1),
+        correlation_id: z.string().min(1),
+        currency: z.string().min(1),
+        amount_minor: z.number().int().min(1),
+        posted_at_rfc3339: z.string().min(1),
+      })
+      .strict(),
+    projection: z
+      .object({
+        transfer_id: z.number().int().min(0),
+        correlation_id: z.string(),
+        currency: z.string(),
+        amount_minor: z.number().int().min(0),
+        projected_at_rfc3339: z.string(),
+      })
+      .strict(),
+  })
+  .strict();
+
+export type LedgerReconciliationInput = z.infer<typeof ledgerReconciliationInputSchema>;
+
+/**
+ * Reconcile a confirmed TigerBeetle transfer fact against its PostgreSQL
+ * projection. Incomplete evidence on either side is reported as a discrepancy,
+ * never as agreement, and the parser re-checks the comparison itself.
+ */
+export function reconcileLedgerProjectionViaService(
+  input: LedgerReconciliationInput,
+  options?: CallOptions,
+): Promise<BridgeOutcome<RustLedgerReconciliation>> {
+  return callService(
+    "ledger-gateway",
+    "/v1/projections/reconcile",
+    ledgerReconciliationInputSchema.parse(input),
+    parseRustLedgerReconciliation,
     options,
   );
 }

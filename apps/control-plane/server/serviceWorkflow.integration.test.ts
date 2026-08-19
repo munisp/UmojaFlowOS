@@ -89,7 +89,8 @@ describe("multi-language service workflow (no provider configured)", () => {
   it("reports every service as unconfigured rather than implying a healthy integration", async () => {
     const caller = appRouter.createCaller(ctxFor("auditor"));
     const configuration = await caller.contracts.serviceConfiguration();
-    expect(configuration).toHaveLength(3);
+    // Go payment engine, Rust risk core, Rust ledger gateway, Python reporting.
+    expect(configuration).toHaveLength(4);
     for (const entry of configuration) {
       // This sandbox sets no service endpoints. The important property is that an
       // absent endpoint is reported explicitly, never silently treated as live.
@@ -134,5 +135,25 @@ describe("multi-language service workflow (no provider configured)", () => {
         source_references: ["ledger-export-2026-07"],
       }),
     ).rejects.toThrow();
+  });
+
+  it("keeps ledger verification compliance-gated and fails closed when the gateway is unconfigured", async () => {
+    const postings = [
+      { account_id: "nostro-ngn", currency: "NGN", debit_minor: 1_000, credit_minor: 0 },
+      { account_id: "customer-ngn", currency: "NGN", debit_minor: 0, credit_minor: 1_000 },
+    ];
+
+    for (const role of ["auditor", "treasury_operator"] as const) {
+      const caller = appRouter.createCaller(ctxFor(role));
+      await expect(caller.contracts.validateLedgerPostingsViaService(postings)).rejects.toThrow();
+    }
+
+    const compliance = appRouter.createCaller(ctxFor("compliance_officer"));
+    const outcome = await compliance.contracts.validateLedgerPostingsViaService(postings);
+
+    // An unconfigured gateway must never resolve to a balanced verdict, which
+    // would otherwise let an unverified posting set look approved.
+    expect(outcome.status).toBe("not_configured");
+    expect(JSON.stringify(outcome)).not.toMatch(/"balanced"\s*:\s*true/);
   });
 });

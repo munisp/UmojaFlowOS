@@ -18,6 +18,10 @@ import {
   assessCounterpartyRiskViaService,
   monitoringInputSchema,
   counterpartyRiskInputSchema,
+  validateLedgerPostingsViaService,
+  reconcileLedgerProjectionViaService,
+  ledgerPostingSchema,
+  ledgerReconciliationInputSchema,
 } from "./serviceBridge";
 import {
   parseGoAuditTrailEnvelope,
@@ -162,6 +166,15 @@ export const appRouter = router({
     assessCounterpartyRiskViaService: complianceProcedure
       .input(counterpartyRiskInputSchema)
       .mutation(({ input }) => assessCounterpartyRiskViaService(input)),
+    // Ledger-gateway verification. Neither call can post to TigerBeetle or write
+    // to PostgreSQL: the gateway holds no database client, and both responses are
+    // independently re-derived by their contract parsers before being returned.
+    validateLedgerPostingsViaService: complianceProcedure
+      .input(z.array(ledgerPostingSchema).min(1))
+      .mutation(({ input }) => validateLedgerPostingsViaService(input)),
+    reconcileLedgerProjectionViaService: complianceProcedure
+      .input(ledgerReconciliationInputSchema)
+      .mutation(({ input }) => reconcileLedgerProjectionViaService(input)),
   }),
   umoja: umojaFlowRouter,
 });

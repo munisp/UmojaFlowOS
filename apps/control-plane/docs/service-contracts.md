@@ -102,3 +102,50 @@ appeared healthy in isolation:
 | The Rust `monitoring` and `counterparty_risk` modules were never declared in `lib.rs` | Both compiled nowhere, so their tests never ran and the two routes the bridge calls did not exist; the bridge would have reported `unavailable` indefinitely | Declared both modules and added the routes; the Rust suite rose from 13 to 34 tests |
 | The Python assembly and exposure endpoints returned ad-hoc bodies such as `{"report": ...}` | The strict parser rejects unknown keys, so every response would have been discarded as contract drift | Both endpoints now emit the published envelopes using canonical corridor identifiers |
 | The Go validate route returned a bare `{status, provider_execution}` object | Same outcome: the versioned event parser would have refused it | The route now returns the published validated-event envelope with independent event and correlation identifiers |
+
+## The ledger gateway boundary
+
+The Rust ledger gateway is the only service whose output the control plane
+re-derives arithmetically rather than merely schema-checking, so it deserves a
+separate statement. It is a **verifier, not a poster**. It answers two questions
+and nothing else:
+
+| Route | Question | Envelope |
+| --- | --- | --- |
+| `POST /v1/postings/validate` | Does this proposed double-entry posting set net to zero in every currency? | `umojaflowos.ledger.posting_validation.v1` |
+| `POST /v1/projections/reconcile` | Does this confirmed TigerBeetle transfer fact agree with its PostgreSQL projection? | `umojaflowos.ledger.projection_reconciliation.v1` |
+
+Three distinctions are enforced in code rather than left to interpretation.
+A **structurally malformed** posting set (empty, missing account or currency,
+negative amount) is refused with 422; it is a malformed request, not a ledger
+finding, and returning `balanced: false` for it would misrepresent the defect.
+An **imbalance** is a real finding and is reported with the offending currency
+and net. And an **incomplete projection** is a stated discrepancy
+(`INCOMPLETE_PROJECTION`), never agreement: an unprojected transfer must not read
+as reconciled.
+
+Because the gateway's own `balanced` and `reconciled` flags are exactly what a
+drifted or defective build would get wrong, the control plane never trusts them.
+`parseRustLedgerValidation` recomputes the per-currency net from the postings the
+envelope carries, and `parseRustLedgerReconciliation` re-runs the field-by-field
+comparison. Regressions prove that a service claiming `balanced: true` over
+postings that do not net to zero, or claiming agreement between records that
+differ by one minor unit, is discarded as a contract violation. Writing to
+TigerBeetle remains activation-gated behind the cluster configuration under
+`infra/tigerbeetle/`; the gateway links no ledger client at all.
+
+## Mechanically enforced runtime alignment
+
+The PostgreSQL-first claim above is a statement about dependencies, so it is
+checked rather than trusted. `server/serviceRuntimeAlignment.test.ts` reads the
+real manifests and sources in the canonical monorepo and asserts that no service
+declares or imports a client for PostgreSQL, MySQL/TiDB, MongoDB, Redis, or
+Cassandra, that no source embeds a credentialed connection string, and that the
+ledger gateway links no TigerBeetle client. Only `import`/`use`/`from`/`require`
+lines are inspected, so prose naming PostgreSQL as the system of record is
+permitted while an actual dependency is not.
+
+The check was verified with a negative control: adding `sqlx = "0.7"` to the
+ledger-gateway manifest fails the test with the offending file and marker named.
+A service that acquired its own store would otherwise gain a second system of
+record silently, and no boundary schema check would ever notice.

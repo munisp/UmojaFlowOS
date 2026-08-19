@@ -55,3 +55,41 @@ describe("service contract procedure gates", () => {
     }
   });
 });
+
+/**
+ * Bridge mutations must be gated at least as tightly as the parsers, because
+ * invoking one reaches out to a real service rather than inspecting a payload
+ * the caller already holds.
+ */
+const BRIDGE_MUTATIONS = [
+  "evaluateMonitoringViaService",
+  "assessCounterpartyRiskViaService",
+  "validateLedgerPostingsViaService",
+  "reconcileLedgerProjectionViaService",
+];
+
+describe("service bridge procedure gates", () => {
+  it("exposes every bridge mutation through the compliance gate only", () => {
+    for (const name of BRIDGE_MUTATIONS) {
+      expect(routerSource, `${name} must be registered`).toContain(`${name}:`);
+      expect(routerSource, `${name} must use complianceProcedure`).toMatch(
+        new RegExp(`${name}:\\s*complianceProcedure`),
+      );
+    }
+  });
+
+  it("does not expose any bridge mutation to a read-only or treasury role", () => {
+    for (const name of BRIDGE_MUTATIONS) {
+      expect(routerSource).not.toMatch(new RegExp(`${name}:\\s*publicProcedure`));
+      expect(routerSource).not.toMatch(new RegExp(`${name}:\\s*auditorProcedure`));
+      expect(routerSource).not.toMatch(new RegExp(`${name}:\\s*treasuryProcedure`));
+    }
+  });
+
+  it("keeps the bridge configuration read auditor-visible but read-only", () => {
+    // An auditor may confirm which services are configured; that is evidence, not
+    // an action, and it must not become a mutation.
+    expect(routerSource).toMatch(/serviceConfiguration:\s*auditorProcedure/);
+    expect(routerSource).not.toMatch(/serviceConfiguration:\s*\w*Procedure\.input/);
+  });
+});

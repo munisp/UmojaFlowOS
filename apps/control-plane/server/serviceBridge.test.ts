@@ -4,6 +4,8 @@ import {
   describeServiceConfiguration,
   evaluateMonitoringViaService,
   assessCounterpartyRiskViaService,
+  validateLedgerPostingsViaService,
+  reconcileLedgerProjectionViaService,
   ServiceBridgeConfigurationError,
   type MonitoringInput,
 } from "./serviceBridge";
@@ -58,10 +60,13 @@ describe("service endpoint resolution", () => {
     const described = describeServiceConfiguration({
       UMOJA_RISK_CORE_URL: "http://127.0.0.1:8081",
     });
-    expect(described).toHaveLength(3);
+    // Four bridged services: the Go payment engine, the Rust risk core, the Rust
+    // ledger gateway, and the Python reporting service.
+    expect(described).toHaveLength(4);
     expect(described.find(d => d.service === "risk-compliance-core")?.configured).toBe(true);
     expect(described.find(d => d.service === "payment-engine")?.configured).toBe(false);
     expect(described.find(d => d.service === "reporting-analytics")?.configured).toBe(false);
+    expect(described.find(d => d.service === "ledger-gateway")?.configured).toBe(false);
   });
 });
 
@@ -192,5 +197,113 @@ describe("service bridge fail-closed behaviour", () => {
     });
     expect(outcome.status).toBe("ok");
     expect(outcome.status === "ok" && outcome.result.decision).toBe("MANUAL_REVIEW");
+  });
+});
+
+describe("ledger gateway bridge fail-closed behaviour", () => {
+  const POSTINGS = [
+    { account_id: "nostro-ngn", currency: "NGN", debit_minor: 1_000, credit_minor: 0 },
+    { account_id: "customer-ngn", currency: "NGN", debit_minor: 0, credit_minor: 1_000 },
+  ];
+
+  it("performs no network call when the gateway endpoint is unset", async () => {
+    let called = false;
+    const outcome = await validateLedgerPostingsViaService(POSTINGS, {
+      env: {},
+      fetchImpl: (async () => {
+        called = true;
+        throw new Error("must not be reached");
+      }) as unknown as typeof fetch,
+    });
+    expect(outcome.status).toBe("not_configured");
+    expect(called).toBe(false);
+  });
+
+  it("rejects a balanced claim that its own postings contradict", async () => {
+    // The service says balanced; the postings do not net to zero. The parser
+    // re-derives the net, so this is refused rather than believed. This is the
+    // single most important check at this boundary.
+    const lying = {
+      service: "umojaflowos-ledger-gateway",
+      contract_version: "v1",
+      envelope_type: "umojaflowos.ledger.posting_validation.v1",
+      postings: [
+        { account_id: "nostro-ngn", currency: "NGN", debit_minor: 1_000, credit_minor: 0 },
+        { account_id: "customer-ngn", currency: "NGN", debit_minor: 0, credit_minor: 900 },
+      ],
+      balanced: true,
+      imbalance: null,
+    };
+    const outcome = await validateLedgerPostingsViaService(POSTINGS, {
+      env: { UMOJA_LEDGER_GATEWAY_URL: "http://127.0.0.1:8083" },
+      fetchImpl: (async () =>
+        new Response(JSON.stringify(lying), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })) as unknown as typeof fetch,
+    });
+    expect(outcome.status).toBe("unavailable");
+    expect(outcome.status === "unavailable" && outcome.reason).toMatch(/contract violation/i);
+  });
+
+  it("rejects a reconciliation that claims agreement between differing records", async () => {
+    const lying = {
+      service: "umojaflowos-ledger-gateway",
+      contract_version: "v1",
+      envelope_type: "umojaflowos.ledger.projection_reconciliation.v1",
+      confirmed_fact: {
+        transfer_id: 1,
+        correlation_id: "corr-1",
+        currency: "ZAR",
+        amount_minor: 1_000,
+        posted_at: "2026-08-18T10:00:00+00:00",
+      },
+      projection: {
+        transfer_id: 1,
+        correlation_id: "corr-1",
+        currency: "ZAR",
+        amount_minor: 999,
+        projected_at: "2026-08-18T10:00:01+00:00",
+      },
+      reconciled: true,
+      discrepancy_reason: null,
+    };
+    const outcome = await reconcileLedgerProjectionViaService(
+      {
+        confirmed_fact: {
+          transfer_id: 1,
+          correlation_id: "corr-1",
+          currency: "ZAR",
+          amount_minor: 1_000,
+          posted_at_rfc3339: "2026-08-18T10:00:00+00:00",
+        },
+        projection: {
+          transfer_id: 1,
+          correlation_id: "corr-1",
+          currency: "ZAR",
+          amount_minor: 999,
+          projected_at_rfc3339: "2026-08-18T10:00:01+00:00",
+        },
+      },
+      {
+        env: { UMOJA_LEDGER_GATEWAY_URL: "http://127.0.0.1:8083" },
+        fetchImpl: (async () =>
+          new Response(JSON.stringify(lying), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          })) as unknown as typeof fetch,
+      },
+    );
+    expect(outcome.status).toBe("unavailable");
+  });
+
+  it("refuses an empty posting set before any call is made", () => {
+    // An empty set cannot be balanced or unbalanced; sending it would invite the
+    // service to answer a question that has no meaning. The guard runs before the
+    // call is constructed, so it throws synchronously rather than resolving to an
+    // outcome, which is the stricter of the two behaviours.
+    expect(() => validateLedgerPostingsViaService([], { env: {} })).toThrow(
+      /expected array to have >=1 items/,
+    );
   });
 });
