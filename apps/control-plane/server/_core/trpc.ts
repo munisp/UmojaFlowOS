@@ -2,6 +2,7 @@ import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
+import type { OperatingRole } from "../operatingRoles";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
@@ -27,8 +28,6 @@ const requireUser = t.middleware(async opts => {
 
 export const protectedProcedure = t.procedure.use(requireUser);
 
-type OperatingRole = "admin" | "compliance_officer" | "treasury_operator" | "auditor";
-
 function procedureForRoles(roles: OperatingRole[]) {
   return t.procedure.use(
     t.middleware(async opts => {
@@ -51,3 +50,5 @@ export const complianceProcedure = procedureForRoles(["admin", "compliance_offic
 export const complianceOnlyProcedure = procedureForRoles(["compliance_officer"]);
 export const treasuryProcedure = procedureForRoles(["admin", "treasury_operator"]);
 export const auditorProcedure = procedureForRoles(["admin", "compliance_officer", "treasury_operator", "auditor"]);
+export const providerContactProcedure = procedureForRoles(["provider_contact"]);
+export const cbnLiaisonProcedure = procedureForRoles(["cbn_liaison"]);

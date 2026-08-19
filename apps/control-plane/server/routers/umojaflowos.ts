@@ -6,11 +6,16 @@ import { adminProcedure, auditorProcedure, complianceProcedure, router, treasury
 import { createHeartbeatJob } from "../_core/heartbeat";
 import { COOKIE_NAME } from "@shared/const";
 import { TRPCError } from "@trpc/server";
+import { legacyOperatingRoles, type OperatingRole } from "../operatingRoles";
 
 const corridor = z.enum(["NIGERIA_NGN", "KENYA_KES", "SOUTH_AFRICA_ZAR"]);
 const currency = z.enum(["NGN", "KES", "ZAR", "USD", "USDC", "USDT"]);
 const decimal = z.string().regex(/^\d+(\.\d{1,12})?$/, "Enter a non-negative decimal value with up to 12 decimal places");
-const actorOf = (user: { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" }) => ({ openId: user.openId, role: user.role });
+type LegacyOperatingRole = Exclude<OperatingRole, "provider_contact" | "cbn_liaison">;
+const actorOf = (user: { openId: string; role: OperatingRole }): { openId: string; role: LegacyOperatingRole } => {
+  if (!legacyOperatingRoles.has(user.role)) throw new TRPCError({ code: "FORBIDDEN", message: "External stakeholder roles have no authority in the frozen transitional data path." });
+  return { openId: user.openId, role: user.role as LegacyOperatingRole };
+};
 
 export const umojaFlowRouter = router({
   overview: auditorProcedure.query(() => db.getDashboardSnapshot()),

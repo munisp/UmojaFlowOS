@@ -40,7 +40,8 @@ GRANT INSERT ON TABLE
   cbn_sandbox_incidents,
   cbn_sandbox_reporting_packs,
   cbn_sandbox_evidence_assessments,
-  user_role_assignments
+  user_role_assignments,
+  external_stakeholder_evidence
 TO :"app_role_ident";
 
 -- Records with a governed, reviewable lifecycle require in-place transitions.
@@ -71,7 +72,9 @@ GRANT INSERT, UPDATE ON TABLE
   rate_locks,
   scheduled_jobs,
   treasury_rebalancing_recommendations,
-  compliance_alerts
+  compliance_alerts,
+  operator_role_assignments,
+  external_stakeholder_assignments
 TO :"app_role_ident";
 
 -- `treasury_stress_test_runs` is intentionally omitted: no application write

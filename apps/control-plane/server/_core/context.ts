@@ -2,11 +2,12 @@ import type { CreateExpressContextOptions } from "@trpc/server/adapters/express"
 import type { User } from "../../drizzle/schema";
 import { sdk } from "./sdk";
 import { resolveKeycloakUser } from "../keycloakFederation";
+import { resolvePostgresOperatingRole, type PlatformUser } from "../postgresRoleResolver";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
   res: CreateExpressContextOptions["res"];
-  user: User | null;
+  user: PlatformUser | null;
 };
 
 export async function createContext(
@@ -28,9 +29,10 @@ export async function createContext(
     user = await resolveKeycloakUser(opts.req);
   }
 
+  const resolvedUser = user ? await resolvePostgresOperatingRole(user) : null;
   return {
     req: opts.req,
     res: opts.res,
-    user,
+    user: resolvedUser,
   };
 }

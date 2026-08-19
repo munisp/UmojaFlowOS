@@ -7,7 +7,8 @@ DECLARE
     'liquidity_positions', 'market_observations', 'notification_deliveries',
     'payment_legs', 'payment_orders', 'policy_decisions', 'rate_locks',
     'postgres_cutover_runs', 'postgres_cutover_table_reconciliations', 'regulatory_deadlines', 'regulatory_reports', 'sar_str_filings',
-    'scheduled_jobs', 'user_role_assignments'
+    'scheduled_jobs', 'user_role_assignments', 'operator_role_assignments',
+    'external_stakeholder_assignments', 'external_stakeholder_evidence'
   ];
 BEGIN
   IF (SELECT count(*) FROM pg_tables WHERE schemaname = 'public' AND tablename = ANY(expected_tables)) <> array_length(expected_tables, 1) THEN
@@ -36,6 +37,11 @@ BEGIN
      OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='cbn_sandbox_reporting_packs' AND column_name='submission_reference')
      OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='cbn_sandbox_evidence_assessments' AND column_name='external_eligibility') THEN
     RAISE EXCEPTION 'CBN sandbox readiness must preserve test wind-down, internal evidence assessment, and non-assertive external evidence boundaries';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='operator_role_assignments' AND column_name='subject')
+     OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='external_stakeholder_assignments' AND column_name='stakeholder_subject')
+     OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='external_stakeholder_evidence' AND column_name='evidence_sha256') THEN
+    RAISE EXCEPTION 'external stakeholder authority must resolve through canonical PostgreSQL assignments and hashed evidence';
   END IF;
 END $$;
 

@@ -1,6 +1,6 @@
 import { KycEvidenceLedger, KycEvidenceNotice, ReviewerDecisionForm, ReviewerDecisionHistory } from "@/components/KycEvidenceControls";
 
-type ConsoleRole = "admin" | "compliance_officer" | "treasury_operator" | "auditor";
+import type { OperatorRole as ConsoleRole } from "@/lib/roleCapabilities";
 
 type AnalysisJob = {
   id: string;

@@ -4,9 +4,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormEvent } from "react";
 import { SubmitFeedback, useRetryableSubmit, useSubmitFeedback } from "@/components/SubmitFeedback";
+import type { OperatorRole as ConsoleRole } from "@/lib/roleCapabilities";
 
 type Corridor = "NIGERIA_NGN" | "KENYA_KES" | "SOUTH_AFRICA_ZAR";
-type ConsoleRole = "admin" | "compliance_officer" | "treasury_operator" | "auditor";
 
 export type RateLockRow = {
   id: string;

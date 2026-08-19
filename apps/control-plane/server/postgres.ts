@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import type { OperatingRole } from "./operatingRoles";
 import { createHash, randomUUID } from "node:crypto";
 import { storageCreateUploadUrl, storageGetSignedUrl } from "./storage";
 
@@ -108,7 +109,7 @@ export async function createPostgresBeneficiary(actor: Actor, input: { customerI
 }
 
 export async function createPostgresCounterparty(
-  actor: { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" },
+  actor: { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" | "provider_contact" | "cbn_liaison" },
   input: { legalName: string; counterpartyType: string; jurisdiction: string },
 ) {
   const client = await getPool().connect();
@@ -161,7 +162,7 @@ export async function listPostgresCounterpartyAuthorizations() {
 }
 
 export async function createPostgresCounterpartyAuthorization(
-  actor: { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" },
+  actor: { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" | "provider_contact" | "cbn_liaison" },
   input: { counterpartyId: string; regulator: string; licenceReference: string; scopeDescription: string; evidenceUri: string; validFrom: Date; validTo?: Date; status: string },
 ) {
   const client = await getPool().connect();
@@ -188,7 +189,7 @@ export async function createPostgresCounterpartyAuthorization(
 }
 
 export async function transitionPostgresCounterpartyAuthorization(
-  actor: { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" },
+  actor: { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" | "provider_contact" | "cbn_liaison" },
   input: { authorizationId: string; status: "pending_review" | "verified" | "expired" | "suspended" | "rejected" },
 ) {
   const client = await getPool().connect();
@@ -457,7 +458,7 @@ export async function recordPostgresMarketObservation(actor: TreasuryActor, inpu
   const client = await getPool().connect(); try { await client.query("BEGIN"); const integration = await client.query<{ category: string; state: string }>("SELECT category,state FROM integration_connections WHERE id=$1 FOR KEY SHARE", [input.integrationConnectionId]); const source = integration.rows[0]; if (!source || !["fx_rate","stablecoin_market_data"].includes(source.category) || source.state !== "active") throw new Error("An active canonical FX or stablecoin market-data integration is required"); const row = await client.query<{ id: string }>(`INSERT INTO market_observations (integration_connection_id,base_asset,quote_asset,rate,observed_at,source_reference) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`, [input.integrationConnectionId,input.baseAsset,input.quoteAsset,rate,input.observedAt,input.sourceReference]); const id = row.rows[0]?.id; if (!id) throw new Error("PostgreSQL market observation insert did not return a record"); await client.query("INSERT INTO activity_events (actor_subject,actor_role,action,object_type,object_id,metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)", [actor.openId,actor.role,"market_observation.recorded","market_observation",id,JSON.stringify({ integrationConnectionId: input.integrationConnectionId, baseAsset: input.baseAsset, quoteAsset: input.quoteAsset, sourceReference: input.sourceReference, providerExecutionInitiated: false })]); await client.query("COMMIT"); return { id }; } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
 }
 
-type TreasuryActor = { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" };
+type TreasuryActor = { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" | "provider_contact" | "cbn_liaison" };
 
 export async function createPostgresTreasuryRecommendation(actor: TreasuryActor, input: { bufferPolicyId: string; reconciledAvailableBalance: string; reconciledAt: Date; balanceSourceReference: string; verifiedNearTermFundingGap: string; fundingGapSourceReference: string; expiresAt: Date }) {
   const client = await getPool().connect();
@@ -675,7 +676,7 @@ export async function listPostgresReviewerDecisions() {
   }
 }
 
-export type Actor = { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" };
+export type Actor = { openId: string; role: OperatingRole };
 
 export async function createPostgresVerificationConsent(actor: Actor, input: { scope: "kyc" | "kyb"; subjectReference: string; consentVersion: string; purpose: string; grantedAt: Date; expiresAt?: Date }) {
   const client = await getPool().connect();
@@ -750,7 +751,7 @@ export async function createPostgresReviewerDecision(actor: Actor, input: { anal
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
 }
 
-type PolicyActor = { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" };
+type PolicyActor = { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" | "provider_contact" | "cbn_liaison" };
 
 async function recordActivity(client: { query: (text: string, values?: unknown[]) => Promise<unknown> }, actor: PolicyActor, action: string, objectType: string, objectId: string, metadata: Record<string, unknown>) {
   await client.query(

@@ -9,6 +9,7 @@ export type OnboardingModule =
   | "markets"
   | "compliance"
   | "reports"
+  | "sandbox"
   | "registry"
   | "integrations";
 
@@ -89,6 +90,28 @@ const journeys: Record<OperatorRole, Journey> = {
       { title: "Inspect service observations", detail: "Review Go, Rust, and Python health readings with their collection time and known gaps.", module: "integrations", completed: signals => signals.integrations > 0 },
       { title: "Inspect payment and treasury records", detail: "Review draft orders, legs, rate-lock evidence, and treasury recommendations without changing them.", module: "payments", completed: signals => signals.paymentOrders > 0 || signals.liquidityPositions > 0 },
       { title: "Inspect compliance and reporting evidence", detail: "Review evidence, cases, and CBN, CBK, or SARB report workflow records.", module: "reports", completed: signals => signals.complianceCases > 0 || signals.reports > 0 },
+    ],
+  },
+  provider_contact: {
+    roleLabel: "Provider contact",
+    title: "Supply attributable provider-readiness evidence",
+    intro: "Contribute only the assigned provider’s approved documentary and technical evidence through the controlled external-stakeholder workspace.",
+    boundary: "Supplying evidence does not disclose a secret, verify a licence, activate a provider, create custody or funding, initiate a payment, move value, or settle a transaction.",
+    steps: [
+      { title: "Review the assigned counterparty", detail: "Confirm the provider or institution assigned by the administrator; no unassigned counterparty is visible or writable.", module: "registry", completed: signals => signals.counterparties > 0 },
+      { title: "Supply licensing and entitlement evidence", detail: "Record a supplied HTTPS evidence reference and digest for the approved service scope; verification remains an internal review decision.", module: "registry", completed: signals => signals.auditEvents > 0 },
+      { title: "Supply technical readiness material", detail: "Record endpoint, callback, or runbook evidence without placing a credential, secret value, or execution instruction in the platform.", module: "integrations", completed: signals => signals.integrations > 0 },
+    ],
+  },
+  cbn_liaison: {
+    roleLabel: "CBN liaison",
+    title: "Prepare an evidence-only CBN sandbox review package",
+    intro: "Work only on the assigned Nigeria (NGN) CBN sandbox dossier and its supplied correspondence or review evidence.",
+    boundary: "Recording a correspondence or review reference does not submit to CBN, prove acknowledgement, establish eligibility, admission, licensing, provider activation, payment execution, or settlement.",
+    steps: [
+      { title: "Review the assigned CBN dossier", detail: "Open only the dossier assigned by an administrator and inspect its recorded internal readiness state.", module: "sandbox", completed: signals => signals.auditEvents > 0 },
+      { title: "Record review correspondence", detail: "Attach only supplied HTTPS correspondence, request, or response references with their SHA-256 digests.", module: "sandbox", completed: signals => signals.reports > 0 || signals.auditEvents > 0 },
+      { title: "Confirm external review boundary", detail: "Keep all CBN-facing material marked not submitted until an authorised CBN channel returns an independently verifiable reference.", module: "reports", completed: signals => signals.reports > 0 },
     ],
   },
 };
