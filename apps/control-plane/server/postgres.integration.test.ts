@@ -15,9 +15,9 @@ describe.skipIf(!runIntegration)("local PostgreSQL canonical schema", () => {
     const readiness = await getPostgresReadiness();
     expect(readiness.connected).toBe(true);
     expect(readiness.database).toBe("umojaflowos_dev");
-    // 39 canonical tables after migration 0014 added the redacted control
-    // evidence outbox and its non-authoritative delivery state.
-    expect(readiness.tableCount).toBe(39);
+    // 45 canonical tables after migration 0015 added CBN Cohort 2 readiness
+    // records without asserting an external approval or submission.
+    expect(readiness.tableCount).toBe(45);
     expect(readiness.version).toContain("PostgreSQL");
   });
 

@@ -34,9 +34,11 @@ GRANT INSERT ON TABLE
   counterparty_risk_assessments,
   counterparty_onboarding_gate_decisions,
   market_observations,
-  -- An observation, once recorded, is a historical fact. Granting UPDATE would
-  -- allow a past incident to be edited out of the trend it appears in.
   service_health_samples,
+  cbn_sandbox_evidence_items,
+  cbn_sandbox_consumer_records,
+  cbn_sandbox_incidents,
+  cbn_sandbox_reporting_packs,
   user_role_assignments
 TO :"app_role_ident";
 
@@ -60,9 +62,9 @@ GRANT INSERT, UPDATE ON TABLE
   alert_policies,
   integration_connections,
   legal_entities,
-  -- Redacted analytics evidence is written transactionally with the canonical
-  -- control decision, then marked delivered by the cron-only dispatcher.
   control_evidence_outbox,
+  cbn_sandbox_dossiers,
+  cbn_sandbox_test_plans,
   payment_orders,
   payment_legs,
   rate_locks,

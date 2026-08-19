@@ -1,7 +1,7 @@
 DO $$
 DECLARE
   expected_tables TEXT[] := ARRAY[
-    'activity_events', 'alert_policies', 'beneficiaries', 'compliance_cases',
+    'activity_events', 'alert_policies', 'beneficiaries', 'cbn_sandbox_consumer_records', 'cbn_sandbox_dossiers', 'cbn_sandbox_evidence_items', 'cbn_sandbox_incidents', 'cbn_sandbox_reporting_packs', 'cbn_sandbox_test_plans', 'compliance_cases',
     'control_evidence_outbox', 'corridor_policies', 'counterparties', 'counterparty_authorizations', 'counterparty_onboardings', 'counterparty_onboarding_gate_decisions',
     'customers', 'integration_connections', 'kyc_documents', 'kyc_document_upload_intents', 'legal_entities',
     'liquidity_positions', 'market_observations', 'notification_deliveries',
@@ -30,6 +30,11 @@ BEGIN
      OR to_regclass('public.document_analysis_evidence') IS NULL
      OR to_regclass('public.verification_reviewer_decisions') IS NULL THEN
     RAISE EXCEPTION 'canonical KYC/KYB document-intelligence tables are missing';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='cbn_sandbox_test_plans' AND column_name='wind_down_uri')
+     OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='cbn_sandbox_incidents' AND column_name='notification_status')
+     OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='cbn_sandbox_reporting_packs' AND column_name='submission_reference') THEN
+    RAISE EXCEPTION 'CBN sandbox readiness must preserve test wind-down and non-assertive notification/submission evidence';
   END IF;
 END $$;
 
