@@ -1,5 +1,17 @@
 # Production-Completion Readiness Baseline
 
+## 2026-08-19 revision (canonical control-evidence outbox and governed evidence completion)
+
+This revision supersedes the summary below while retaining it as audit history. The implementation ledger now contains **194** items: **188 completed** and **6 externally blocked**, or **96.9%** checklist completion. The six items are unchanged external gates: licensed provider credentials and counterparty confirmation; an approved production cutover; two Ollama evidence-only executions on a host that can load a suitable visual model; provisioned production middleware; and refreshed secured-development Kafka and Permify identities.
+
+The canonical PostgreSQL schema now has **39** validated tables following migration `0014_control_evidence_outbox.sql`. The migration adds an append-only, application-role write-protected `control_evidence_outbox`; PostgreSQL triggers insert a redacted SHA-256 correlation, lifecycle stage/gate/cycle facts, observation time, and the explicit statement `authoritative: false` in the same transaction as onboarding lifecycle and gate-decision records. No customer, account, document, credential, wallet, provider identifier, or execution authority is copied into the outbox.
+
+The scheduled dispatcher is intentionally constrained. It is cron-only and does nothing unless a catalog endpoint and the dedicated PostgreSQL-control source token are both explicitly configured. For pending outbox rows it acquires a row lock, sends a source-bound catalog event, records a success as delivered only after a 2xx response, and records a bounded failure attempt without changing a canonical control decision. It therefore supports governed analytics evidence, not workflow authority, payment execution, provider activation, regulatory submission, or settlement. Three PostgreSQL/real-HTTP regressions prove its disabled, exactly-once, and bounded-failure behaviours.
+
+The active provider-independent evidence paths are now complete: the Go payment engine and Rust risk core arrive through Dapr; Go Temporal workflow and Permify outcomes are emitted only after their decisive operation; Python reconciled USDC/USDT exposure observations are opt-in and redacted for Nigeria (NGN), Kenya (KES), and South Africa (ZAR); and canonical onboarding evidence arrives via the PostgreSQL outbox. TigerBeetle, AI/ML inference, and provider-lifecycle evidence are correctly absent until their runtime/provider gates are satisfied, rather than being simulated.
+
+Closing validation for this revision ran the managed suite with PostgreSQL and all live Go/Rust/Python/ledger/service regressions enabled: **84 files and 561 tests passed**. The canonical `make check` passed its contracts, infrastructure, Go, Rust, Python, and TypeScript stages after synchronization. Canonical fixture cleanup was re-run and the database baseline was confirmed clean after the test run.
+
 ## 2026-08-19 revision (attached lifecycle operating model, governed analytics, and stablecoin boundary)
 
 This revision supersedes the summary below while retaining it as an audit history. The ledger now records **182** items: **176 completed** and **6 externally blocked**, or **96.7%** checklist completion. The six open items are all external facts: approved provider credentials/licence confirmation, an approved production cutover, two evidence-model host-capacity checks, provisioned production middleware, and refreshed secured-development identities.

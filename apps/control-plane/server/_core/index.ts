@@ -10,6 +10,7 @@ import { createContext } from "./context";
 import { regulatoryDeadlineReminders } from "../scheduled/regulatoryDeadlineReminders";
 import { counterpartyRiskReviews } from "../scheduled/counterpartyRiskReviews";
 import { serviceHealthCollector } from "../scheduled/serviceHealthCollector";
+import { lakehouseControlEvidenceDrain } from "../scheduled/lakehouseControlEvidenceDrain";
 import { serveStatic, setupVite } from "./vite";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -42,6 +43,7 @@ async function startServer() {
   app.post("/api/scheduled/regulatory-deadline-reminders", regulatoryDeadlineReminders);
   app.post("/api/scheduled/counterparty-risk-reviews", counterpartyRiskReviews);
   app.post("/api/scheduled/service-health-collector", serviceHealthCollector);
+  app.post("/api/scheduled/lakehouse-control-evidence-drain", lakehouseControlEvidenceDrain);
   // tRPC API
   app.use(
     "/api/trpc",

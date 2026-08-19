@@ -62,6 +62,32 @@ INSERT INTO fixture_counterparties (id)
 SELECT c.id FROM counterparties c
 WHERE EXISTS (SELECT 1 FROM fixture_patterns p WHERE c.legal_name LIKE p.pattern);
 
+-- The control-evidence outbox deliberately holds only one-way hashes, not an
+-- onboarding foreign key. Collect the fixture lifecycle facts before deleting
+-- the counterparties so their generated correlations can be removed exactly.
+CREATE TEMP TABLE fixture_onboardings (id uuid, cycle_number integer) ON COMMIT DROP;
+INSERT INTO fixture_onboardings (id, cycle_number)
+SELECT o.id, o.cycle_number
+FROM counterparty_onboardings o
+WHERE o.counterparty_id IN (SELECT id FROM fixture_counterparties);
+
+CREATE TEMP TABLE fixture_onboarding_gates (
+  onboarding_id uuid,
+  cycle_number integer,
+  gate text,
+  decision text
+) ON COMMIT DROP;
+INSERT INTO fixture_onboarding_gates (onboarding_id, cycle_number, gate, decision)
+SELECT d.onboarding_id, d.cycle_number, d.gate::text, d.decision::text
+FROM counterparty_onboarding_gate_decisions d
+WHERE d.onboarding_id IN (SELECT id FROM fixture_onboardings);
+
+CREATE TEMP TABLE fixture_onboarding_cycles (onboarding_id uuid, cycle_number integer) ON COMMIT DROP;
+INSERT INTO fixture_onboarding_cycles (onboarding_id, cycle_number)
+SELECT id, cycle_number FROM fixture_onboardings
+UNION
+SELECT onboarding_id, cycle_number FROM fixture_onboarding_gates;
+
 CREATE TEMP TABLE fixture_orders (id uuid) ON COMMIT DROP;
 INSERT INTO fixture_orders (id)
 SELECT o.id FROM payment_orders o
@@ -150,6 +176,32 @@ WHERE p.created_by LIKE 'cutover-compliance-%'
 -- Leaf-to-root deletion.
 -- The alerting subtree is removed first: deliveries and alerts reference
 -- policies, and an alert may reference the case it escalated to.
+DELETE FROM control_evidence_outbox e
+WHERE (
+  e.event_type = 'umojaflowos.counterparty.onboarding.created.v1'
+  AND EXISTS (
+    SELECT 1 FROM fixture_onboardings o
+    WHERE e.correlation_sha256 = encode(digest(o.id::text, 'sha256'), 'hex')
+  )
+) OR (
+  e.event_type = 'umojaflowos.counterparty.onboarding.gate-decided.v1'
+  AND EXISTS (
+    SELECT 1 FROM fixture_onboarding_gates d
+    WHERE e.correlation_sha256 = encode(digest(d.onboarding_id::text || ':' || d.cycle_number::text || ':' || d.gate || ':' || d.decision, 'sha256'), 'hex')
+  )
+) OR (
+  e.event_type = 'umojaflowos.counterparty.onboarding.recertification-started.v1'
+  AND EXISTS (
+    SELECT 1 FROM fixture_onboarding_cycles c
+    WHERE e.correlation_sha256 = encode(digest(c.onboarding_id::text || ':' || c.cycle_number::text, 'sha256'), 'hex')
+  )
+);
+
+DELETE FROM counterparty_onboarding_gate_decisions
+WHERE onboarding_id IN (SELECT id FROM fixture_onboardings);
+DELETE FROM counterparty_onboardings
+WHERE id IN (SELECT id FROM fixture_onboardings);
+
 DELETE FROM notification_deliveries WHERE alert_policy_id IN (SELECT id FROM fixture_alert_policies);
 DELETE FROM compliance_alerts WHERE id IN (SELECT id FROM fixture_alerts);
 DELETE FROM compliance_alerts WHERE escalated_case_id IN (SELECT id FROM fixture_cases);

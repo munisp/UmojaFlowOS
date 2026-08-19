@@ -2,7 +2,7 @@ DO $$
 DECLARE
   expected_tables TEXT[] := ARRAY[
     'activity_events', 'alert_policies', 'beneficiaries', 'compliance_cases',
-    'corridor_policies', 'counterparties', 'counterparty_authorizations', 'counterparty_onboardings', 'counterparty_onboarding_gate_decisions',
+    'control_evidence_outbox', 'corridor_policies', 'counterparties', 'counterparty_authorizations', 'counterparty_onboardings', 'counterparty_onboarding_gate_decisions',
     'customers', 'integration_connections', 'kyc_documents', 'kyc_document_upload_intents', 'legal_entities',
     'liquidity_positions', 'market_observations', 'notification_deliveries',
     'payment_legs', 'payment_orders', 'policy_decisions', 'rate_locks',

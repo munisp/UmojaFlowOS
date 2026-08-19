@@ -60,6 +60,9 @@ GRANT INSERT, UPDATE ON TABLE
   alert_policies,
   integration_connections,
   legal_entities,
+  -- Redacted analytics evidence is written transactionally with the canonical
+  -- control decision, then marked delivered by the cron-only dispatcher.
+  control_evidence_outbox,
   payment_orders,
   payment_legs,
   rate_locks,

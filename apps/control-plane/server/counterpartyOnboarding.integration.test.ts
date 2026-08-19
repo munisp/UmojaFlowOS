@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { beginCounterpartyRecertification, createCounterpartyOnboarding, decideCounterpartyOnboardingGate } from "./counterpartyOnboarding";
 import {
   closePostgresPool,
@@ -13,6 +14,14 @@ import {
 const admin = { openId: `onboarding-admin-${crypto.randomUUID()}`, role: "admin" as const };
 const compliance = { openId: `onboarding-compliance-${crypto.randomUUID()}`, role: "compliance_officer" as const };
 const treasury = { openId: `onboarding-treasury-${crypto.randomUUID()}`, role: "treasury_operator" as const };
+
+function purgeFixtureRows() {
+  execFileSync(
+    "sudo",
+    ["-u", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-q", "-d", "umojaflowos_dev", "-f", "-"],
+    { input: readFileSync(new URL("../../../database/postgresql/purge_regression_fixtures.sql", import.meta.url)) },
+  );
+}
 
 async function fixture() {
   const counterparty = await createPostgresCounterparty(admin, {
@@ -54,7 +63,15 @@ async function enableFixtureIntegration(counterpartyId: string) {
 
 describe("canonical counterparty onboarding lifecycle", () => {
   it("requires a verified legal gate, then a verified technical connection, and two independent pilot decisions", async () => {
+    purgeFixtureRows();
     const { counterparty, onboarding } = await fixture();
+    const createdEvidence = await getPool().query(
+      "SELECT event_type, correlation_sha256, payload FROM control_evidence_outbox WHERE event_type='umojaflowos.counterparty.onboarding.created.v1' AND correlation_sha256=encode(digest($1::text, 'sha256'), 'hex')",
+      [onboarding.id],
+    );
+    expect(createdEvidence.rows).toHaveLength(1);
+    expect(createdEvidence.rows[0].correlation_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(createdEvidence.rows[0].payload).toEqual({ authoritative: false, stage: "legal_onboarding" });
     const legal = await decideCounterpartyOnboardingGate(compliance, {
       onboardingId: onboarding.id,
       gate: "legal",
@@ -63,6 +80,12 @@ describe("canonical counterparty onboarding lifecycle", () => {
       rationale: "Licence and ownership evidence are complete for the required corridor.",
     });
     expect(legal?.stage).toBe("technical_readiness");
+    const gateEvidence = await getPool().query(
+      "SELECT event_type, payload FROM control_evidence_outbox WHERE event_type='umojaflowos.counterparty.onboarding.gate-decided.v1' AND correlation_sha256=encode(digest($1::text || ':1:legal:approved', 'sha256'), 'hex')",
+      [onboarding.id],
+    );
+    expect(gateEvidence.rows).toHaveLength(1);
+    expect(gateEvidence.rows[0].payload).toEqual({ authoritative: false, gate: "legal", cycle_number: 1 });
 
     await expect(
       decideCounterpartyOnboardingGate(admin, {
@@ -105,6 +128,7 @@ describe("canonical counterparty onboarding lifecycle", () => {
   });
 
   it("requires distinct actors for pilot approval and restarts a due recertification at legal onboarding", async () => {
+    purgeFixtureRows();
     const { counterparty, onboarding } = await fixture();
     await decideCounterpartyOnboardingGate(compliance, {
       onboardingId: onboarding.id,
@@ -156,14 +180,9 @@ describe("canonical counterparty onboarding lifecycle", () => {
 
 afterAll(async () => {
   // The application role intentionally cannot delete append-only gate evidence.
-  // Regression cleanup therefore runs under the schema owner with a fixed,
-  // non-user-controlled predicate, mirroring the repository purge script.
-  execFileSync("sudo", ["-u", "postgres", "psql", "-q", "-d", "umojaflowos_dev", "-c", `
-    DELETE FROM counterparty_onboarding_gate_decisions WHERE onboarding_id IN (SELECT id FROM counterparty_onboardings WHERE created_by LIKE 'onboarding-admin-%');
-    DELETE FROM counterparty_onboardings WHERE created_by LIKE 'onboarding-admin-%';
-    DELETE FROM integration_connections WHERE counterparty_id IN (SELECT id FROM counterparties WHERE legal_name LIKE 'Boundary Regression Onboarding %');
-    DELETE FROM counterparty_authorizations WHERE counterparty_id IN (SELECT id FROM counterparties WHERE legal_name LIKE 'Boundary Regression Onboarding %');
-    DELETE FROM counterparties WHERE legal_name LIKE 'Boundary Regression Onboarding %';
-  `]);
+  // Run the repository's schema-owner purge script rather than using a broad
+  // outbox deletion, so fixture cleanup is itself a regression of the exact
+  // hash-correlated cleanup path used after the full suite.
+  purgeFixtureRows();
   await closePostgresPool();
 });
