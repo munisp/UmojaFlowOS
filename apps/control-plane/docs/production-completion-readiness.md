@@ -1,5 +1,13 @@
 # Production-Completion Readiness Baseline
 
+## 2026-08-19 revision (bank, liquidity, and stablecoin provider boundaries)
+
+This revision supersedes the summary below while retaining it as audit history. The implementation ledger now contains **206** items: **200 completed** and **6 externally blocked**, or **97.1%** checklist completion. The remaining six external facts are unchanged: licensed provider credentials/counterparty confirmation; an approved production cutover; two Ollama evidence-only executions on a suitable visual-model host; provisioned production middleware; and refreshed secured-development Kafka and Permify identities.
+
+First-party API documentation was reviewed for Stitch, Mono, Cellulant Tingg, Circle Mint, Fireblocks, and BVNK; the evidence record is retained in `docs/bank-liquidity-stablecoin-provider-research-notes.md`. Documentation supports different account, consent, merchant, custody, funding, policy, and jurisdiction conditions for each provider and does not establish availability for UmojaFlowOS. Circle Mint was selected solely for a narrow, documented institutional **USDC** balance-observation protocol boundary. Its Go client performs only the documented `GET /v1/businessAccount/balances` request using an API key supplied through trusted runtime composition, filters provider records to USDC, rejects malformed values and remote plaintext transport, and exposes no mint, redeem, trade, transfer, payout, custody, funding, or settlement method.
+
+The implementation does not treat a Circle response as a liquidity, custody, funding, conversion, counterparty, licensing, or settlement fact. It requires a separately authorised Circle Mint account, API key, linked-bank/product entitlement, customer-approved wallet configuration, and any applicable regulatory approval before an observation can be activated or relied on. The canonical `make check` passed contracts, infrastructure, Go, Rust, Python, and TypeScript; the full canonical TypeScript suite passed **573** tests with **153** activation-gated skips.
+
 ## 2026-08-19 revision (documented provider adapter boundaries)
 
 This revision supersedes the summary below while retaining it as audit history. The implementation ledger now contains **204** items: **198 completed** and **6 externally blocked**, or **97.1%** checklist completion. The six remaining items are external facts: licensed provider credentials/counterparty confirmation; an approved production cutover; two Ollama evidence-only executions on a suitable visual-model host; provisioned production middleware; and refreshed secured-development Kafka and Permify identities.
