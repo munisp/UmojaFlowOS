@@ -14,6 +14,17 @@ Four things, none of which are code. An approved production PostgreSQL deploymen
 
 Until those exist, the honest description is that the provider-independent platform is implemented and verified, and every provider-dependent path is gated closed rather than stubbed open.
 
+### The four blocked items are prepared, not merely deferred
+
+Each remaining item now carries the work that *can* be done without the missing input, so that when the input arrives the remaining step is small and its preconditions are already enforced.
+
+| Blocked item | Preparation in place |
+| --- | --- |
+| Real provider adapters | `server/providerActivationGate.test.ts` proves no code path sets an integration `active`, that the lifecycle still offers `credential_pending` and `verification_pending`, that the live schema stores only a `secret_reference` with no credential-shaped column, that the bridge cannot fall back to an implicit endpoint, and that contracts refuse execution authority. Verified by introducing an activation statement, which fails the check. |
+| Transitional MySQL/TiDB retirement | `server/transitionalRetirementReadiness.test.ts` enumerates the exact surface awaiting deletion as a closed set with a recorded reason per file, and asserts the nine canonical modules stay free of it so retirement remains a deletion rather than a refactor. |
+| Ollama evidence-only validation | The host ceiling is measured rather than assumed: a graduated probe shows models up to 986 MB load and answer while 1.9 GB and above are killed, so inference works and only weight size blocks it. |
+| Ollama request validator execution | The validator and its assertions are implemented and committed; only execution is blocked, on the same measured ceiling. |
+
 ## Measured Ledger State
 
 > Superseded by the 2026-08-19 revision above; retained as the historical record.
