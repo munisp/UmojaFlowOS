@@ -91,6 +91,35 @@ request. It failed identically:
 Both models are 8B-class, so neither fits. The constraint is the host, not the
 model choice or the request shape.
 
+### Where the ceiling actually is
+
+"Both 8B models fail" establishes that 8B is too large, but not that the
+environment can run inference at all, and the difference matters: if inference
+were broken for some other reason, the capacity explanation would be wrong. A
+graduated probe was therefore run, pulling progressively larger models and
+issuing the same trivial request to each.
+
+| Model | On-disk size | Result |
+| --- | --- | --- |
+| `qwen2.5:0.5b` | 397 MB | Loaded and answered |
+| `qwen2.5:1.5b` | 986 MB | Loaded and answered |
+| `qwen2.5:3b` | 1.9 GB | `signal: killed` during load |
+| `qwen2.5vl:3b` | 3.2 GB | `signal: terminated` during load |
+| `deepseek-r1:8b` | 5.2 GB | `signal: terminated` during load |
+| `qwen3-vl:8b` | 6.1 GB | `signal: terminated` during load |
+
+Inference works in this sandbox. The ceiling sits between roughly 1 GB and
+1.9 GB of model weights, against 3.9 GB total memory. That is far below any
+vision model suitable for document evidence: the smallest generally available
+Qwen vision model is 3B at 3.2 GB, which is already above the ceiling. The
+blocked item is therefore a genuine host-capacity limit with a measured
+boundary, not an untested assumption, and it cannot be worked around by
+selecting a smaller vision model.
+
+The probe models were removed afterwards, so the runtime inventory again
+contains exactly the two allowlisted models and the digest verification is
+unaffected.
+
 `scripts/document-intelligence/validate_evidence_only_request.py` is the
 executable validation for this step. It builds a synthetic, locally generated
 image — deliberately not a KYC or KYB document — issues a schema-constrained
