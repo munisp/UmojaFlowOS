@@ -1,5 +1,15 @@
 # Production-Completion Readiness Baseline
 
+## 2026-08-19 revision (CBN Regulatory Sandbox Cohort 2 readiness)
+
+This revision supersedes the summary below while retaining it as audit history. The implementation ledger now contains **199** items: **193 completed** and **6 externally blocked**, or **97.0%** checklist completion. The remaining six items are unchanged external facts: licensed provider credentials/counterparty confirmation; an approved production cutover; two Ollama evidence-only executions on a suitable visual-model host; provisioned production middleware; and refreshed secured-development Kafka and Permify identities.
+
+The official CBN Regulatory Sandbox Cohort 2 page was reviewed and its applicable requirements are retained in `docs/cbn-cohort-2-source-notes.md`. UmojaFlowOS is aligned to the VASP-track controlled-testing objective for Nigeria (NGN), especially its USDC/USDT-only scope, fail-closed provider activation, evidence-only stablecoin boundary, human-reviewed KYC/KYB, audit trail, and non-assertive reporting. The full requirement mapping, including material gaps and the official framework-PDF bot-verification limitation, is retained in `docs/cbn-cohort-2-platform-gap-assessment.md`.
+
+Migration `0015_cbn_sandbox_readiness.sql` increases the canonical PostgreSQL schema to **45** tables. It creates CBN Cohort 2 readiness dossiers, SHA-256/HTTPS evidence records, documented controlled-test plans, consumer disclosure/complaint records, material incidents, and reporting packs. Role-enforced control-plane APIs prohibit this module from claiming external submission, CBN admission, licence, provider activation, payment execution, settlement, or an external reporting/incident notification. A test plan records the permitted use, user category, transaction and aggregate-exposure ceilings, time window, success metrics, and orderly-wind-down evidence, but remains explicitly non-executable pending authorised external test parameters.
+
+Closing validation ran 15 focused source, live PostgreSQL, and schema-baseline tests. The canonical `make check` passed contracts, infrastructure, Go, Rust, Python, TypeScript, and the managed application: **567** tests passed and **153** activation-gated tests were intentionally skipped. The local CBN sandbox records were verified empty after regression cleanup. Canonical GitHub commit: `eeda13a`.
+
 ## 2026-08-19 revision (canonical control-evidence outbox and governed evidence completion)
 
 This revision supersedes the summary below while retaining it as audit history. The implementation ledger now contains **194** items: **188 completed** and **6 externally blocked**, or **96.9%** checklist completion. The six items are unchanged external gates: licensed provider credentials and counterparty confirmation; an approved production cutover; two Ollama evidence-only executions on a host that can load a suitable visual model; provisioned production middleware; and refreshed secured-development Kafka and Permify identities.
