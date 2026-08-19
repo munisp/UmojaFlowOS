@@ -27,6 +27,7 @@ from .stablecoin_exposure import (
 )
 from .opensearch_adapter import OpenSearchConfig, OpenSearchProjectionWriter, OpenSearchUnavailable, redacted_search_document
 from .lakehouse_writer import BronzeLakehouseWriter, LakehouseConfig, LakehouseUnavailable
+from .lifecycle_event_lakehouse import LifecycleEventProjectionError, project_lifecycle_event
 from .sedona_livy import SedonaAggregateJobClient, SedonaLivyConfig, SedonaUnavailable
 from .geolibre_project import GeoLibrePublicationError, build_aggregate_project
 
@@ -392,9 +393,22 @@ def receive_payment_or_policy_event(event: DaprCloudEvent) -> dict[str, str]:
         # A 503 deliberately tells Dapr/Kafka not to ACK. It is not a user
         # input refusal; it is a durable-processing outage that must retry.
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    # A governed deployment can require the redacted immutable analytics
+    # projection before Dapr receives an ACK.  Without this explicit flag the
+    # event remains durable in Redis evidence only; there is intentionally no
+    # implicit object-store endpoint or credential fallback.
+    response = {"status": "SUCCESS", "delivery": "recorded" if inserted else "duplicate"}
+    if os.environ.get("UMOJA_LAKEHOUSE_PROJECT_EVENTS") == "true":
+        try:
+            _key, lakehouse_status = project_lifecycle_event(configured_lakehouse_writer(), event.model_dump())
+            METRICS.record_lakehouse_batch()
+        except (LakehouseUnavailable, LifecycleEventProjectionError, LakehouseContractError) as exc:
+            raise HTTPException(status_code=503, detail=f"lifecycle analytics projection is unavailable: {exc}") from exc
+        response["lakehouse_projection"] = lakehouse_status
     # Dapr treats both results as an ACK. `duplicate` means a prior delivery
     # was already durably appended; it does not create a second evidence row.
-    return {"status": "SUCCESS", "delivery": "recorded" if inserted else "duplicate"}
+    return response
 
 
 @app.post("/v1/reports/validate")

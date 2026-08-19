@@ -36,7 +36,7 @@ export async function getPostgresReadiness() {
 }
 
 const canonicalTables = [
-  "activity_events", "alert_policies", "beneficiaries", "compliance_cases", "corridor_policies", "counterparties", "counterparty_authorizations", "counterparty_risk_assessments", "customers", "document_analysis_evidence", "document_analysis_jobs", "integration_connections", "kyc_documents", "kyc_document_upload_intents", "legal_entities", "liquidity_positions", "market_observations", "notification_deliveries", "payment_legs", "payment_orders", "policy_decisions", "rate_locks", "regulatory_deadlines", "regulatory_reports", "sar_str_filings", "scheduled_jobs", "treasury_buffer_policies", "treasury_rebalancing_recommendations", "treasury_stress_test_runs", "user_role_assignments", "verification_consents", "verification_reviewer_decisions",
+  "activity_events", "alert_policies", "beneficiaries", "compliance_cases", "corridor_policies", "counterparties", "counterparty_authorizations", "counterparty_onboardings", "counterparty_onboarding_gate_decisions", "counterparty_risk_assessments", "customers", "document_analysis_evidence", "document_analysis_jobs", "integration_connections", "kyc_documents", "kyc_document_upload_intents", "legal_entities", "liquidity_positions", "market_observations", "notification_deliveries", "payment_legs", "payment_orders", "policy_decisions", "rate_locks", "regulatory_deadlines", "regulatory_reports", "sar_str_filings", "scheduled_jobs", "treasury_buffer_policies", "treasury_rebalancing_recommendations", "treasury_stress_test_runs", "user_role_assignments", "verification_consents", "verification_reviewer_decisions",
 ] as const;
 
 export async function getPostgresCutoverReadiness() {
@@ -675,7 +675,7 @@ export async function listPostgresReviewerDecisions() {
   }
 }
 
-type Actor = { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" };
+export type Actor = { openId: string; role: "admin" | "compliance_officer" | "treasury_operator" | "auditor" };
 
 export async function createPostgresVerificationConsent(actor: Actor, input: { scope: "kyc" | "kyb"; subjectReference: string; consentVersion: string; purpose: string; grantedAt: Date; expiresAt?: Date }) {
   const client = await getPool().connect();

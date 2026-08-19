@@ -1,5 +1,17 @@
 # Production-Completion Readiness Baseline
 
+## 2026-08-19 revision (attached lifecycle operating model, governed analytics, and stablecoin boundary)
+
+This revision supersedes the summary below while retaining it as an audit history. The ledger now records **182** items: **176 completed** and **6 externally blocked**, or **96.7%** checklist completion. The six open items are all external facts: approved provider credentials/licence confirmation, an approved production cutover, two evidence-model host-capacity checks, provisioned production middleware, and refreshed secured-development identities.
+
+The supplied lifecycle and operating model is now mapped in `docs/attached-lifecycle-implementation-coverage.md`. The map covers payment initiation, identity and role checks, evidence-only KYC/KYB, RFQ/rate controls, funding and liquidity checks, durable execution workflow, provider-local payout boundary, reconciliation/reporting/audit, exception management, and event evidence. It distinguishes implemented control planes from provider-dependent movement rather than treating a diagram arrow as a completed settlement.
+
+The provider-independent lifecycle gaps discovered by that audit are closed on canonical PostgreSQL. Migration 0013 produces **38** validated public tables, adding counterparty onboarding and immutable gate-decision evidence. The lifecycle is `legal_onboarding → technical_readiness → pilot → steady_state`, with blocked and due-recertification outcomes. Legal requires a verified authorisation; technical requires an active verified integration; pilot requires separate compliance and treasury actors. A 15-case router RBAC suite caught and closed a generic technical-gate bypass before this revision was recorded. The role-aware UI, DOM tests, and axe audit include the new controls.
+
+Advanced analytics now receives a governed redacted lifecycle projection only after Dapr/Redis has validated and durably acknowledged the event. Bronze writes remain immutable and reject customer, account, wallet, document, credential, and raw-location fields. Sedona and GeoLibre remain aggregate-only clients; OCR/ML evidence remains review-required. The Go Yellow Card boundary implements documented HMAC RFQ creation and signed-webhook verification for **USDC/USDT** offers to **NGN/KES/ZAR**. It cannot accept a quote, create a wallet, move value, or assert settlement, and remains inactive pending licensed counterparties, secrets, allowlisting, and sandbox approval.
+
+Closing validation for this revision: the managed suite ran with PostgreSQL and all live Go/Rust/Python/ledger/service regressions enabled — **83 files and 558 tests passed**. The Go payment-engine provider suite, including Yellow Card local protocol tests, passed with `go vet`. The Python lifecycle-event lakehouse projection and event-consumer regressions passed. The full canonical quality gate remains required after the final source synchronization.
+
 ## 2026-08-19 revision (secured-development validation and source-material guard)
 
 This revision supersedes the summary below while retaining it as an audit

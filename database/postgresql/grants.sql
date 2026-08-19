@@ -32,6 +32,7 @@ GRANT INSERT ON TABLE
   verification_consents,
   verification_reviewer_decisions,
   counterparty_risk_assessments,
+  counterparty_onboarding_gate_decisions,
   market_observations,
   -- An observation, once recorded, is a historical fact. Granting UPDATE would
   -- allow a past incident to be edited out of the trend it appears in.
@@ -52,6 +53,7 @@ GRANT INSERT, UPDATE ON TABLE
   beneficiaries,
   counterparties,
   counterparty_authorizations,
+  counterparty_onboardings,
   liquidity_positions,
   treasury_buffer_policies,
   corridor_policies,

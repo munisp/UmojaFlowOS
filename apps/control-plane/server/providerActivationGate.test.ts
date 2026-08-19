@@ -52,7 +52,9 @@ describe("provider activation gate", () => {
     const offenders: string[] = [];
     for (const file of serverSources()) {
       const contents = readFileSync(file, "utf8");
-      if (/state\s*=\s*'active'/i.test(contents) || /set\s+state[^;]{0,80}'active'/i.test(contents)) {
+      // A readiness query is allowed to read `state='active'`; it cannot make
+      // an integration active. This guard is about writes to the lifecycle.
+      if (/UPDATE\s+integration_connections[\s\S]{0,300}\bSET\s+state\b/i.test(contents)) {
         offenders.push(file.slice(ROOT.length + 1));
       }
     }

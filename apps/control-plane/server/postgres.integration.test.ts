@@ -15,9 +15,9 @@ describe.skipIf(!runIntegration)("local PostgreSQL canonical schema", () => {
     const readiness = await getPostgresReadiness();
     expect(readiness.connected).toBe(true);
     expect(readiness.database).toBe("umojaflowos_dev");
-    // 36 canonical tables after migration 0012 added append-only service
-    // health samples for operator-visible history.
-    expect(readiness.tableCount).toBe(36);
+    // 38 canonical tables after migration 0013 added the onboarding lifecycle
+    // and its append-only independent gate-decision evidence.
+    expect(readiness.tableCount).toBe(38);
     expect(readiness.version).toContain("PostgreSQL");
   });
 

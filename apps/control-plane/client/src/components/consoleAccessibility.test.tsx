@@ -12,6 +12,7 @@ import { RateLockForm } from "./RateLockControls";
 import { RegulatoryDeadlineForm } from "./RegulatoryDeadlineControls";
 import { SarStrFilingForm } from "./SarStrFilingControls";
 import { StakeholderOnboardingWorkspace } from "./StakeholderOnboardingWorkspace";
+import { CounterpartyOnboardingControls } from "./CounterpartyOnboardingControls";
 import { TreasuryRecommendationForm } from "./TreasuryRebalancingControls";
 
 /**
@@ -214,6 +215,42 @@ const surfaces: Array<{ name: string; render: () => void }> = [
           role="admin"
           signals={{ counterparties: 0, integrations: 0, customers: 0, consents: 0, documents: 0, liquidityPositions: 0, marketObservations: 0, paymentOrders: 0, complianceCases: 0, reports: 0, auditEvents: 0 }}
           onNavigate={() => undefined}
+        />,
+      ),
+  },
+  {
+    name: "counterparty onboarding lifecycle controls",
+    render: () =>
+      renderInPageContext(
+        <CounterpartyOnboardingControls
+          role="admin"
+          counterparties={[{ id: "8192a3b4-c5d6-47e8-f901-234567890123", legalName: "Registered PSP", counterpartyType: "payment_service_provider", jurisdiction: "Nigeria" }]}
+          rows={[{
+            id: "92a3b4c5-d6e7-48f9-8012-345678901234",
+            counterpartyId: "8192a3b4-c5d6-47e8-f901-234567890123",
+            legalName: "Registered PSP",
+            counterpartyType: "payment_service_provider",
+            jurisdiction: "Nigeria",
+            countryOverlays: ["NIGERIA_NGN"],
+            stage: "legal_onboarding",
+            cycleNumber: 1,
+            legalEvidenceUri: "https://evidence.example/legal",
+            technicalEvidenceUri: null,
+            pilotEvidenceUri: null,
+            recertificationDueAt: null,
+            currentReason: null,
+            decisions: [],
+          }]}
+          loading={false}
+          createPending={false}
+          decisionPending={false}
+          recertificationPending={false}
+          error={null}
+          create={() => undefined}
+          decideLegal={() => undefined}
+          decideTechnical={() => undefined}
+          decidePilot={() => undefined}
+          beginRecertification={() => undefined}
         />,
       ),
   },

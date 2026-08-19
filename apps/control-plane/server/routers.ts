@@ -18,6 +18,7 @@ import { adminProcedure, auditorProcedure, complianceOnlyProcedure, compliancePr
 import { listPostgresActiveVerificationConsents, listPostgresAnalysisReadyDocuments } from "./analysisSubmission";
 import { registerPostgresLegalEntity } from "./legalEntityRegistry";
 import { disposeComplianceCase } from "./complianceCaseWorkflow";
+import { beginCounterpartyRecertification, createCounterpartyOnboarding, decideCounterpartyOnboardingGate, listCounterpartyOnboardings } from "./counterpartyOnboarding";
 import { resolveSelectedModel } from "./modelProvenance";
 import { transitionPostgresPaymentLeg, createPostgresPaymentLeg, createPostgresPaymentOrder, expirePostgresRateLocks, listPostgresPaymentLegs, listPostgresPaymentOrders, transitionPostgresPaymentOrder } from "./paymentWorkflow";
 import { listPostgresTreasuryRecommendations, listPostgresTreasuryBufferPolicies, listPostgresLegalEntities, transitionPostgresCounterpartyAuthorization, evaluatePostgresRegulatoryDeadlines, cancelPostgresRateLock, createPostgresAlertPolicy, createPostgresBeneficiary, createPostgresComplianceCase, createPostgresCorridorPolicy, createPostgresCounterparty, createPostgresCounterpartyAuthorization, createPostgresCounterpartyRiskAssessment, createPostgresCustomer, createPostgresDocumentAnalysisJob, createPostgresIntegrationConnection, createPostgresKycDocumentUploadIntent, createPostgresRateLock, createPostgresRegulatoryDeadline, createPostgresRegulatoryReport, createPostgresReviewerDecision, createPostgresSarStrFiling, createPostgresTreasuryRecommendation, createPostgresVerificationConsent, decidePostgresTreasuryRecommendation, escalatePostgresCounterpartyRiskAssessment, finalizePostgresKycDocumentUpload, getPostgresCutoverReadiness, getPostgresReadiness, listPostgresAlertPolicies, listPostgresBeneficiaries, listPostgresComplianceCases, listPostgresCorridorPolicies, listPostgresCounterparties, listPostgresCounterpartyAuthorizations, listPostgresCounterpartyRiskAssessments, listPostgresCustomers, listPostgresDocumentAnalysisEvidence, listPostgresDocumentAnalysisJobs, listPostgresIntegrationConnections, listPostgresKycDocuments, listPostgresLiquidityPositions, listPostgresMarketObservations, listPostgresNotificationDeliveries, listPostgresRateLocks, listPostgresRegulatoryDeadlines, listPostgresRegulatoryReports, listPostgresReviewerDecisions, listPostgresSarStrFilings, persistPostgresDocumentAnalysisEvidence, recordPostgresLiquidityPosition, recordPostgresMarketObservation, transitionPostgresRegulatoryReport, transitionPostgresSarStrFiling, updatePostgresKycDocumentReview } from "./postgres";
@@ -61,6 +62,37 @@ export const appRouter = router({
     readiness: auditorProcedure.query(() => getPostgresReadiness()),
     cutoverReadiness: auditorProcedure.query(() => getPostgresCutoverReadiness()),
     counterparties: auditorProcedure.query(() => listPostgresCounterparties()),
+    counterpartyOnboardings: auditorProcedure.query(() => listCounterpartyOnboardings()),
+    createCounterpartyOnboarding: adminProcedure.input(z.object({
+      counterpartyId: z.string().uuid(),
+      countryOverlays: z.array(z.enum(["NIGERIA_NGN", "KENYA_KES", "SOUTH_AFRICA_ZAR"])).min(1).max(3),
+      legalEvidenceUri: z.string().url(),
+      recertificationDueAt: z.coerce.date(),
+    })).mutation(({ ctx, input }) => createCounterpartyOnboarding({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    decideCounterpartyOnboardingGate: complianceOnlyProcedure.input(z.object({
+      onboardingId: z.string().uuid(),
+      gate: z.enum(["legal", "pilot"]),
+      decision: z.enum(["approved", "blocked"]),
+      evidenceUri: z.string().url(),
+      rationale: z.string().trim().min(10).max(4000),
+    })).mutation(({ ctx, input }) => decideCounterpartyOnboardingGate({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    decideTechnicalOnboardingGate: adminProcedure.input(z.object({
+      onboardingId: z.string().uuid(),
+      decision: z.enum(["approved", "blocked"]),
+      evidenceUri: z.string().url(),
+      rationale: z.string().trim().min(10).max(4000),
+    })).mutation(({ ctx, input }) => decideCounterpartyOnboardingGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "technical" })),
+    decideTreasuryPilotOnboardingGate: treasuryProcedure.input(z.object({
+      onboardingId: z.string().uuid(),
+      decision: z.enum(["approved", "blocked"]),
+      evidenceUri: z.string().url(),
+      rationale: z.string().trim().min(10).max(4000),
+    })).mutation(({ ctx, input }) => decideCounterpartyOnboardingGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "pilot" })),
+    beginCounterpartyRecertification: complianceProcedure.input(z.object({
+      onboardingId: z.string().uuid(),
+      legalEvidenceUri: z.string().url(),
+      recertificationDueAt: z.coerce.date(),
+    })).mutation(({ ctx, input }) => beginCounterpartyRecertification({ openId: ctx.user.openId, role: ctx.user.role }, input.onboardingId, input.legalEvidenceUri, input.recertificationDueAt)),
     customers: auditorProcedure.query(() => listPostgresCustomers()),
     beneficiaries: auditorProcedure.input(z.object({ customerId: z.string().uuid().optional() }).optional()).query(({ input }) => listPostgresBeneficiaries(input?.customerId)),
     createCustomer: complianceProcedure.input(z.object({ legalName: z.string().trim().min(2).max(255), registrationIdentifier: z.string().trim().min(2).max(255) })).mutation(({ ctx, input }) => createPostgresCustomer({ openId: ctx.user.openId, role: ctx.user.role }, input)),
