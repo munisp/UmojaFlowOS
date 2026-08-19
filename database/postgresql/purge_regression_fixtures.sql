@@ -45,7 +45,12 @@ INSERT INTO fixture_actors (pattern) VALUES
   ('cutover-%'),
   ('boundary-%'),
   ('treasury-regression-%'),
-  ('compliance-regression-%');
+  ('compliance-regression-%'),
+  -- The credential-configuration and activation suites act as `admin-<uuid>`.
+  -- A real administrator is identified by an OAuth open id, never by a
+  -- generated UUID, so this prefix is unambiguously synthetic. The underscore
+  -- wildcards pin it to exactly the UUID shape.
+  ('admin-________-____-____-____-____________');
 
 CREATE TEMP TABLE fixture_customers (id uuid) ON COMMIT DROP;
 INSERT INTO fixture_customers (id)
@@ -169,6 +174,9 @@ DELETE FROM market_observations WHERE integration_connection_id IN (
   SELECT i.id FROM integration_connections i WHERE i.counterparty_id IN (SELECT id FROM fixture_counterparties)
 );
 DELETE FROM integration_connections WHERE counterparty_id IN (SELECT id FROM fixture_counterparties);
+-- Integration connections carry no actor column, so they are reachable only
+-- through their counterparty; the credential suites' counterparties are named
+-- with a fixture pattern for exactly this reason.
 DELETE FROM counterparty_risk_assessments WHERE counterparty_id IN (SELECT id FROM fixture_counterparties);
 DELETE FROM counterparty_authorizations WHERE counterparty_id IN (SELECT id FROM fixture_counterparties);
 DELETE FROM beneficiaries WHERE customer_id IN (SELECT id FROM fixture_customers);

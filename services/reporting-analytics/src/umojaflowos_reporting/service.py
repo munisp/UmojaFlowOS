@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from dataclasses import asdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from .reporting import ReportValidationError, build_evidence_manifest, validate_report_pack
@@ -99,6 +101,86 @@ CONTRACT_CORRIDOR_BY_REGULATOR = {
 }
 
 
+class ServiceMetrics:
+    """Counters observed while the service runs.
+
+    These are collected in middleware rather than inside each endpoint. Counting
+    per-endpoint would mean every new route has to remember to increment, and
+    the one that forgets is invisible: the dashboard would simply under-report
+    with no signal that it was doing so. Middleware makes the measurement a
+    property of the server rather than a convention.
+
+    Nothing here is derived or estimated. A quantity the service cannot observe
+    is absent from the payload rather than reported as zero, because a
+    fabricated zero reads as "nothing happening" and is worse than a gap.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._started_at = time.monotonic()
+        self.requests_total = 0
+        self.requests_rejected = 0  # 4xx: the caller's input was refused
+        self.requests_failed = 0  # 5xx: the service itself failed
+        self.reports_assembled = 0
+        self.exposure_reports = 0
+
+    def record_request(self, status_code: int) -> None:
+        with self._lock:
+            self.requests_total += 1
+            if 400 <= status_code < 500:
+                self.requests_rejected += 1
+            elif status_code >= 500:
+                self.requests_failed += 1
+
+    def record_assembly(self) -> None:
+        with self._lock:
+            self.reports_assembled += 1
+
+    def record_exposure(self) -> None:
+        with self._lock:
+            self.exposure_reports += 1
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "service": "reporting-analytics",
+                "language": "python",
+                "uptime_seconds": int(time.monotonic() - self._started_at),
+                "requests_total": self.requests_total,
+                "requests_rejected": self.requests_rejected,
+                "requests_failed": self.requests_failed,
+                "reports_assembled": self.reports_assembled,
+                "exposure_reports": self.exposure_reports,
+                "observed_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+                "regulatory_submission": "disabled_without_verified_channel",
+            }
+
+
+METRICS = ServiceMetrics()
+
+
+@app.middleware("http")
+async def count_requests(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """Counts every served request, including those that raise."""
+    try:
+        response = await call_next(request)
+    except Exception:
+        # An unhandled exception is a served request that failed; not counting
+        # it would make the failure invisible in exactly the case that matters.
+        METRICS.record_request(500)
+        raise
+    # The metrics read itself is excluded, otherwise polling the dashboard would
+    # inflate the very numbers it displays.
+    if request.url.path != "/v1/metrics":
+        METRICS.record_request(response.status_code)
+    return response
+
+
+@app.get("/v1/metrics")
+def metrics() -> dict[str, Any]:
+    return METRICS.snapshot()
+
+
 @app.get("/healthz")
 def health() -> dict[str, str]:
     return {"service": "reporting-analytics", "status": "healthy", "regulatory_submission": "disabled_without_verified_channel"}
@@ -154,6 +236,9 @@ def assemble_report(request: ReportAssemblyRequest) -> dict[str, Any]:
         # Re-verify the artifact before returning it so a corrupt assembly can
         # never leave this endpoint.
         validate_assembled_report(report)
+        # Counted after verification: an artifact that failed its own check was
+        # not assembled in any sense an operator would recognise.
+        METRICS.record_assembly()
         return {
             "service": SERVICE_NAME,
             "contract_version": CONTRACT_VERSION,
@@ -209,6 +294,7 @@ def stablecoin_exposure(request: StablecoinExposureRequest) -> dict[str, Any]:
             max_position_age=timedelta(minutes=request.max_position_age_minutes),
             max_observation_age=timedelta(minutes=request.max_observation_age_minutes),
         )
+        METRICS.record_exposure()
         return {
             "service": SERVICE_NAME,
             "contract_version": CONTRACT_VERSION,

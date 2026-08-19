@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormEvent, useState } from "react";
+import { SubmitFeedback, useSubmitFeedback } from "@/components/SubmitFeedback";
 
 export type ActiveConsent = {
   id: string;
@@ -49,14 +50,13 @@ export function AnalysisJobSubmissionForm({
   documents,
   canSubmit,
   pending,
-  submit,
-}: {
+  submit, error }: {
   consents: ActiveConsent[];
   documents: AnalysisReadyDocument[];
   canSubmit: boolean;
   pending: boolean;
-  submit: (input: AnalysisSubmission) => void;
-}) {
+  submit: (input: AnalysisSubmission) => void; error?: string | null }) {
+  const feedback = useSubmitFeedback(pending, error);
   const [consentId, setConsentId] = useState<string>(consents[0]?.id ?? "");
   const [documentId, setDocumentId] = useState<string>(documents[0]?.id ?? "");
 
@@ -109,6 +109,6 @@ export function AnalysisJobSubmissionForm({
       <p className="break-all font-mono text-[10px] text-black/60">{document.storageUrl}</p>
       <p className="text-[10px] text-black/50">Scope {consent.scope.toUpperCase()} · purpose recorded on consent {consent.consentVersion}</p>
     </div>
-    <Button type="submit" disabled={pending} className="rounded-none bg-[#e11919] font-black uppercase tracking-wide hover:bg-black">{pending ? "Submitting…" : "Submit for document analysis"}</Button>
+    <SubmitFeedback state={feedback} /><Button type="submit" disabled={pending} className="rounded-none bg-[#e11919] font-black uppercase tracking-wide hover:bg-black">{pending ? "Submitting…" : "Submit for document analysis"}</Button>
   </form>;
 }

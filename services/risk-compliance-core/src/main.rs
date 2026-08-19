@@ -19,15 +19,90 @@ use risk_compliance_core::{
     Decision, PolicyInput, PolicyResult,
 };
 use serde::Serialize;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 /// Service identity carried on every envelope. Must match the value the control
 /// plane's contract pins with `z.literal`.
 const SERVICE_NAME: &str = "umojaflowos-risk-compliance-core";
 const CONTRACT_VERSION: &str = "v1";
 
-#[derive(Clone)]
-struct ServiceState;
+/// Counters the service observes while running.
+///
+/// Each is incremented where the corresponding evaluation completes, so the
+/// values are measurements rather than estimates. Nothing here is derived,
+/// smoothed, or back-filled: a counter this service cannot observe is not
+/// reported at all, because a fabricated zero reads as "healthy" and would be
+/// worse than an absent field.
+struct ServiceState {
+    started_at: Instant,
+    policy_evaluations: AtomicU64,
+    monitoring_evaluations: AtomicU64,
+    monitoring_review_required: AtomicU64,
+    counterparty_assessments: AtomicU64,
+    counterparty_review_required: AtomicU64,
+}
+
+impl ServiceState {
+    fn new() -> Self {
+        Self {
+            started_at: Instant::now(),
+            policy_evaluations: AtomicU64::new(0),
+            monitoring_evaluations: AtomicU64::new(0),
+            monitoring_review_required: AtomicU64::new(0),
+            counterparty_assessments: AtomicU64::new(0),
+            counterparty_review_required: AtomicU64::new(0),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct MetricsSnapshot {
+    service: &'static str,
+    language: &'static str,
+    uptime_seconds: u64,
+    policy_evaluations: u64,
+    monitoring_evaluations: u64,
+    monitoring_review_required: u64,
+    counterparty_assessments: u64,
+    counterparty_review_required: u64,
+    observed_at: String,
+    screening_provider: &'static str,
+}
+
+/// RFC3339 observation time so the console can show how old a reading is.
+fn observed_at_now() -> String {
+    let elapsed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    // Formatted from epoch seconds without pulling in a date library, since the
+    // control plane only needs a parseable instant.
+    let secs = elapsed.as_secs() as i64;
+    let days = secs / 86_400;
+    let rem = secs % 86_400;
+    let (year, month, day) = civil_from_days(days);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        rem / 3600,
+        (rem % 3600) / 60,
+        rem % 60
+    )
+}
+
+/// Days-since-epoch to a civil date, using Howard Hinnant's algorithm.
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
 
 async fn health() -> Json<serde_json::Value> {
     Json(
@@ -35,10 +110,26 @@ async fn health() -> Json<serde_json::Value> {
     )
 }
 
+async fn metrics(State(state): State<Arc<ServiceState>>) -> Json<MetricsSnapshot> {
+    Json(MetricsSnapshot {
+        service: "risk-compliance-core",
+        language: "rust",
+        uptime_seconds: state.started_at.elapsed().as_secs(),
+        policy_evaluations: state.policy_evaluations.load(Ordering::Relaxed),
+        monitoring_evaluations: state.monitoring_evaluations.load(Ordering::Relaxed),
+        monitoring_review_required: state.monitoring_review_required.load(Ordering::Relaxed),
+        counterparty_assessments: state.counterparty_assessments.load(Ordering::Relaxed),
+        counterparty_review_required: state.counterparty_review_required.load(Ordering::Relaxed),
+        observed_at: observed_at_now(),
+        screening_provider: "disabled_without_verified_provider",
+    })
+}
+
 async fn evaluate_policy(
-    State(_state): State<Arc<ServiceState>>,
+    State(state): State<Arc<ServiceState>>,
     Json(input): Json<PolicyInput>,
 ) -> Json<PolicyResult> {
+    state.policy_evaluations.fetch_add(1, Ordering::Relaxed);
     Json(evaluate(&input))
 }
 
@@ -75,10 +166,19 @@ impl MonitoringEnvelope {
 }
 
 async fn evaluate_monitoring_route(
-    State(_state): State<Arc<ServiceState>>,
+    State(state): State<Arc<ServiceState>>,
     Json(input): Json<MonitoringInput>,
 ) -> Json<MonitoringEnvelope> {
-    Json(MonitoringEnvelope::from_result(evaluate_monitoring(&input)))
+    let result = evaluate_monitoring(&input);
+    state.monitoring_evaluations.fetch_add(1, Ordering::Relaxed);
+    // Counted separately because "how many evaluations happened" and "how many
+    // needed a human" answer different operational questions.
+    if !matches!(result.decision, Decision::Allow) {
+        state
+            .monitoring_review_required
+            .fetch_add(1, Ordering::Relaxed);
+    }
+    Json(MonitoringEnvelope::from_result(result))
 }
 
 #[derive(Debug, Serialize)]
@@ -92,10 +192,18 @@ struct CounterpartyEnvelope {
 }
 
 async fn assess_counterparty_route(
-    State(_state): State<Arc<ServiceState>>,
+    State(state): State<Arc<ServiceState>>,
     Json(input): Json<CounterpartyRiskInput>,
 ) -> Json<CounterpartyEnvelope> {
     let assessment = assess_counterparty_risk(&input);
+    state
+        .counterparty_assessments
+        .fetch_add(1, Ordering::Relaxed);
+    if assessment.review_required {
+        state
+            .counterparty_review_required
+            .fetch_add(1, Ordering::Relaxed);
+    }
     // `RiskBand` already serialises in SCREAMING_SNAKE_CASE; going through serde
     // rather than a hand-written match keeps the wire value tied to the enum.
     let band = serde_json::to_value(assessment.band)
@@ -115,10 +223,11 @@ async fn assess_counterparty_route(
 fn router() -> Router {
     Router::new()
         .route("/healthz", get(health))
+        .route("/v1/metrics", get(metrics))
         .route("/v1/policy/evaluate", post(evaluate_policy))
         .route("/v1/monitoring/evaluate", post(evaluate_monitoring_route))
         .route("/v1/counterparty/assess", post(assess_counterparty_route))
-        .with_state(Arc::new(ServiceState))
+        .with_state(Arc::new(ServiceState::new()))
 }
 
 #[tokio::main]
@@ -275,5 +384,96 @@ mod tests {
         let parsed: serde_json::Value =
             serde_json::from_slice(&body).expect("monitoring body is JSON");
         assert_eq!(parsed["decision"], "BLOCK");
+    }
+
+    /// Metrics must be measurements. An endpoint returning plausible constants
+    /// would satisfy a shape check, so these drive real requests through the
+    /// router and then require the counters to match exactly that traffic.
+    async fn read_metrics(app: &mut Router) -> serde_json::Value {
+        use axum::body::{to_bytes, Body};
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/metrics")
+                    .body(Body::empty())
+                    .expect("build metrics request"),
+            )
+            .await
+            .expect("metrics route responds");
+        let body = to_bytes(response.into_body(), 64 * 1024)
+            .await
+            .expect("read metrics body");
+        serde_json::from_slice(&body).expect("metrics body is JSON")
+    }
+
+    async fn post_monitoring(app: &mut Router, payload: serde_json::Value) {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/monitoring/evaluate")
+                    .header("content-type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .expect("build monitoring request"),
+            )
+            .await
+            .expect("monitoring route responds");
+    }
+
+    #[tokio::test]
+    async fn metrics_start_at_zero_and_identify_the_service() {
+        let mut app = router();
+        let metrics = read_metrics(&mut app).await;
+        assert_eq!(metrics["service"], "risk-compliance-core");
+        assert_eq!(metrics["language"], "rust");
+        assert_eq!(metrics["monitoring_evaluations"], 0);
+        assert_eq!(metrics["counterparty_assessments"], 0);
+        // An observation time is required so the console can show staleness.
+        assert!(metrics["observed_at"]
+            .as_str()
+            .is_some_and(|s| s.ends_with('Z')));
+    }
+
+    #[tokio::test]
+    async fn metrics_count_the_requests_actually_served() {
+        let mut app = router();
+        for _ in 0..3 {
+            post_monitoring(&mut app, serde_json::json!({"corridor":"NIGERIA_NGN"})).await;
+        }
+        let metrics = read_metrics(&mut app).await;
+        assert_eq!(metrics["monitoring_evaluations"], 3);
+        // Each of those evaluations blocks for missing input, so all three are
+        // also counted as requiring review. This distinguishes the two counters.
+        assert_eq!(metrics["monitoring_review_required"], 3);
+    }
+
+    #[tokio::test]
+    async fn metrics_restate_that_screening_is_disabled() {
+        let mut app = router();
+        let metrics = read_metrics(&mut app).await;
+        assert_eq!(
+            metrics["screening_provider"],
+            "disabled_without_verified_provider"
+        );
+    }
+
+    /// The date arithmetic backing `observed_at` is hand-written, so it is
+    /// checked against known values rather than trusted.
+    #[test]
+    fn civil_date_conversion_matches_known_dates() {
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        assert_eq!(civil_from_days(19_723), (2024, 1, 1));
+        // A leap day, which is where naive implementations drift.
+        assert_eq!(civil_from_days(19_782), (2024, 2, 29));
     }
 }

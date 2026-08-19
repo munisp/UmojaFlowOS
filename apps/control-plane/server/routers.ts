@@ -1,4 +1,13 @@
 import { COOKIE_NAME } from "@shared/const";
+import { TRPCError } from "@trpc/server";
+import { probeProviderEndpoint } from "./providerHealthCheck";
+import { collectAllServiceStatuses } from "./serviceHealth";
+import {
+  activatePostgresIntegrationConnection,
+  configurePostgresIntegrationCredential,
+  listPostgresIntegrationCredentialStatus,
+  suspendPostgresIntegrationConnection,
+} from "./postgres";
 import { evaluatePostgresLiquidityThresholds, evaluatePostgresPaymentFailures, evaluatePostgresComplianceFlags, computePostgresFxSpread } from "./operationalAlerts";
 import { raisePostgresComplianceAlert, acknowledgePostgresComplianceAlert, escalatePostgresComplianceAlert, dismissPostgresComplianceAlert, listPostgresComplianceAlerts } from "./complianceAlerts";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -71,6 +80,59 @@ export const appRouter = router({
     fxSpread: auditorProcedure.input(z.object({ baseAsset: z.enum(["NGN","KES","ZAR","USD","USDC","USDT"]), quoteAsset: z.enum(["NGN","KES","ZAR","USD","USDC","USDT"]), windowMinutes: z.number().int().min(1).max(1440).optional() })).query(({ input }) => computePostgresFxSpread(input.baseAsset, input.quoteAsset, { windowMinutes: input.windowMinutes })),
     alertPolicies: auditorProcedure.query(() => listPostgresAlertPolicies()),
     createIntegrationConnection: adminProcedure.input(z.object({ counterpartyId: z.string().uuid(), category: z.enum(["payment_rail", "fx_rate", "stablecoin_market_data", "kyc_kyb", "sanctions", "chain_analytics", "notification", "regulatory_submission"]), environment: z.enum(["sandbox", "production"]), documentationUrl: z.string().url() })).mutation(({ ctx, input }) => createPostgresIntegrationConnection({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+
+    /**
+     * Provider credential configuration and activation.
+     *
+     * Administrator-only, because supplying the credential that makes a
+     * corridor live is the single most consequential configuration action in
+     * the platform. Note that the read is also administrator-only rather than
+     * auditor-readable: the secret *reference* names a deployment secret, and
+     * that name is itself operational information.
+     */
+    integrationCredentialStatus: adminProcedure.query(() => listPostgresIntegrationCredentialStatus()),
+
+    /**
+     * Live health and metrics for the Go, Rust, and Python services.
+     *
+     * Auditor-readable because operational visibility is a read, and withholding
+     * it from the roles who respond to incidents would be counterproductive. The
+     * collection itself performs real HTTP reads against configured endpoints
+     * only; an unconfigured service is reported as such rather than as failing.
+     */
+    serviceStatus: auditorProcedure.query(() => collectAllServiceStatuses()),
+
+    configureIntegrationCredential: adminProcedure
+      .input(z.object({
+        integrationConnectionId: z.string().uuid(),
+        // Constrained to a deployment-secret name; the repository additionally
+        // refuses anything credential-shaped.
+        secretReference: z.string().trim().min(3).max(64),
+        endpointUrl: z.string().url(),
+      }))
+      .mutation(({ ctx, input }) => configurePostgresIntegrationCredential({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+
+    /**
+     * Attempts activation. The probe runs first and its outcome is passed to
+     * the repository, which decides. A failed or unreachable probe records a
+     * failed activation rather than throwing, so the operator sees why.
+     */
+    activateIntegrationConnection: adminProcedure
+      .input(z.object({ integrationConnectionId: z.string().uuid() }))
+      .mutation(async ({ ctx, input }) => {
+        const connections = await listPostgresIntegrationCredentialStatus();
+        const connection = connections.find((row: { id: string }) => row.id === input.integrationConnectionId);
+        if (!connection) throw new TRPCError({ code: "NOT_FOUND", message: "integration connection does not exist" });
+        if (!connection.secretReference) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "configure a credential reference before attempting activation" });
+        }
+        const outcome = await probeProviderEndpoint({ endpoint: connection.endpoint, secretReference: connection.secretReference });
+        return activatePostgresIntegrationConnection({ openId: ctx.user.openId, role: ctx.user.role }, { integrationConnectionId: input.integrationConnectionId, outcome });
+      }),
+
+    suspendIntegrationConnection: adminProcedure
+      .input(z.object({ integrationConnectionId: z.string().uuid(), reason: z.string().trim().min(10).max(500) }))
+      .mutation(({ ctx, input }) => suspendPostgresIntegrationConnection({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     createCorridorPolicy: complianceProcedure.input(z.object({ corridor: z.enum(["NIGERIA_NGN", "KENYA_KES", "SOUTH_AFRICA_ZAR"]), regulator: z.enum(["CBN", "CBK", "SARB"]), policyVersion: z.string().trim().min(1).max(64), effectiveFrom: z.coerce.date(), effectiveTo: z.coerce.date().optional(), requiresTravelRule: z.boolean(), requiresAuthorisedFxIntermediary: z.boolean(), policyDocumentUri: z.string().url() })).mutation(({ ctx, input }) => createPostgresCorridorPolicy({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     paymentOrders: auditorProcedure.query(() => listPostgresPaymentOrders()),
     paymentLegs: auditorProcedure.input(z.object({ paymentOrderId: z.string().uuid().optional() }).optional()).query(({ input }) => listPostgresPaymentLegs(input?.paymentOrderId)),

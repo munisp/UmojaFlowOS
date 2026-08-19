@@ -15,6 +15,7 @@
 //! actual control.
 
 use axum::{
+    extract::State,
     http::StatusCode,
     routing::{get, post},
     Json, Router,
@@ -25,14 +26,98 @@ use ledger_gateway::{
     PostgresProjectionRecord, Posting, ReconciliationError,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 const SERVICE_NAME: &str = "umojaflowos-ledger-gateway";
 const CONTRACT_VERSION: &str = "v1";
+
+/// Counters observed while serving. Verification outcomes are counted
+/// separately from request volume, because "how many posting sets were checked"
+/// and "how many failed to balance" are different operational signals and
+/// collapsing them would hide the one that matters.
+struct ServiceState {
+    started_at: Instant,
+    posting_validations: AtomicU64,
+    posting_imbalances: AtomicU64,
+    reconciliations: AtomicU64,
+    reconciliation_discrepancies: AtomicU64,
+}
+
+impl ServiceState {
+    fn new() -> Self {
+        Self {
+            started_at: Instant::now(),
+            posting_validations: AtomicU64::new(0),
+            posting_imbalances: AtomicU64::new(0),
+            reconciliations: AtomicU64::new(0),
+            reconciliation_discrepancies: AtomicU64::new(0),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct MetricsSnapshot {
+    service: &'static str,
+    language: &'static str,
+    uptime_seconds: u64,
+    posting_validations: u64,
+    posting_imbalances: u64,
+    reconciliations: u64,
+    reconciliation_discrepancies: u64,
+    observed_at: String,
+    ledger_backend: &'static str,
+}
+
+fn observed_at_now() -> String {
+    let elapsed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    let secs = elapsed.as_secs() as i64;
+    let days = secs / 86_400;
+    let rem = secs % 86_400;
+    let (year, month, day) = civil_from_days(days);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        rem / 3600,
+        (rem % 3600) / 60,
+        rem % 60
+    )
+}
+
+/// Days-since-epoch to a civil date (Howard Hinnant's algorithm).
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
 
 async fn health() -> Json<serde_json::Value> {
     Json(
         serde_json::json!({"service":"ledger-gateway","status":"healthy","ledger_backend":"disabled_without_deployed_tigerbeetle"}),
     )
+}
+
+async fn metrics(State(state): State<Arc<ServiceState>>) -> Json<MetricsSnapshot> {
+    Json(MetricsSnapshot {
+        service: "ledger-gateway",
+        language: "rust",
+        uptime_seconds: state.started_at.elapsed().as_secs(),
+        posting_validations: state.posting_validations.load(Ordering::Relaxed),
+        posting_imbalances: state.posting_imbalances.load(Ordering::Relaxed),
+        reconciliations: state.reconciliations.load(Ordering::Relaxed),
+        reconciliation_discrepancies: state.reconciliation_discrepancies.load(Ordering::Relaxed),
+        observed_at: observed_at_now(),
+        ledger_backend: "disabled_without_deployed_tigerbeetle",
+    })
 }
 
 #[derive(Debug, Serialize)]
@@ -58,8 +143,10 @@ struct PostingValidationEnvelope {
 /// and returning a "balanced: false" envelope for it would misrepresent the
 /// defect. An imbalance, by contrast, is a real and reportable finding.
 async fn validate_postings(
+    State(state): State<Arc<ServiceState>>,
     Json(postings): Json<Vec<Posting>>,
 ) -> Result<Json<PostingValidationEnvelope>, (StatusCode, Json<serde_json::Value>)> {
+    state.posting_validations.fetch_add(1, Ordering::Relaxed);
     let imbalance = match validate_balanced(&postings) {
         Ok(()) => None,
         Err(LedgerError::Unbalanced {
@@ -76,6 +163,11 @@ async fn validate_postings(
             ))
         }
     };
+    // Counted here rather than at the match arm so a structurally invalid set,
+    // which returns 422 above, is never miscounted as an imbalance.
+    if imbalance.is_some() {
+        state.posting_imbalances.fetch_add(1, Ordering::Relaxed);
+    }
     Ok(Json(PostingValidationEnvelope {
         service: SERVICE_NAME,
         contract_version: CONTRACT_VERSION,
@@ -125,6 +217,7 @@ struct ReconciliationEnvelope {
 /// projection. Incomplete evidence on either side is a discrepancy, never a
 /// silent pass: a missing projection cannot be read as agreement.
 async fn reconcile_projection(
+    State(state): State<Arc<ServiceState>>,
     Json(request): Json<ReconciliationRequest>,
 ) -> Json<ReconciliationEnvelope> {
     let outcome = verify_projection(&request.confirmed_fact, &request.projection);
@@ -134,6 +227,12 @@ async fn reconcile_projection(
         Err(ReconciliationError::IncompleteProjection) => Some("INCOMPLETE_PROJECTION"),
         Err(ReconciliationError::Mismatch) => Some("MISMATCH"),
     };
+    state.reconciliations.fetch_add(1, Ordering::Relaxed);
+    if discrepancy_reason.is_some() {
+        state
+            .reconciliation_discrepancies
+            .fetch_add(1, Ordering::Relaxed);
+    }
     Json(ReconciliationEnvelope {
         service: SERVICE_NAME,
         contract_version: CONTRACT_VERSION,
@@ -176,12 +275,14 @@ async fn receive_payment_event(
 fn router() -> Router {
     Router::new()
         .route("/healthz", get(health))
+        .route("/v1/metrics", get(metrics))
         .route("/v1/postings/validate", post(validate_postings))
         .route("/v1/projections/reconcile", post(reconcile_projection))
         .route(
             "/events/payment-order-validated",
             post(receive_payment_event),
         )
+        .with_state(Arc::new(ServiceState::new()))
 }
 
 #[tokio::main]
@@ -343,5 +444,99 @@ mod tests {
             body["ledger_backend"],
             "disabled_without_deployed_tigerbeetle"
         );
+    }
+
+    /// Metrics are asserted by driving requests and requiring the counters to
+    /// match. A constant-returning endpoint would pass a shape check but fail
+    /// these, which is the point.
+    async fn read_metrics(app: &Router) -> serde_json::Value {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/metrics")
+                    .body(Body::empty())
+                    .expect("build metrics request"),
+            )
+            .await
+            .expect("metrics responds");
+        let bytes = to_bytes(response.into_body(), 64 * 1024)
+            .await
+            .expect("read metrics");
+        serde_json::from_slice(&bytes).expect("metrics is JSON")
+    }
+
+    /// Posts against a *shared* router. The existing `post_json` helper builds
+    /// a fresh router per call, which is correct for response assertions but
+    /// would reset the very counters these tests measure.
+    async fn post_to(app: &Router, uri: &str, payload: serde_json::Value) {
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(uri)
+                    .header("content-type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .expect("build request"),
+            )
+            .await
+            .expect("route responds");
+    }
+
+    #[tokio::test]
+    async fn metrics_identify_the_service_and_start_at_zero() {
+        let app = router();
+        let metrics = read_metrics(&app).await;
+        assert_eq!(metrics["service"], "ledger-gateway");
+        assert_eq!(metrics["language"], "rust");
+        assert_eq!(metrics["posting_validations"], 0);
+        assert_eq!(metrics["reconciliations"], 0);
+        assert!(metrics["observed_at"]
+            .as_str()
+            .is_some_and(|value| value.ends_with('Z')));
+    }
+
+    #[tokio::test]
+    async fn metrics_separate_imbalances_from_volume() {
+        let app = router();
+
+        // One balanced set.
+        post_to(
+            &app,
+            "/v1/postings/validate",
+            serde_json::json!([
+                {"account_id":"1","currency":"NGN","debit_minor":100,"credit_minor":0},
+                {"account_id":"2","currency":"NGN","debit_minor":0,"credit_minor":100}
+            ]),
+        )
+        .await;
+
+        // Two unbalanced sets.
+        for _ in 0..2 {
+            post_to(
+                &app,
+                "/v1/postings/validate",
+                serde_json::json!([
+                    {"account_id":"1","currency":"NGN","debit_minor":100,"credit_minor":0},
+                    {"account_id":"2","currency":"NGN","debit_minor":0,"credit_minor":40}
+                ]),
+            )
+            .await;
+        }
+
+        let metrics = read_metrics(&app).await;
+        assert_eq!(metrics["posting_validations"], 3);
+        // The imbalance count must not be the request count; collapsing them
+        // would hide the signal an operator actually needs.
+        assert_eq!(metrics["posting_imbalances"], 2);
+    }
+
+    #[test]
+    fn civil_date_conversion_matches_known_dates() {
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        assert_eq!(civil_from_days(19_723), (2024, 1, 1));
+        assert_eq!(civil_from_days(19_782), (2024, 2, 29));
     }
 }

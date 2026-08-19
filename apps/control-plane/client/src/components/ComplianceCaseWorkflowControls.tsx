@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormEvent, useState } from "react";
+import { SubmitFeedback, useSubmitFeedback } from "@/components/SubmitFeedback";
 
 type CaseStatus = "open" | "under_review" | "cleared" | "escalated" | "reported" | "closed";
 
@@ -56,12 +57,11 @@ function dispositionTargets(status: string): DispositionStatus[] {
 export function VerificationConsentForm({
   canCapture,
   pending,
-  submit,
-}: {
+  submit, error }: {
   canCapture: boolean;
   pending: boolean;
-  submit: (input: { scope: "kyc" | "kyb"; subjectReference: string; consentVersion: string; purpose: string; grantedAt: Date }) => void;
-}) {
+  submit: (input: { scope: "kyc" | "kyb"; subjectReference: string; consentVersion: string; purpose: string; grantedAt: Date }) => void; error?: string | null }) {
+  const feedback = useSubmitFeedback(pending, error);
   const [scope, setScope] = useState<"kyc" | "kyb">("kyc");
   if (!canCapture) {
     return <div className="px-5 py-8 text-sm leading-6 text-black/55">Consent capture is restricted to compliance officers. This view is read-only.</div>;
@@ -103,7 +103,7 @@ export function VerificationConsentForm({
       <span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Stated purpose</span>
       <Input name="purpose" required minLength={10} maxLength={1000} className="rounded-none border-black/25" placeholder="Specific processing purpose the subject consented to" />
     </Label>
-    <Button type="submit" disabled={pending} className="rounded-none bg-[#e11919] font-black uppercase tracking-wide hover:bg-black">{pending ? "Recording…" : "Record verification consent"}</Button>
+    <SubmitFeedback state={feedback} /><Button type="submit" disabled={pending} className="rounded-none bg-[#e11919] font-black uppercase tracking-wide hover:bg-black">{pending ? "Recording…" : "Record verification consent"}</Button>
   </form>;
 }
 

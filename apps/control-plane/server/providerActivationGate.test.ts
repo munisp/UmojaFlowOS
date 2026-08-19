@@ -42,20 +42,59 @@ function serverSources(): string[] {
 }
 
 describe("provider activation gate", () => {
-  it("has no code path that sets an integration to the active state", () => {
+  it("confines activation to exactly one auditable code path", () => {
     // This is the load-bearing assertion. Every downstream capability — rate
     // locks, market observations, payment execution — requires an active
-    // integration, so as long as nothing can produce that state, nothing can
-    // claim a live provider.
+    // integration. Previously nothing could produce that state at all; now
+    // exactly one function can, and the point of this check is that it stays
+    // exactly one. A second activation path is how a gate quietly stops being
+    // a gate.
     const offenders: string[] = [];
     for (const file of serverSources()) {
       const contents = readFileSync(file, "utf8");
-      // An UPDATE that assigns the active state, in any quoting style.
-      if (/state\s*=\s*'active'/i.test(contents) || /set\s+state[^;]{0,80}active/i.test(contents)) {
+      if (/state\s*=\s*'active'/i.test(contents) || /set\s+state[^;]{0,80}'active'/i.test(contents)) {
         offenders.push(file.slice(ROOT.length + 1));
       }
     }
-    expect(offenders).toEqual([]);
+    // postgres.ts holds activatePostgresIntegrationConnection; nothing else may.
+    expect(offenders).toEqual(["server/postgres.ts"]);
+  });
+
+  it("makes that single path conditional on a passed health check", () => {
+    // The gate is only as good as the condition guarding it, so the condition
+    // is asserted directly rather than assumed from the function's name.
+    const source = readFileSync(join(ROOT, "server", "postgres.ts"), "utf8");
+    const activation = source.slice(source.indexOf("export async function activatePostgresIntegrationConnection"));
+    const body = activation.slice(0, activation.indexOf("\nexport "));
+
+    // The state written is derived from the outcome, never hard-coded to active.
+    expect(body).toMatch(/const passed = input\.outcome\.reachable/);
+    expect(body).toMatch(/nextState = passed \? "active" : "failed"/);
+    // Activation is impossible without a configured credential reference.
+    expect(body).toMatch(/configure a credential reference before attempting activation/);
+    // The 2xx requirement is explicit rather than implied by `reachable`.
+    expect(body).toMatch(/httpStatus >= 200 && input\.outcome\.httpStatus < 300/);
+  });
+
+  it("keeps the health-check probe separate from the activation decision", () => {
+    // If the probe decided, a bug in the probe would be a bug in the gate. The
+    // probe reports; the repository decides.
+    const probe = readFileSync(join(ROOT, "server", "providerHealthCheck.ts"), "utf8");
+    expect(probe).not.toMatch(/UPDATE integration_connections/);
+    expect(probe).not.toMatch(/'active'/);
+  });
+
+  it("never persists a credential value, only a reference to a deployment secret", () => {
+    const source = readFileSync(join(ROOT, "server", "postgres.ts"), "utf8");
+    // The configuration function writes secret_reference and nothing else
+    // credential-shaped.
+    const configure = source.slice(source.indexOf("export async function configurePostgresIntegrationCredential"));
+    const body = configure.slice(0, configure.indexOf("\nexport "));
+    expect(body).toMatch(/assertIsSecretReferenceNotSecret/);
+    expect(body).toMatch(/credentialValuePersisted: false/);
+    // The credential is resolved from the environment at call time, in the
+    // probe, and never reaches the repository at all.
+    expect(body).not.toMatch(/process\.env\[/);
   });
 
   it("defines the full lifecycle so a future adapter has states to move through", () => {

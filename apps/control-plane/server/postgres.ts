@@ -895,6 +895,232 @@ export async function listPostgresIntegrationConnections() {
   } finally { client.release(); }
 }
 
+/**
+ * Provider credential configuration and verified activation.
+ *
+ * The rule the whole platform rests on is that an integration may only reach
+ * `active` after a real health check against the real provider endpoint has
+ * succeeded. Everything below is written so that rule cannot be sidestepped:
+ * credentials are stored as a *reference* to a deployment secret and never as a
+ * value, and the only function that writes `active` requires a health-check
+ * outcome it did not produce itself.
+ */
+
+/** A secret reference names a deployment secret; it never carries the secret. */
+const SECRET_REFERENCE_PATTERN = /^[A-Z][A-Z0-9_]{2,63}$/;
+
+/**
+ * Values that look like credentials rather than references. A caller pasting an
+ * actual key into this field is the most likely way a secret would end up in the
+ * database, so it is refused explicitly rather than merely discouraged.
+ */
+const CREDENTIAL_SHAPED = [
+  /^sk_/i, /^pk_/i, /^rk_/i,            // common key prefixes
+  /^Bearer\s/i,
+  /^[A-Za-z0-9+/]{40,}={0,2}$/,          // long base64 blob
+  /^[0-9a-f]{32,}$/i,                    // long hex blob
+  /^-----BEGIN /,                        // PEM material
+  /^ey[A-Za-z0-9_-]+\./,                 // JWT
+];
+
+export function assertIsSecretReferenceNotSecret(candidate: string): void {
+  const value = candidate.trim();
+  for (const pattern of CREDENTIAL_SHAPED) {
+    if (pattern.test(value)) {
+      throw new Error("secret reference looks like a credential value; supply the name of a deployment secret instead");
+    }
+  }
+  if (!SECRET_REFERENCE_PATTERN.test(value)) {
+    throw new Error("secret reference must be an uppercase deployment secret name, for example PROVIDER_FX_API_KEY");
+  }
+}
+
+/**
+ * Records which deployment secret backs an integration and moves it to
+ * `credential_pending`. This deliberately does not activate anything: supplying
+ * a credential reference is a claim, and the health check is what tests it.
+ */
+export async function configurePostgresIntegrationCredential(
+  actor: PolicyActor,
+  input: { integrationConnectionId: string; secretReference: string; endpointUrl: string },
+) {
+  assertIsSecretReferenceNotSecret(input.secretReference);
+  const endpoint = normaliseProviderEndpoint(input.endpointUrl);
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const existing = await client.query<{ id: string; state: string; secretReference: string | null }>(
+      `SELECT id, state::text AS state, secret_reference AS "secretReference"
+         FROM integration_connections WHERE id=$1 FOR UPDATE`,
+      [input.integrationConnectionId],
+    );
+    const connection = existing.rows[0];
+    if (!connection) throw new Error("integration connection does not exist");
+    if (connection.state === "active") {
+      // Re-pointing a live integration's credential would silently change which
+      // provider it talks to, so it must be suspended first.
+      throw new Error("suspend the integration before changing the credential of an active connection");
+    }
+
+    const { rows } = await client.query<{ id: string; state: string }>(
+      `UPDATE integration_connections
+          SET secret_reference=$2,
+              documentation_url=$3,
+              state='credential_pending',
+              last_health_checked_at=NULL,
+              last_health_result=NULL
+        WHERE id=$1
+        RETURNING id, state::text AS state`,
+      [input.integrationConnectionId, input.secretReference.trim(), endpoint],
+    );
+    const updated = rows[0];
+    if (!updated) throw new Error("integration credential update did not return a record");
+
+    await recordActivity(client, actor, "integration_connection.credential_configured", "integration_connection", updated.id, {
+      // The reference name is recorded; no credential value exists to record.
+      secretReference: input.secretReference.trim(),
+      endpoint,
+      previousState: connection.state,
+      state: updated.state,
+      credentialValuePersisted: false,
+      activated: false,
+    });
+    await client.query("COMMIT");
+    return updated;
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
+/**
+ * A provider endpoint must be a plain absolute HTTPS URL carrying no credential.
+ * A URL with embedded userinfo is a credential in a field that gets logged.
+ */
+export function normaliseProviderEndpoint(candidate: string): string {
+  let url: URL;
+  try {
+    url = new URL(candidate.trim());
+  } catch {
+    throw new Error("provider endpoint must be an absolute URL");
+  }
+  if (url.protocol !== "https:") throw new Error("provider endpoint must use https");
+  if (url.username || url.password) throw new Error("provider endpoint must not embed credentials");
+  return url.toString();
+}
+
+/** The outcome of a real health check, produced by the caller, not by the database. */
+export type ProviderHealthCheckOutcome = {
+  reachable: boolean;
+  httpStatus: number | null;
+  observedAt: Date;
+  detail: string;
+  endpoint: string;
+};
+
+/**
+ * The only path to `active`.
+ *
+ * It refuses unless the supplied outcome actually passed, and it refuses if the
+ * integration has no credential reference — so activation cannot happen before
+ * configuration, and cannot happen on a failed or unreachable check. The failure
+ * path is equally explicit: a failed check moves the integration to `failed` and
+ * records why, rather than leaving it in a state that reads as "not tried yet".
+ */
+export async function activatePostgresIntegrationConnection(
+  actor: PolicyActor,
+  input: { integrationConnectionId: string; outcome: ProviderHealthCheckOutcome },
+) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const existing = await client.query<{ id: string; state: string; secretReference: string | null }>(
+      `SELECT id, state::text AS state, secret_reference AS "secretReference"
+         FROM integration_connections WHERE id=$1 FOR UPDATE`,
+      [input.integrationConnectionId],
+    );
+    const connection = existing.rows[0];
+    if (!connection) throw new Error("integration connection does not exist");
+    if (!connection.secretReference) {
+      throw new Error("configure a credential reference before attempting activation");
+    }
+
+    const passed = input.outcome.reachable && input.outcome.httpStatus !== null && input.outcome.httpStatus >= 200 && input.outcome.httpStatus < 300;
+    const nextState = passed ? "active" : "failed";
+
+    const { rows } = await client.query<{ id: string; state: string; lastHealthCheckedAt: Date }>(
+      `UPDATE integration_connections
+          SET state=$2::integration_state,
+              last_health_checked_at=$3,
+              last_health_result=$4::jsonb
+        WHERE id=$1
+        RETURNING id, state::text AS state, last_health_checked_at AS "lastHealthCheckedAt"`,
+      [
+        input.integrationConnectionId,
+        nextState,
+        input.outcome.observedAt,
+        JSON.stringify({
+          reachable: input.outcome.reachable,
+          httpStatus: input.outcome.httpStatus,
+          detail: input.outcome.detail,
+          endpoint: input.outcome.endpoint,
+          observedAt: input.outcome.observedAt.toISOString(),
+        }),
+      ],
+    );
+    const updated = rows[0];
+    if (!updated) throw new Error("integration activation did not return a record");
+
+    await recordActivity(client, actor, passed ? "integration_connection.activated" : "integration_connection.activation_refused", "integration_connection", updated.id, {
+      state: updated.state,
+      healthCheckPassed: passed,
+      httpStatus: input.outcome.httpStatus,
+      reachable: input.outcome.reachable,
+      detail: input.outcome.detail,
+      endpoint: input.outcome.endpoint,
+      credentialValuePersisted: false,
+    });
+    await client.query("COMMIT");
+    return { ...updated, healthCheckPassed: passed, detail: input.outcome.detail };
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
+/** Suspends a live integration, which is the prerequisite for re-credentialling. */
+export async function suspendPostgresIntegrationConnection(actor: PolicyActor, input: { integrationConnectionId: string; reason: string }) {
+  const reason = input.reason.trim();
+  if (reason.length < 10) throw new Error("suspension requires a stated reason");
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ id: string; state: string }>(
+      `UPDATE integration_connections SET state='suspended'
+        WHERE id=$1 AND state IN ('active','failed','verification_pending')
+        RETURNING id, state::text AS state`,
+      [input.integrationConnectionId],
+    );
+    const updated = rows[0];
+    if (!updated) throw new Error("only an active, failed, or verifying integration can be suspended");
+    await recordActivity(client, actor, "integration_connection.suspended", "integration_connection", updated.id, { reason, state: updated.state });
+    await client.query("COMMIT");
+    return updated;
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
+/** Detailed integration view including credential-reference presence, never a value. */
+export async function listPostgresIntegrationCredentialStatus() {
+  const client = await getPool().connect();
+  try {
+    const { rows } = await client.query(
+      `SELECT ic.id, c.legal_name AS "counterpartyLegalName", ic.category, ic.environment,
+              ic.documentation_url AS "endpoint", ic.state::text AS state,
+              (ic.secret_reference IS NOT NULL) AS "credentialConfigured",
+              ic.secret_reference AS "secretReference",
+              ic.last_health_checked_at AS "lastHealthCheckedAt",
+              ic.last_health_result AS "lastHealthResult"
+         FROM integration_connections ic JOIN counterparties c ON c.id = ic.counterparty_id
+        ORDER BY ic.created_at DESC`,
+    );
+    return rows;
+  } finally { client.release(); }
+}
+
 export async function listPostgresCorridorPolicies() {
   const client = await getPool().connect();
   try {

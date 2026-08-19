@@ -6,11 +6,37 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/domain"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/eventing"
 )
+
+// serviceMetrics holds counters the service actually observes while running.
+//
+// Everything here is measured, never estimated: each field is incremented at the
+// point the corresponding event happens. A metric this service cannot observe is
+// absent rather than reported as zero, because a fabricated zero is worse than a
+// missing field — it reads as "nothing is wrong".
+type serviceMetrics struct {
+	startedAt          time.Time
+	validationsTotal   atomic.Uint64
+	validationsInvalid atomic.Uint64
+	validationsFailed  atomic.Uint64
+}
+
+// metricsSnapshot is the wire form. The control plane reads it as-is.
+type metricsSnapshot struct {
+	Service            string `json:"service"`
+	Language           string `json:"language"`
+	UptimeSeconds      int64  `json:"uptime_seconds"`
+	ValidationsTotal   uint64 `json:"validations_total"`
+	ValidationsInvalid uint64 `json:"validations_invalid"`
+	ValidationsFailed  uint64 `json:"validations_failed"`
+	ObservedAt         string `json:"observed_at"`
+	ProviderExecution  string `json:"provider_execution"`
+}
 
 type validationRequest struct {
 	ID             string `json:"id"`
@@ -49,24 +75,46 @@ func randomID() (string, error) {
 
 func newHandler(now func() time.Time) http.Handler {
 	mux := http.NewServeMux()
+	metrics := &serviceMetrics{startedAt: now()}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"service": "payment-engine", "status": "healthy", "provider_execution": "disabled_without_verified_provider"})
 	})
+	// Metrics the service has actually counted since it started. The control
+	// plane displays these with their observation time so a stale reading is
+	// visibly stale rather than silently presented as current.
+	mux.HandleFunc("GET /v1/metrics", func(w http.ResponseWriter, _ *http.Request) {
+		observed := now()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(metricsSnapshot{
+			Service:            "payment-engine",
+			Language:           "go",
+			UptimeSeconds:      int64(observed.Sub(metrics.startedAt).Seconds()),
+			ValidationsTotal:   metrics.validationsTotal.Load(),
+			ValidationsInvalid: metrics.validationsInvalid.Load(),
+			ValidationsFailed:  metrics.validationsFailed.Load(),
+			ObservedAt:         observed.UTC().Format(time.RFC3339),
+			ProviderExecution:  "disabled_without_verified_provider",
+		})
+	})
 	mux.HandleFunc("POST /v1/orders/validate", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
+		metrics.validationsTotal.Add(1)
 		var input validationRequest
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			metrics.validationsInvalid.Add(1)
 			http.Error(w, "invalid JSON request", http.StatusBadRequest)
 			return
 		}
 		order, err := domain.NewOrder(input.ID, input.IdempotencyKey, domain.Corridor(input.Corridor), domain.Money{Currency: input.SourceCurrency, Amount: input.SourceAmount}, domain.Money{Currency: input.TargetCurrency, Amount: input.TargetAmount}, now())
 		if err != nil {
+			metrics.validationsInvalid.Add(1)
 			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 			return
 		}
 		if input.PolicyOutcome != "" || input.PolicyVersion != "" {
 			if err := order.ApplyPolicy(domain.PolicyDecision{Outcome: input.PolicyOutcome, Version: input.PolicyVersion}); err != nil {
+				metrics.validationsInvalid.Add(1)
 				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 				return
 			}
@@ -76,6 +124,7 @@ func newHandler(now func() time.Time) http.Handler {
 		if correlationID == "" {
 			generated, err := randomID()
 			if err != nil {
+				metrics.validationsFailed.Add(1)
 				http.Error(w, "could not derive a correlation id", http.StatusInternalServerError)
 				return
 			}
@@ -83,6 +132,7 @@ func newHandler(now func() time.Time) http.Handler {
 		}
 		eventID, err := randomID()
 		if err != nil {
+			metrics.validationsFailed.Add(1)
 			http.Error(w, "could not derive an event id", http.StatusInternalServerError)
 			return
 		}
@@ -96,6 +146,7 @@ func newHandler(now func() time.Time) http.Handler {
 			ProviderExecution: "disabled_without_verified_provider",
 		})
 		if err != nil {
+			metrics.validationsFailed.Add(1)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

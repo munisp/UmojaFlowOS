@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormEvent } from "react";
+import { SubmitFeedback, useSubmitFeedback } from "@/components/SubmitFeedback";
 
 type Corridor = "NIGERIA_NGN" | "KENYA_KES" | "SOUTH_AFRICA_ZAR";
 type ConsoleRole = "admin" | "compliance_officer" | "treasury_operator" | "auditor";
@@ -91,12 +92,11 @@ export function RateLockTable({
 export function RateLockForm({
   observations,
   submit,
-  pending,
-}: {
+  pending, error }: {
   observations: MarketObservationRow[];
   submit: (input: { marketObservationId: string; corridor: Corridor; expiresAt: Date }) => void;
-  pending: boolean;
-}) {
+  pending: boolean; error?: string | null }) {
+  const feedback = useSubmitFeedback(pending, error);
   if (!observations.length) {
     return <p className="px-5 py-8 text-sm leading-6 text-black/55" data-testid="rate-lock-form-unavailable">
       A recorded market observation from an active integration is required before a rate lock can be created.
@@ -119,6 +119,6 @@ export function RateLockForm({
     <Label className="grid gap-1.5"><span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Corridor</span><Select name="corridor" defaultValue="NIGERIA_NGN"><SelectTrigger className="rounded-none border-black/25"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="NIGERIA_NGN">Nigeria (NGN)</SelectItem><SelectItem value="KENYA_KES">Kenya (KES)</SelectItem><SelectItem value="SOUTH_AFRICA_ZAR">South Africa (ZAR)</SelectItem></SelectContent></Select></Label>
     <Label className="grid gap-1.5"><span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Lock expires at</span><Input name="expiresAt" type="datetime-local" required className="rounded-none border-black/25" /></Label>
     <p className="text-xs leading-5 text-black/55">The locked rate is copied from the selected observation. No rate is entered by hand.</p>
-    <Button type="submit" disabled={pending} className="rounded-none bg-[#e11919] font-black uppercase tracking-wide hover:bg-black">{pending ? "Saving…" : "Create source-derived rate lock"}</Button>
+    <SubmitFeedback state={feedback} /><Button type="submit" disabled={pending} className="rounded-none bg-[#e11919] font-black uppercase tracking-wide hover:bg-black">{pending ? "Saving…" : "Create source-derived rate lock"}</Button>
   </form>;
 }
