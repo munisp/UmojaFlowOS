@@ -1,5 +1,13 @@
 # Production-Completion Readiness Baseline
 
+## 2026-08-19 revision (documented provider adapter boundaries)
+
+This revision supersedes the summary below while retaining it as audit history. The implementation ledger now contains **204** items: **198 completed** and **6 externally blocked**, or **97.1%** checklist completion. The six remaining items are external facts: licensed provider credentials/counterparty confirmation; an approved production cutover; two Ollama evidence-only executions on a suitable visual-model host; provisioned production middleware; and refreshed secured-development Kafka and Permify identities.
+
+First-party API documentation was reviewed for Paystack, Flutterwave, Safaricom M-PESA Daraja, Onafriq, Thunes, and Kotani Pay; the source record is retained in `docs/provider-api-research-notes.md`. The implementation selects only two narrow documented protocol boundaries. The Go **Paystack** client supports a credentialed, HTTPS-only read of the documented transaction-verification resource for provider-reported NGN, KES, or ZAR records and verifies the documented HMAC-SHA512 webhook signature. It contains no collection, beneficiary, transfer, payout, or settlement operation. The Go **Safaricom Daraja** client supports only the documented OAuth client-credential request for Kenya (KES) credential validation. It contains no STK, C2B, B2B, B2C, callback, reversal, or settlement operation.
+
+Both clients default to disabled forms, require secrets only through trusted runtime composition, reject remote plaintext transport, permit loopback HTTP only in explicit tests, constrain response parsing, and do not alter the payment-engine’s disabled provider-execution state. A successful response is a provider-reported protocol fact, not proof of a licensed relationship, account enablement, corridor availability, payment execution, settlement, or CBN approval. The canonical `make check` passed contracts, infrastructure, Go, Rust, Python, and TypeScript; the full canonical TypeScript suite passed **573** tests with **153** activation-gated skips.
+
 ## 2026-08-19 revision (CBN Regulatory Sandbox Cohort 2 readiness)
 
 This revision supersedes the summary below while retaining it as audit history. The implementation ledger now contains **201** items: **195 completed** and **6 externally blocked**, or **97.0%** checklist completion. The remaining six items are unchanged external facts: licensed provider credentials/counterparty confirmation; an approved production cutover; two Ollama evidence-only executions on a suitable visual-model host; provisioned production middleware; and refreshed secured-development Kafka and Permify identities.
