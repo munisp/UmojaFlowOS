@@ -13,7 +13,20 @@ import (
 	"go.temporal.io/sdk/testsuite"
 
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/domain"
+	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/eventing"
 )
+
+type recordingPublisher struct {
+	topic string
+	event eventing.Envelope
+	err   error
+}
+
+func (p *recordingPublisher) Publish(_ context.Context, topic string, event eventing.Envelope) error {
+	p.topic = topic
+	p.event = event
+	return p.err
+}
 
 func approvedPolicy() domain.PolicyDecision {
 	return domain.PolicyDecision{Outcome: "ALLOW", Version: "v1"}
@@ -229,5 +242,39 @@ func TestLiveTemporalRoundTrip(t *testing.T) {
 	}
 	if recorded[0].WorkflowID != "wf-live" {
 		t.Fatalf("unexpected recorded decision: %+v", recorded[0])
+	}
+}
+
+func TestRecordingActivitiesPublishRedactedWorkflowOutcomeAfterCanonicalRecord(t *testing.T) {
+	publisher := &recordingPublisher{}
+	recorded := false
+	activities := RecordingActivities{
+		Recorder: func(_ context.Context, _ WorkflowOutput) error {
+			recorded = true
+			return nil
+		},
+		Publisher:     publisher,
+		EvidenceTopic: "payment.events",
+	}
+	out := WorkflowOutput{
+		WorkflowID:               "workflow-123",
+		Status:                   domain.Approved,
+		ExternalExecutionStarted: false,
+		RecordedAt:               time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC),
+	}
+	if err := activities.RecordDecision(context.Background(), out); err != nil {
+		t.Fatalf("record decision: %v", err)
+	}
+	if !recorded {
+		t.Fatal("canonical decision recorder must run before evidence publication")
+	}
+	if publisher.topic != "payment.events" || publisher.event.EventType != eventing.PaymentOrderWorkflowRecordedV1 {
+		t.Fatalf("unexpected workflow evidence event: %#v", publisher)
+	}
+	if publisher.event.CorrelationID != "workflow-123" || publisher.event.EventID == "workflow-123" {
+		t.Fatalf("workflow evidence must retain correlation only internally and use a derived event id: %#v", publisher.event)
+	}
+	if strings.Contains(string(publisher.event.Payload), "provider") {
+		t.Fatalf("workflow evidence must not include provider execution detail: %s", publisher.event.Payload)
 	}
 }

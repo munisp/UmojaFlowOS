@@ -32,6 +32,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/eventing"
 )
 
 // Decision is the outcome of a permission check.
@@ -68,6 +70,10 @@ type Config struct {
 	// AllowInsecureLoopback permits plaintext to 127.0.0.1 only, for
 	// development. Any other plaintext endpoint is refused outright.
 	AllowInsecureLoopback bool
+	// EvidencePublisher is optional and does not alter authorization. When
+	// configured, it receives a redacted decision event after the check returns.
+	EvidencePublisher eventing.Publisher
+	EvidenceTopic     string
 }
 
 func (c Config) validate() error {
@@ -161,7 +167,8 @@ type checkResponse struct {
 // non-2xx status, an unparseable body, a transport error, and a response whose
 // `can` value the client does not recognise — a future Permify release adding
 // a new result must not be silently treated as permission.
-func (c *Client) Check(ctx context.Context, request Request) Result {
+func (c *Client) Check(ctx context.Context, request Request) (result Result) {
+	defer func() { c.publishDecisionEvidence(ctx, request, result) }()
 	if err := request.validate(); err != nil {
 		return Result{Decision: Denied, Reason: err.Error()}
 	}
@@ -233,4 +240,18 @@ func (c *Client) Check(ctx context.Context, request Request) Result {
 			Indeterminate: true,
 		}
 	}
+}
+
+func (c *Client) publishDecisionEvidence(ctx context.Context, request Request, result Result) {
+	if c.config.EvidencePublisher == nil || strings.TrimSpace(c.config.EvidenceTopic) == "" {
+		return
+	}
+	event, err := eventing.NewPermifyDecision(request.SubjectID, request.EntityID, request.Permission, result.Decision == Allowed, time.Now().UTC())
+	if err != nil {
+		return
+	}
+	// Analytics evidence must not alter a permission outcome. A failed publisher
+	// remains observable through its own health path but cannot turn an allowed
+	// or denied decision into a different authorization result.
+	_ = c.config.EvidencePublisher.Publish(ctx, c.config.EvidenceTopic, event)
 }

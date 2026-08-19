@@ -8,7 +8,20 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/eventing"
 )
+
+type evidencePublisher struct {
+	topic string
+	event eventing.Envelope
+}
+
+func (p *evidencePublisher) Publish(_ context.Context, topic string, event eventing.Envelope) error {
+	p.topic = topic
+	p.event = event
+	return nil
+}
 
 func loopbackConfig(baseURL string) Config {
 	return Config{
@@ -128,6 +141,33 @@ func TestIncompleteRequestDenies(t *testing.T) {
 	}
 	if result := client.Check(context.Background(), Request{EntityType: "payment_order"}); result.Decision != Denied {
 		t.Fatalf("an incomplete request must deny, got %+v", result)
+	}
+}
+
+func TestPermifyDecisionEvidenceIsRedactedAndCannotChangeAuthorization(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"can":"CHECK_RESULT_ALLOWED"}`))
+	}))
+	defer server.Close()
+	publisher := &evidencePublisher{}
+	config := loopbackConfig(server.URL)
+	config.EvidencePublisher = publisher
+	config.EvidenceTopic = "payment.events"
+	client, err := NewClient(config)
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	result := client.Check(context.Background(), Request{
+		SubjectType: "user", SubjectID: "operator-123", EntityType: "payment_order", EntityID: "order-123", Permission: "approve_compliance",
+	})
+	if result.Decision != Allowed {
+		t.Fatalf("expected explicit allow, got %+v", result)
+	}
+	if publisher.topic != "payment.events" || publisher.event.EventType != eventing.PermifyDecisionV1 {
+		t.Fatalf("unexpected authorization evidence event: %#v", publisher)
+	}
+	if strings.Contains(string(publisher.event.Payload), "operator") || strings.Contains(string(publisher.event.Payload), "order") || strings.Contains(string(publisher.event.Payload), "permission") {
+		t.Fatalf("authorization evidence payload must not expose relationships: %s", publisher.event.Payload)
 	}
 }
 

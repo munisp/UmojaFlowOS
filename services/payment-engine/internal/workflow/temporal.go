@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/domain"
+	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/eventing"
 )
 
 // TaskQueueName is the single queue this service polls. Kept as a constant so
@@ -164,7 +165,9 @@ func isLoopback(address string) bool {
 
 // RecordingActivities adapts a decision recorder into the activity interface.
 type RecordingActivities struct {
-	Recorder func(ctx context.Context, out WorkflowOutput) error
+	Recorder      func(ctx context.Context, out WorkflowOutput) error
+	Publisher     eventing.Publisher
+	EvidenceTopic string
 }
 
 // RecordDecision persists the workflow outcome.
@@ -172,8 +175,23 @@ func (a RecordingActivities) RecordDecision(ctx context.Context, out WorkflowOut
 	if a.Recorder == nil {
 		return errors.New("no decision recorder is configured")
 	}
-	activity.GetLogger(ctx).Info("recording payment order decision", "workflowId", out.WorkflowID)
-	return a.Recorder(ctx, out)
+	if err := a.Recorder(ctx, out); err != nil {
+		return err
+	}
+	if a.Publisher == nil {
+		return nil
+	}
+	if strings.TrimSpace(a.EvidenceTopic) == "" {
+		return errors.New("workflow evidence publisher requires an event topic")
+	}
+	event, err := eventing.NewWorkflowOutcome(out.WorkflowID, string(out.Status), out.RecordedAt, out.ExternalExecutionStarted)
+	if err != nil {
+		return err
+	}
+	if err := a.Publisher.Publish(ctx, a.EvidenceTopic, event); err != nil {
+		return fmt.Errorf("workflow decision evidence could not be published: %w", err)
+	}
+	return nil
 }
 
 // NewClient dials Temporal after validating the transport contract.

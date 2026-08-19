@@ -20,6 +20,7 @@ from .lakehouse_writer import BronzeLakehouseWriter
 
 
 CatalogSource = Literal[
+    "go_payment_engine",
     "postgresql_control",
     "tigerbeetle_reconciliation",
     "temporal_workflow",
@@ -29,10 +30,12 @@ CatalogSource = Literal[
     "stablecoin_exposure",
     "provider_lifecycle",
     "service_health",
+    "python_reporting",
 ]
 
 CATALOG_SOURCES: frozenset[str] = frozenset(
     {
+        "go_payment_engine",
         "postgresql_control",
         "tigerbeetle_reconciliation",
         "temporal_workflow",
@@ -42,6 +45,7 @@ CATALOG_SOURCES: frozenset[str] = frozenset(
         "stablecoin_exposure",
         "provider_lifecycle",
         "service_health",
+        "python_reporting",
     }
 )
 

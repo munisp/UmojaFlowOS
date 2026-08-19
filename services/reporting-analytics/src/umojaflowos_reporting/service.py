@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import hmac
 import os
 import threading
 import time
@@ -27,6 +28,7 @@ from .stablecoin_exposure import (
 )
 from .opensearch_adapter import OpenSearchConfig, OpenSearchProjectionWriter, OpenSearchUnavailable, redacted_search_document
 from .lakehouse_writer import BronzeLakehouseWriter, LakehouseConfig, LakehouseUnavailable
+from .lakehouse_catalog import CATALOG_SOURCES, write_catalog_evidence
 from .lifecycle_event_lakehouse import LifecycleEventProjectionError, project_lifecycle_event
 from .sedona_livy import SedonaAggregateJobClient, SedonaLivyConfig, SedonaUnavailable
 from .geolibre_project import GeoLibrePublicationError, build_aggregate_project
@@ -46,6 +48,10 @@ class LakehouseBatchRequest(BaseModel):
     dataset: str = Field(min_length=1, max_length=255)
     schema_version: str = Field(default="v1", min_length=1, max_length=64)
     records: list[dict[str, Any]]
+
+
+class CatalogEvidenceRequest(BaseModel):
+    evidence: dict[str, Any]
 
 
 class GeospatialAggregationRequest(BaseModel):
@@ -108,6 +114,8 @@ class StablecoinExposureRequest(BaseModel):
 
 PAYMENT_ORDER_VALIDATED_EVENT = "umojaflowos.payment.order.validated.v1"
 POLICY_DECISION_EVENT = "umojaflowos.policy.decision.v1"
+PAYMENT_ORDER_WORKFLOW_RECORDED_EVENT = "umojaflowos.payment.order.workflow-recorded.v1"
+PERMIFY_DECISION_EVENT = "umojaflowos.authorization.permify-decision.v1"
 
 
 class DaprCloudEvent(BaseModel):
@@ -369,14 +377,14 @@ def receive_payment_or_policy_event(event: DaprCloudEvent) -> dict[str, str]:
 
     if event.topic != "payment.events" or event.pubsubname != "kafka":
         raise HTTPException(status_code=422, detail="event arrived through an unrecognised stream")
-    if event.type not in {"com.dapr.event.sent", PAYMENT_ORDER_VALIDATED_EVENT, POLICY_DECISION_EVENT}:
+    if event.type not in {"com.dapr.event.sent", PAYMENT_ORDER_VALIDATED_EVENT, POLICY_DECISION_EVENT, PAYMENT_ORDER_WORKFLOW_RECORDED_EVENT, PERMIFY_DECISION_EVENT}:
         raise HTTPException(status_code=422, detail="event type is not accepted by this subscriber")
 
     data = event.data
     required = {"event_id", "event_type", "schema_version", "correlation_id", "payload"}
     if not required.issubset(data):
         raise HTTPException(status_code=422, detail="event evidence is incomplete")
-    if data["event_type"] not in {PAYMENT_ORDER_VALIDATED_EVENT, POLICY_DECISION_EVENT}:
+    if data["event_type"] not in {PAYMENT_ORDER_VALIDATED_EVENT, POLICY_DECISION_EVENT, PAYMENT_ORDER_WORKFLOW_RECORDED_EVENT, PERMIFY_DECISION_EVENT}:
         raise HTTPException(status_code=422, detail="event evidence type is not recognised")
     if data["schema_version"] != "v1":
         raise HTTPException(status_code=422, detail="event evidence schema version is not supported")
@@ -458,6 +466,40 @@ def write_lakehouse_bronze(request: LakehouseBatchRequest) -> dict[str, Any]:
         manifest, key, status = configured_lakehouse_writer().write(request.dataset, request.records, request.schema_version)
         METRICS.record_lakehouse_batch()
         return {"status": status, "object_key": key, "manifest": manifest.__dict__}
+    except LakehouseContractError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except LakehouseUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def _catalog_source_key(source: str) -> str:
+    if source not in CATALOG_SOURCES:
+        raise HTTPException(status_code=422, detail="lakehouse catalog source is not approved")
+    return f"UMOJA_LAKEHOUSE_CATALOG_{source.upper()}_KEY"
+
+
+@app.post("/v1/lakehouse/catalog/{source}")
+def write_catalog_record(source: str, request: CatalogEvidenceRequest, http_request: Request) -> dict[str, Any]:
+    """Write one source-bound, redacted catalog record to immutable storage.
+
+    Each source uses an independent deployment-secret value. The caller cannot
+    select a different source through the body, and an unconfigured source
+    remains unavailable rather than accepting evidence into an implicit bucket.
+    """
+
+    if os.environ.get("UMOJA_LAKEHOUSE_CATALOG_INGESTION_ENABLED") != "true":
+        raise HTTPException(status_code=503, detail="governed lakehouse catalog ingestion is not configured")
+    key_name = _catalog_source_key(source)
+    expected = os.environ.get(key_name)
+    presented = http_request.headers.get("X-Umoja-Lakehouse-Key")
+    if not expected or not presented or not hmac.compare_digest(expected, presented):
+        raise HTTPException(status_code=403, detail="lakehouse catalog source authentication failed")
+    if request.evidence.get("source") != source:
+        raise HTTPException(status_code=422, detail="lakehouse catalog body source does not match its authenticated source path")
+    try:
+        payload_sha256, locator = write_catalog_evidence(configured_lakehouse_writer(), request.evidence)
+        METRICS.record_lakehouse_batch()
+        return {"status": "recorded", "authoritative": False, "payload_sha256": payload_sha256, "object_locator": locator}
     except LakehouseContractError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except LakehouseUnavailable as exc:
@@ -623,6 +665,32 @@ def stablecoin_exposure(request: StablecoinExposureRequest) -> dict[str, Any]:
             max_position_age=timedelta(minutes=request.max_position_age_minutes),
             max_observation_age=timedelta(minutes=request.max_observation_age_minutes),
         )
+        if os.environ.get("UMOJA_LAKEHOUSE_PROJECT_STABLECOIN_EXPOSURE") == "true":
+            writer = configured_lakehouse_writer()
+            for exposure in report.corridor_exposures:
+                correlation_material = json.dumps(
+                    {
+                        "generated_at": report.generated_at.astimezone(timezone.utc).isoformat(),
+                        "corridor": exposure.corridor,
+                        "asset": exposure.asset,
+                        "position_count": exposure.position_count,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                write_catalog_evidence(
+                    writer,
+                    {
+                        "source": "stablecoin_exposure",
+                        "event_type": "umojaflowos.stablecoin.exposure.observed.v1",
+                        "observed_at": report.generated_at.astimezone(timezone.utc).isoformat(),
+                        "correlation_sha256": hashlib.sha256(correlation_material).hexdigest(),
+                        "outcome": "reconciled",
+                        "corridor": exposure.corridor,
+                        "stablecoin": exposure.asset,
+                    },
+                )
+            METRICS.record_lakehouse_batch()
         METRICS.record_exposure()
         return {
             "service": SERVICE_NAME,
