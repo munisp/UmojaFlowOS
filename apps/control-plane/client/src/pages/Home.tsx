@@ -220,12 +220,12 @@ export default function Home() {
     consents: activeVerificationConsents.data?.length ?? 0,
     documents: postgresKycDocuments.data?.length ?? 0,
     liquidityPositions: liquidity.data?.length ?? 0,
-    rateLocks: rateLocks.data?.length ?? 0,
+    marketObservations: markets.data?.length ?? 0,
     paymentOrders: counts.payment,
     complianceCases: counts.case,
     reports: postgresReports.data?.length ?? 0,
     auditEvents: overview.data?.latestEvents.length ?? 0,
-  }), [counts, postgresCustomers.data, activeVerificationConsents.data, postgresKycDocuments.data, liquidity.data, rateLocks.data, postgresReports.data, overview.data]);
+  }), [counts, postgresCustomers.data, activeVerificationConsents.data, postgresKycDocuments.data, liquidity.data, markets.data, postgresReports.data, overview.data]);
 
   const actionAllowed = (kind: string) => canOpenConsoleComposer(user?.role, kind as Parameters<typeof canOpenConsoleComposer>[1]);
   const openComposer = (kind: string) => {

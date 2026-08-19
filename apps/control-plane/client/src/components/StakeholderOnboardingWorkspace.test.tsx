@@ -10,7 +10,7 @@ const emptySignals: OnboardingSignals = {
   consents: 0,
   documents: 0,
   liquidityPositions: 0,
-  rateLocks: 0,
+  marketObservations: 0,
   paymentOrders: 0,
   complianceCases: 0,
   reports: 0,
@@ -61,7 +61,7 @@ describe("stakeholder onboarding workspace", () => {
     render(
       <StakeholderOnboardingWorkspace
         role="treasury_operator"
-        signals={{ ...emptySignals, liquidityPositions: 1, rateLocks: 1 }}
+        signals={{ ...emptySignals, liquidityPositions: 1, marketObservations: 1 }}
         onNavigate={vi.fn()}
       />,
     );

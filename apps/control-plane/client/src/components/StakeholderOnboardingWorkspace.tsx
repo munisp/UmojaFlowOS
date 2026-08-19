@@ -19,7 +19,7 @@ export type OnboardingSignals = {
   consents: number;
   documents: number;
   liquidityPositions: number;
-  rateLocks: number;
+  marketObservations: number;
   paymentOrders: number;
   complianceCases: number;
   reports: number;
@@ -74,7 +74,7 @@ const journeys: Record<OperatorRole, Journey> = {
     boundary: "Drafting, locking a rate, or proposing a rebalance does not move funds. Provider finality and independent controls remain required.",
     steps: [
       { title: "Record a reconciled position", detail: "Capture actual nostro, vostro, pre-funding, liquidity, or custody evidence with its source reference.", module: "treasury", completed: signals => signals.liquidityPositions > 0 },
-      { title: "Review market evidence", detail: "Use independently sourced NGN, KES, or ZAR observations before considering a rate lock.", module: "markets", completed: signals => signals.rateLocks > 0 },
+      { title: "Review market evidence", detail: "Use independently sourced NGN, KES, or ZAR observations before considering a rate lock.", module: "markets", completed: signals => signals.marketObservations > 0 },
       { title: "Draft a payment order", detail: "Create an order against a live rate lock and an authorised customer/beneficiary relationship.", module: "payments", completed: signals => signals.paymentOrders > 0 },
       { title: "Review the settlement path", detail: "Add only authorised legs and track control transitions; no screen represents settlement without evidence.", module: "payments", completed: signals => signals.paymentOrders > 0 && signals.counterparties > 0 },
     ],

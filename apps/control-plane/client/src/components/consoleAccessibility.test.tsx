@@ -212,7 +212,7 @@ const surfaces: Array<{ name: string; render: () => void }> = [
       renderInPageContext(
         <StakeholderOnboardingWorkspace
           role="admin"
-          signals={{ counterparties: 0, integrations: 0, customers: 0, consents: 0, documents: 0, liquidityPositions: 0, rateLocks: 0, paymentOrders: 0, complianceCases: 0, reports: 0, auditEvents: 0 }}
+          signals={{ counterparties: 0, integrations: 0, customers: 0, consents: 0, documents: 0, liquidityPositions: 0, marketObservations: 0, paymentOrders: 0, complianceCases: 0, reports: 0, auditEvents: 0 }}
           onNavigate={() => undefined}
         />,
       ),
