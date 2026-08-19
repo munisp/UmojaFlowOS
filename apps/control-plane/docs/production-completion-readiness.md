@@ -1,5 +1,53 @@
 # Production-Completion Readiness Baseline
 
+## 2026-08-19 revision (provider activation and observability)
+
+This section supersedes the measured state recorded below it. Earlier revisions
+are retained, because a readiness baseline that quietly rewrites its own history
+is not a baseline.
+
+The managed implementation ledger now contains **154** tracked items: **150
+completed** and **4 open**, which is **97.4%** checklist completion. The ledger
+grew by six items covering the credential interface, the status dashboard, and
+the submission-feedback rollout, all of which are now complete.
+
+Measured quality gates at this revision, each re-run at the close of the pass:
+the managed suite passes **483 tests with no skips** when every live
+cross-language regression is enabled, which starts the real Go, Rust, and Python
+binaries and drives them through the real bridge; Go **23**; Rust **38** in the
+risk core and **15** in the ledger gateway; Python **45** in reporting and **37**
+in document intelligence. `make check` is green across all four languages,
+TypeScript reports zero errors, and the canonical database is verified empty of
+regression fixtures after the run.
+
+### One position has changed materially
+
+Previous revisions stated that no code path could set an integration to
+`active`, and treated that as the strongest available guarantee. That is no
+longer true, and the change is an improvement rather than a regression: exactly
+one activation path now exists, and it cannot activate anything without a real
+provider request returning 2xx. The guarantee has moved from *absence* to
+*verification*, which is the stronger of the two, because an absent path would
+have had to be written under time pressure at the moment a credential finally
+arrived.
+
+What has not changed is that no provider can be activated here. The remaining
+requirement is a credential issued by a licensed counterparty, and neither the
+credential nor the licence can be fabricated.
+
+### What would move this from checklist completion to production readiness
+
+Four things, none of which are code, and each unchanged in substance from the
+previous revision:
+
+| Requirement | Why code cannot supply it |
+| --- | --- |
+| An executed, reconciled production PostgreSQL cutover | The transitional source currently holds no business rows, so reconciliation has nothing real to compare |
+| Credential-verified provider connections | A credential and a confirmed counterparty licence are external facts |
+| A host able to load the 8B evidence models | Measured ceiling is roughly 1–1.9 GB of weights against 3.9 GB total memory |
+| Regulator-confirmed submission channels | A submission reference is only meaningful if an authorised channel issued it |
+
+
 ## 2026-08-19 revision
 
 This section supersedes the measured state recorded below it. The earlier text is retained, because a readiness baseline that quietly rewrites its own history is not a baseline.
