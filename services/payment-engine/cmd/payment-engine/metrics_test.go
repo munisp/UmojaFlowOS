@@ -90,3 +90,23 @@ func TestMetricsRestateThatExecutionIsDisabled(t *testing.T) {
 		t.Fatalf("unexpected provider execution posture: %q", snapshot.ProviderExecution)
 	}
 }
+
+func TestMetricsExposeTheConfiguredLedgerRuntimePosture(t *testing.T) {
+	snapshot := metricsFrom(t, newHandler(time.Now, "configured_reachable_tigerbeetle"))
+	if snapshot.LedgerBackend != "configured_reachable_tigerbeetle" {
+		t.Fatalf("unexpected ledger posture: %q", snapshot.LedgerBackend)
+	}
+
+	recorder := httptest.NewRecorder()
+	newHandler(time.Now, "configured_reachable_tigerbeetle").ServeHTTP(
+		recorder,
+		httptest.NewRequest(http.MethodGet, "/healthz", nil),
+	)
+	var health map[string]string
+	if err := json.Unmarshal(recorder.Body.Bytes(), &health); err != nil {
+		t.Fatalf("health response is not valid JSON: %v", err)
+	}
+	if health["ledger_backend"] != "configured_reachable_tigerbeetle" {
+		t.Fatalf("health must expose the configured ledger posture, got %#v", health)
+	}
+}

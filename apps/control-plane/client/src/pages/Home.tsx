@@ -18,6 +18,7 @@ import { PostgresCustomerOnboardingForm } from "@/components/PostgresCustomerOnb
 import { canConfigureCredentials, CredentialAuditTrail, IntegrationCredentialForm, IntegrationCredentialTable } from "@/components/IntegrationCredentialControls";
 import { ServiceTrendCharts } from "@/components/ServiceTrendCharts";
 import { ServiceStatusDashboard } from "@/components/ServiceStatusDashboard";
+import { StakeholderOnboardingWorkspace } from "@/components/StakeholderOnboardingWorkspace";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,7 +88,7 @@ function CorridorSelect({ value, onValueChange }: { value: string; onValueChange
 
 export default function Home() {
   const { user } = useAuth();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const module = moduleFromPath(location);
   const meta = moduleMeta[module];
   const utils = trpc.useUtils();
@@ -212,6 +213,19 @@ export default function Home() {
   const createReviewerDecision = trpc.postgres.createReviewerDecision.useMutation({ onSuccess: () => onSuccess("Reviewer decision recorded with immutable PostgreSQL activity evidence"), onError: error => toast.error(error.message) });
 
   const counts = useMemo(() => ({ counterparty: overview.data?.counterpartyCounts.reduce((sum, row) => sum + Number(row.count), 0) ?? 0, integration: overview.data?.integrationCounts.reduce((sum, row) => sum + Number(row.count), 0) ?? 0, payment: overview.data?.paymentCounts.reduce((sum, row) => sum + Number(row.count), 0) ?? 0, case: overview.data?.caseCounts.reduce((sum, row) => sum + Number(row.count), 0) ?? 0 }), [overview.data]);
+  const onboardingSignals = useMemo(() => ({
+    counterparties: counts.counterparty,
+    integrations: counts.integration,
+    customers: postgresCustomers.data?.length ?? 0,
+    consents: activeVerificationConsents.data?.length ?? 0,
+    documents: postgresKycDocuments.data?.length ?? 0,
+    liquidityPositions: liquidity.data?.length ?? 0,
+    rateLocks: rateLocks.data?.length ?? 0,
+    paymentOrders: counts.payment,
+    complianceCases: counts.case,
+    reports: postgresReports.data?.length ?? 0,
+    auditEvents: overview.data?.latestEvents.length ?? 0,
+  }), [counts, postgresCustomers.data, activeVerificationConsents.data, postgresKycDocuments.data, liquidity.data, rateLocks.data, postgresReports.data, overview.data]);
 
   const actionAllowed = (kind: string) => canOpenConsoleComposer(user?.role, kind as Parameters<typeof canOpenConsoleComposer>[1]);
   const openComposer = (kind: string) => {
@@ -235,6 +249,7 @@ export default function Home() {
       {module === "overview" && <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
         <div className="grid gap-5 sm:grid-cols-2"><Metric title="Registered counterparties" value={counts.counterparty} detail="Actual registry records only" /><Metric title="Configured integrations" value={counts.integration} detail="Activation requires a verified health check" /><Metric title="Payment orders" value={counts.payment} detail="Final settlement evidence is distinct from draft state" /><Metric title="Compliance cases" value={counts.case} detail="Open, reviewed, escalated, reported, and closed cases" /></div>
         <Panel eyebrow="Activation guard" title="Live-capability boundary"><div className="space-y-0"><Guard title="Records store readiness" detail={postgresCutover.isLoading ? "Checking the platform's record store." : postgresCutover.data?.ready ? `All ${postgresCutover.data.presentTableCount} required record types are present and validated in this environment. Moving to production, and switching live services across, remain separate approvals.` : `The record store is not ready. Missing: ${postgresCutover.data?.missingTables.join(", ") ?? "readiness could not be determined"}.`} /><Guard title="Payment execution" detail="Unavailable until an authorised, credential-verified provider is connected and a policy decision is recorded." /><Guard title="Market observations" detail="Accepted only from an active integration with source timestamps and references." /><Guard title="Regulatory submission" detail="Requires a verified official submission channel and submission reference." /></div></Panel>
+        <div className="xl:col-span-2"><StakeholderOnboardingWorkspace role={user?.role as OperatorRole | undefined} signals={onboardingSignals} onNavigate={target => setLocation(`/${target}`)} /></div>
         <Panel eyebrow="Audit trail" title="Latest attributable activity"><ActivityList events={overview.data?.latestEvents ?? []} loading={overview.isLoading} /></Panel>
       </div>}
       {module === "registry" && <div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><Panel eyebrow="Action" title="Counterparty and licence evidence" action={moduleActions("registry")}>{composer === "counterparty" ? <CounterpartyForm pending={createCounterparty.isPending} submit={createCounterparty.mutate} /> : composer === "authorization" ? <CounterpartyAuthorizationForm pending={createCounterpartyAuthorization.isPending} counterparties={postgresCounterparties.data ?? []} submit={createCounterpartyAuthorization.mutate} error={createCounterpartyAuthorization.error?.message ?? null} /> : <Empty title="Licence evidence requires administrator access" detail="Administrators may register a licensed PSP, correspondent bank, stablecoin provider, FX liquidity provider, custody provider, KYC provider, sanctions provider, chain analytics provider, notification provider, or regulatory-submission provider and attach source-backed licence evidence." />}</Panel><div className="grid gap-5"><Panel eyebrow="Registry" title="Registered counterparties"><CounterpartyTable rows={postgresCounterparties.data ?? []} loading={postgresCounterparties.isLoading} /></Panel><Panel eyebrow="Licence register" title="Counterparty licence authorisations"><CounterpartyAuthorizationTable rows={postgresCounterpartyAuthorizations.data ?? []} loading={postgresCounterpartyAuthorizations.isLoading} canManage={canAdmin} pending={transitionCounterpartyAuthorization.isPending} transition={(authorizationId, status) => transitionCounterpartyAuthorization.mutate({ authorizationId, status })} /></Panel><Panel eyebrow="PostgreSQL control ledger" title="Counterparty risk reviews"><CounterpartyRiskTable rows={postgresCounterpartyRisks.data ?? []} loading={postgresCounterpartyRisks.isLoading} /></Panel></div></div>}

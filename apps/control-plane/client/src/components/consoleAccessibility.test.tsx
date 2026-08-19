@@ -11,6 +11,7 @@ import { PostgresReportTransitionForm } from "./PostgresReportTransitionForm";
 import { RateLockForm } from "./RateLockControls";
 import { RegulatoryDeadlineForm } from "./RegulatoryDeadlineControls";
 import { SarStrFilingForm } from "./SarStrFilingControls";
+import { StakeholderOnboardingWorkspace } from "./StakeholderOnboardingWorkspace";
 import { TreasuryRecommendationForm } from "./TreasuryRebalancingControls";
 
 /**
@@ -204,6 +205,17 @@ const surfaces: Array<{ name: string; render: () => void }> = [
   {
     name: "treasury proposal unavailable state",
     render: () => renderInPageContext(<TreasuryRecommendationForm policies={[]} pending={false} submit={() => undefined} />),
+  },
+  {
+    name: "administrator stakeholder onboarding workspace",
+    render: () =>
+      renderInPageContext(
+        <StakeholderOnboardingWorkspace
+          role="admin"
+          signals={{ counterparties: 0, integrations: 0, customers: 0, consents: 0, documents: 0, liquidityPositions: 0, rateLocks: 0, paymentOrders: 0, complianceCases: 0, reports: 0, auditEvents: 0 }}
+          onNavigate={() => undefined}
+        />,
+      ),
   },
 ];
 

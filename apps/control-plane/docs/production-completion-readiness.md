@@ -3,8 +3,8 @@
 ## 2026-08-19 revision (secured-development validation and source-material guard)
 
 This revision supersedes the summary below while retaining it as an audit
-history. The ledger now records **176** items: **170 completed** and **6
-externally blocked**, or **96.6%** checklist completion. The additional blocked
+history. The ledger now records **176** items: **171 completed** and **5
+externally blocked**, or **97.2%** checklist completion. The additional blocked
 items separate a credential failure from a transport failure so neither can be
 misrepresented as the other.
 
@@ -24,6 +24,16 @@ credential-shaped declarations while allowing public certificates, named
 deployment-secret references, and environment-derived values. Its six
 regressions include negative controls for every refusal. This prevents future external material from entering source,
 documentation, fixtures, templates, or the GitHub repository.
+
+The Go payment engine now has a single TigerBeetle environment-composition
+point: disabled is the default, and an enabled setting requires a complete
+cluster, address, NGN/KES/ZAR ledger, account-code, transfer-code, transport,
+and reachability configuration. It does not silently fall back if activation is
+requested but invalid. The overview console now gives administrators, compliance
+officers, treasury operators, and auditors a role-specific journey driven from
+the displayed recorded signals, with navigation-only guidance and stated
+authority boundaries. The provisioning and reconciliation architecture is
+documented in `docs/tigerbeetle-activation-and-stakeholder-onboarding.md`.
 
 ### Remaining external release gates
 

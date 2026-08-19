@@ -11,6 +11,7 @@ import (
 
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/domain"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/eventing"
+	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/ledger"
 )
 
 // serviceMetrics holds counters the service actually observes while running.
@@ -36,6 +37,7 @@ type metricsSnapshot struct {
 	ValidationsFailed  uint64 `json:"validations_failed"`
 	ObservedAt         string `json:"observed_at"`
 	ProviderExecution  string `json:"provider_execution"`
+	LedgerBackend      string `json:"ledger_backend"`
 }
 
 type validationRequest struct {
@@ -73,12 +75,16 @@ func randomID() (string, error) {
 	return hex.EncodeToString(buffer), nil
 }
 
-func newHandler(now func() time.Time) http.Handler {
+func newHandler(now func() time.Time, configuredLedgerBackend ...string) http.Handler {
+	ledgerBackend := "disabled_without_deployed_tigerbeetle"
+	if len(configuredLedgerBackend) > 0 && configuredLedgerBackend[0] != "" {
+		ledgerBackend = configuredLedgerBackend[0]
+	}
 	mux := http.NewServeMux()
 	metrics := &serviceMetrics{startedAt: now()}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"service": "payment-engine", "status": "healthy", "provider_execution": "disabled_without_verified_provider"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"service": "payment-engine", "status": "healthy", "provider_execution": "disabled_without_verified_provider", "ledger_backend": ledgerBackend})
 	})
 	// Metrics the service has actually counted since it started. The control
 	// plane displays these with their observation time so a stale reading is
@@ -95,6 +101,7 @@ func newHandler(now func() time.Time) http.Handler {
 			ValidationsFailed:  metrics.validationsFailed.Load(),
 			ObservedAt:         observed.UTC().Format(time.RFC3339),
 			ProviderExecution:  "disabled_without_verified_provider",
+			LedgerBackend:      ledgerBackend,
 		})
 	})
 	mux.HandleFunc("POST /v1/orders/validate", func(w http.ResponseWriter, r *http.Request) {
@@ -158,11 +165,16 @@ func newHandler(now func() time.Time) http.Handler {
 }
 
 func main() {
+	ledgerRuntime, err := ledger.RuntimeFromProcessEnv()
+	if err != nil {
+		panic(err)
+	}
+	defer ledgerRuntime.Close()
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8081"
 	}
-	if err := http.ListenAndServe(":"+port, newHandler(time.Now)); err != nil {
+	if err := http.ListenAndServe(":"+port, newHandler(time.Now, ledgerRuntime.Backend)); err != nil {
 		panic(err)
 	}
 }
