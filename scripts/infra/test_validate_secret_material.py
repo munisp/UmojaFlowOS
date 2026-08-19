@@ -38,12 +38,14 @@ class SecretMaterialGuardTests(unittest.TestCase):
         self.assertEqual([], violations)
 
     def test_rejects_private_key_material(self) -> None:
-        violations = self.scan({"docs/unsafe.md": "-----BEGIN PRIVATE KEY-----\nnot-a-key\n"})
+        marker = "-----BEGIN " + "PRIVATE KEY-----"
+        violations = self.scan({"docs/unsafe.md": marker + "\nnot-a-key\n"})
         self.assertEqual(1, len(violations))
         self.assertIn("private-key material", violations[0])
 
     def test_rejects_literal_bearer_credential(self) -> None:
-        violations = self.scan({"docs/unsafe.md": "Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345\n"})
+        header = "Authorization: Bearer " + "abcdefghijklmnopqrstuvwxyz012345"
+        violations = self.scan({"docs/unsafe.md": header + "\n"})
         self.assertEqual(1, len(violations))
         self.assertIn("bearer credential", violations[0])
 
@@ -51,6 +53,16 @@ class SecretMaterialGuardTests(unittest.TestCase):
         violations = self.scan({"infra/unsafe.env.template": "KAFKA_SASL_PASSWORD=not-a-reference\n"})
         self.assertEqual(1, len(violations))
         self.assertIn("deployment-secret reference", violations[0])
+
+    def test_rejects_literal_credential_assignment_in_source(self) -> None:
+        literal = "abcdefghijklmnopqrstuvwxyz012345"
+        violations = self.scan({"src/unsafe.ts": f'const providerToken = "{literal}";\n'})
+        self.assertEqual(1, len(violations))
+        self.assertIn("literal credential in source", violations[0])
+
+    def test_allows_environment_derived_source_assignment(self) -> None:
+        violations = self.scan({"src/safe.ts": "const providerToken = process.env.PROVIDER_TOKEN;\n"})
+        self.assertEqual([], violations)
 
 
 if __name__ == "__main__":

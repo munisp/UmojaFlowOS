@@ -3,7 +3,7 @@
 ## 2026-08-19 revision (secured-development validation and source-material guard)
 
 This revision supersedes the summary below while retaining it as an audit
-history. The ledger now records **175** items: **169 completed** and **6
+history. The ledger now records **176** items: **170 completed** and **6
 externally blocked**, or **96.6%** checklist completion. The additional blocked
 items separate a credential failure from a transport failure so neither can be
 misrepresented as the other.
@@ -18,10 +18,11 @@ material in `docs/external-secured-development-material-inspection.md`.
 
 The provider-independent response is now complete: `make infra-check` includes
 `scripts/infra/validate_secret_material.py`, which scans tracked source only
-and rejects private-key markers, literal bearer values, and literal
-secret-shaped template assignments while allowing public certificates and named
-deployment-secret references. Its four regressions include negative controls
-for every refusal. This prevents future external material from entering source,
+and rejects private-key markers, literal bearer values, literal
+secret-shaped template assignments, and long literal values assigned to
+credential-shaped declarations while allowing public certificates, named
+deployment-secret references, and environment-derived values. Its six
+regressions include negative controls for every refusal. This prevents future external material from entering source,
 documentation, fixtures, templates, or the GitHub repository.
 
 ### Remaining external release gates

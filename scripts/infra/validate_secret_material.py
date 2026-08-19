@@ -24,6 +24,18 @@ PRIVATE_KEY = re.compile(r"-----BEGIN(?: [A-Z0-9]+){0,3} PRIVATE KEY-----")
 LITERAL_BEARER = re.compile(
     r"(?i)authorization\s*:\s*bearer\s+(?!\$\{|<|REPLACE_WITH|example|test|dummy)[A-Za-z0-9._~+/=-]{20,}"
 )
+SENSITIVE_SOURCE_ASSIGNMENT = re.compile(
+    r"""(?ix)
+    (?:
+        (?:const|let|var)\s+
+        (?P<declaration>[a-z_$][\w$]*(?:token|password|secret|api[_-]?key|client[_-]?secret|sasl[_-]?pass)[\w$]*)
+        (?:\s*:\s*[^=;\n]+)?\s*= 
+      |
+        (?P<property>["']?[a-z_$][\w$]*(?:token|password|secret|api[_-]?key|client[_-]?secret|sasl[_-]?pass)[\w$]*["']?)\s*:
+    )
+    \s*(?P<quote>["'])(?P<value>[^"'\n]{20,})(?P=quote)
+    """
+)
 SENSITIVE_ASSIGNMENT = re.compile(
     r"""(?im)^
         \s*(?P<key>[A-Z][A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|API_KEY|CLIENT_SECRET|SASL_PASS)[A-Z0-9_]*)
@@ -77,6 +89,14 @@ def find_violations(repository: Path, paths: Iterable[Path]) -> list[str]:
         bearer = LITERAL_BEARER.search(contents)
         if bearer:
             violations.append(f"{relative}:{line_number(contents, bearer.start())}: committed bearer credential")
+
+        for assignment in SENSITIVE_SOURCE_ASSIGNMENT.finditer(contents):
+            value = assignment.group("value").strip()
+            if not value.upper().startswith(SAFE_VALUE_PREFIXES):
+                key = assignment.group("declaration") or assignment.group("property") or "credential"
+                violations.append(
+                    f"{relative}:{line_number(contents, assignment.start())}: {key} holds a literal credential in source"
+                )
 
         if path.suffix.lower() not in CONFIG_SUFFIXES:
             continue
