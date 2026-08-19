@@ -48,6 +48,7 @@ const menuItems = [
   { icon: LineChart, label: "FX & Stablecoins", path: "/markets" },
   { icon: ShieldCheck, label: "Compliance", path: "/compliance" },
   { icon: ReceiptText, label: "CBN · CBK · SARB", path: "/reports" },
+  { icon: ClipboardCheck, label: "CBN Sandbox", path: "/sandbox" },
   { icon: Building2, label: "Counterparties", path: "/registry" },
   { icon: Activity, label: "Integrations", path: "/integrations" },
   { icon: Scale, label: "Governance", path: "/governance" },
