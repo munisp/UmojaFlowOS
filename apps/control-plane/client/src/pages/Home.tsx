@@ -54,7 +54,7 @@ const moduleMeta: Record<ModuleKey, { number: string; title: string; subtitle: s
 };
 
 function moduleFromPath(path: string): ModuleKey {
-  const part = path.split("/")[1] as ModuleKey;
+  const part = path.split("/").filter(Boolean).at(-1) as ModuleKey;
   return part && part in moduleMeta ? part : "overview";
 }
 
@@ -257,8 +257,7 @@ export default function Home() {
     </header>
     <main className="mx-auto max-w-[1600px] px-5 py-6 sm:px-8"><p className="mb-6 max-w-4xl text-sm leading-6 text-black/65">{meta.subtitle}</p>
       {module === "overview" && <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
-        <div className="xl:col-span-2"><StakeholderPortal role={user?.role as OperatorRole | undefined} onNavigate={target => setLocation(`/${target}`)} /></div>
-        <div className="xl:col-span-2"><StakeholderPortalGallery /></div>
+        <div className="xl:col-span-2"><StakeholderPortal role={user?.role as OperatorRole | undefined} onNavigate={target => setLocation(`/console/${target}`)} /></div>
         <div className="grid gap-5 sm:grid-cols-2"><Metric title="Registered counterparties" value={counts.counterparty} detail="Actual registry records only" /><Metric title="Configured integrations" value={counts.integration} detail="Activation requires a verified health check" /><Metric title="Payment orders" value={counts.payment} detail="Final settlement evidence is distinct from draft state" /><Metric title="Compliance cases" value={counts.case} detail="Open, reviewed, escalated, reported, and closed cases" /></div>
         <Panel eyebrow="Activation guard" title="Live-capability boundary"><div className="space-y-0"><Guard title="Records store readiness" detail={postgresCutover.isLoading ? "Checking the platform's record store." : postgresCutover.data?.ready ? `All ${postgresCutover.data.presentTableCount} required record types are present and validated in this environment. Moving to production, and switching live services across, remain separate approvals.` : `The record store is not ready. Missing: ${postgresCutover.data?.missingTables.join(", ") ?? "readiness could not be determined"}.`} /><Guard title="Payment execution" detail="Unavailable until an authorised, credential-verified provider is connected and a policy decision is recorded." /><Guard title="Market observations" detail="Accepted only from an active integration with source timestamps and references." /><Guard title="Regulatory submission" detail="Requires a verified official submission channel and submission reference." /></div></Panel>
         <div className="xl:col-span-2"><StakeholderOnboardingWorkspace role={user?.role as OperatorRole | undefined} signals={onboardingSignals} onNavigate={target => setLocation(`/${target}`)} /></div>

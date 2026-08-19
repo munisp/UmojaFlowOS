@@ -42,17 +42,17 @@ import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Overview", path: "/" },
-  { icon: Waypoints, label: "Payments", path: "/payments" },
-  { icon: Landmark, label: "Treasury", path: "/treasury" },
-  { icon: LineChart, label: "FX & Stablecoins", path: "/markets" },
-  { icon: ShieldCheck, label: "Compliance", path: "/compliance" },
-  { icon: ReceiptText, label: "CBN · CBK · SARB", path: "/reports" },
-  { icon: ClipboardCheck, label: "CBN Sandbox", path: "/sandbox" },
-  { icon: Building2, label: "Counterparties", path: "/registry" },
-  { icon: Activity, label: "Integrations", path: "/integrations" },
-  { icon: Scale, label: "Governance", path: "/governance" },
-  { icon: BellRing, label: "Alerts", path: "/alerts" },
+  { icon: LayoutDashboard, label: "Overview", path: "/console" },
+  { icon: Waypoints, label: "Payments", path: "/console/payments" },
+  { icon: Landmark, label: "Treasury", path: "/console/treasury" },
+  { icon: LineChart, label: "FX & Stablecoins", path: "/console/markets" },
+  { icon: ShieldCheck, label: "Compliance", path: "/console/compliance" },
+  { icon: ReceiptText, label: "CBN · CBK · SARB", path: "/console/reports" },
+  { icon: ClipboardCheck, label: "CBN Sandbox", path: "/console/sandbox" },
+  { icon: Building2, label: "Counterparties", path: "/console/registry" },
+  { icon: Activity, label: "Integrations", path: "/console/integrations" },
+  { icon: Scale, label: "Governance", path: "/console/governance" },
+  { icon: BellRing, label: "Alerts", path: "/console/alerts" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
