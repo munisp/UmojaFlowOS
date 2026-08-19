@@ -6,7 +6,7 @@ This section supersedes the measured state recorded below it. The earlier text i
 
 The managed implementation ledger now contains **148** tracked items: **144 completed** and **4 open**, which is **97.3%** checklist completion. That number measures the ledger, not production readiness, and the two should not be conflated. All four remaining items are externally blocked and cannot be closed in any environment without input this project does not have: real provider adapters awaiting approved credentials and licensed counterparties, retirement of transitional MySQL/TiDB access awaiting an executed production cutover, and two Ollama evidence-only validations blocked by host memory.
 
-Measured quality gates at this revision: the managed suite passes 361 tests, with 23 opt-in live cross-language regressions available; Go 19; Rust 46 across the risk core and ledger gateway; Python 39. `make check` is green across all four languages. The canonical database holds 35 validated tables and is verified empty of regression fixtures after each full run.
+Measured quality gates at this revision, each re-run at the close of the pass: the managed suite passes **396 tests with no skips** when every live cross-language regression is enabled, which starts the real Go, Rust, and Python binaries and drives them through the real bridge; Go **19**; Rust **34** in the risk core and **12** in the ledger gateway; Python **39** in reporting and **37** in document intelligence. `make check` is green across all four languages. The canonical database holds 35 validated tables and is verified empty of regression fixtures after each full run.
 
 ### What would move this from checklist completion to production readiness
 
