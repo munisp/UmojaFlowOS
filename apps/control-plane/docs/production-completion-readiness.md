@@ -1,6 +1,22 @@
 # Production-Completion Readiness Baseline
 
+## 2026-08-19 revision
+
+This section supersedes the measured state recorded below it. The earlier text is retained, because a readiness baseline that quietly rewrites its own history is not a baseline.
+
+The managed implementation ledger now contains **148** tracked items: **144 completed** and **4 open**, which is **97.3%** checklist completion. That number measures the ledger, not production readiness, and the two should not be conflated. All four remaining items are externally blocked and cannot be closed in any environment without input this project does not have: real provider adapters awaiting approved credentials and licensed counterparties, retirement of transitional MySQL/TiDB access awaiting an executed production cutover, and two Ollama evidence-only validations blocked by host memory.
+
+Measured quality gates at this revision: the managed suite passes 361 tests, with 23 opt-in live cross-language regressions available; Go 19; Rust 46 across the risk core and ledger gateway; Python 39. `make check` is green across all four languages. The canonical database holds 35 validated tables and is verified empty of regression fixtures after each full run.
+
+### What would move this from checklist completion to production readiness
+
+Four things, none of which are code. An approved production PostgreSQL deployment with the cutover executed and reconciled against a non-empty real source. Credential-verified provider connections for payment, FX, screening, and regulatory submission, each with a licensed counterparty confirmed. A host capable of running the 8B evidence models, so the KYC/KYB inference path can be validated end to end. Deployment of the middleware whose activation contracts are written and validated but deliberately disabled.
+
+Until those exist, the honest description is that the provider-independent platform is implemented and verified, and every provider-dependent path is gated closed rather than stubbed open.
+
 ## Measured Ledger State
+
+> Superseded by the 2026-08-19 revision above; retained as the historical record.
 
 The managed implementation ledger contains **125** tracked items: **58 completed** and **67 open**. That equals **46.4%** checklist completion. It is therefore not supportable to claim 90% production completion.
 
