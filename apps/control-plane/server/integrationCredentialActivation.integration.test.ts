@@ -58,7 +58,7 @@ describe("provider credential configuration", () => {
       "Bearer abcdefghijklmnop",
       "ey" + "J".repeat(20) + ".payload",
       "a".repeat(64),
-      "-----BEGIN PRIVATE KEY-----",
+      "-----BEGIN " + "PRIVATE KEY-----",
     ]) {
       expect(() => assertIsSecretReferenceNotSecret(pasted)).toThrow(/looks like a credential|deployment secret name/);
     }

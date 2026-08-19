@@ -1,5 +1,39 @@
 # Production-Completion Readiness Baseline
 
+## 2026-08-19 revision (secured-development validation and source-material guard)
+
+This revision supersedes the summary below while retaining it as an audit
+history. The ledger now records **175** items: **169 completed** and **6
+externally blocked**, or **96.6%** checklist completion. The additional blocked
+items separate a credential failure from a transport failure so neither can be
+misrepresented as the other.
+
+The supplied secured-development certificate material verified the Kafka,
+Permify, and Temporal TLS chains without disabling verification. Kafka then
+rejected the supplied SASL identity and Permify returned unauthorised for the
+supplied bearer identity. No message, topic, policy, workflow, account,
+transfer, or configuration was changed. The TigerBeetle private key was not
+opened or used. The evidence is recorded without endpoint, credential, or key
+material in `docs/external-secured-development-material-inspection.md`.
+
+The provider-independent response is now complete: `make infra-check` includes
+`scripts/infra/validate_secret_material.py`, which scans tracked source only
+and rejects private-key markers, literal bearer values, and literal
+secret-shaped template assignments while allowing public certificates and named
+deployment-secret references. Its four regressions include negative controls
+for every refusal. This prevents future external material from entering source,
+documentation, fixtures, templates, or the GitHub repository.
+
+### Remaining external release gates
+
+| Gate | Required external input |
+| --- | --- |
+| Provider activation | A licensed counterparty confirmation and a current deployment-secret reference. |
+| Transitional-store retirement | Approved production migration against a non-empty source and approved snapshot. |
+| Evidence-only Ollama validation | A host with sufficient memory for the approved visual model. |
+| Provisioned middleware deployment | Approved APISIX/open-appsec, TigerBeetle, Mojaloop, OpenSearch, Keycloak, Sedona/GeoLibre, and lakehouse environments. |
+| Secured-development authenticated checks | Refreshed Kafka and Permify identities; TLS trust alone is verified but not service authorisation. |
+
 ## 2026-08-19 revision (auditable activation, operational history, and middleware integration)
 
 This section supersedes the revisions below while retaining them as an audit

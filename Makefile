@@ -9,6 +9,8 @@ infra-check:
 	python3 scripts/infra/validate_activation_contracts.py
 	python3 scripts/infra/validate_edge_policy.py
 	python3 scripts/infra/test_validate_edge_policy.py
+	python3 scripts/infra/validate_secret_material.py
+	python3 scripts/infra/test_validate_secret_material.py
 
 go-check:
 	cd services/payment-engine && go test ./...
