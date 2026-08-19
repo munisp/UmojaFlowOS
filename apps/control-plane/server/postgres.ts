@@ -74,7 +74,7 @@ export async function listPostgresCounterparties() {
 }
 
 export async function listPostgresCustomers() {
-  const { rows } = await getPool().query<{ id: string; legalName: string; kycStatus: string; createdAt: Date }>("SELECT id, legal_name AS \"legalName\", kyc_status AS \"kycStatus\", created_at AS \"createdAt\" FROM customers ORDER BY created_at DESC LIMIT 200");
+  const { rows } = await getPool().query<{ id: string; legalName: string; registrationIdentifier: string; kycStatus: string; createdAt: Date }>("SELECT id, legal_name AS \"legalName\", registration_identifier AS \"registrationIdentifier\", kyc_status AS \"kycStatus\", created_at AS \"createdAt\" FROM customers ORDER BY created_at DESC LIMIT 200");
   return rows;
 }
 

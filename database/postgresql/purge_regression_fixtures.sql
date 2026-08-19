@@ -104,7 +104,51 @@ INSERT INTO fixture_reports (id)
 SELECT r.id FROM regulatory_reports r
 WHERE r.legal_entity_id IN (SELECT id FROM fixture_entities);
 
+-- Alert policies created by the operational-alert and cutover suites, plus
+-- everything that references them. These were previously missed entirely: the
+-- suites act as `cutover-admin-<epoch>` or `regression-alert-admin`, and neither
+-- matched any pattern above, so 132 policies, 366 notification deliveries, 80
+-- alerts, 20 corridor policies, and 64 cases accumulated silently across runs.
+CREATE TEMP TABLE fixture_alert_policies (id uuid) ON COMMIT DROP;
+INSERT INTO fixture_alert_policies (id)
+SELECT p.id FROM alert_policies p
+WHERE p.created_by LIKE 'cutover-admin-%'
+   OR p.created_by LIKE 'regression-%'
+   OR EXISTS (SELECT 1 FROM fixture_actors a WHERE p.created_by LIKE a.pattern);
+
+-- Alerts are collected by their own source reference as well as by their
+-- originating policy, so an alert whose policy was already removed by an earlier
+-- partial run is still caught.
+CREATE TEMP TABLE fixture_alerts (id uuid) ON COMMIT DROP;
+INSERT INTO fixture_alerts (id)
+SELECT a.id FROM compliance_alerts a
+WHERE a.source_reference LIKE 'regression-alert-%'
+   OR a.alert_policy_id IN (SELECT id FROM fixture_alert_policies)
+   OR a.customer_id IN (SELECT id FROM fixture_customers)
+   OR a.counterparty_id IN (SELECT id FROM fixture_counterparties);
+
+-- Cases opened by the alert-escalation suite carry their own source-reference
+-- prefix and link to no fixture customer, so they need a second collection pass.
+INSERT INTO fixture_cases (id)
+SELECT c.id FROM compliance_cases c
+WHERE c.source_reference LIKE 'regression-alert-case-%'
+  AND c.id NOT IN (SELECT id FROM fixture_cases);
+
+CREATE TEMP TABLE fixture_corridor_policies (id uuid) ON COMMIT DROP;
+INSERT INTO fixture_corridor_policies (id)
+SELECT p.id FROM corridor_policies p
+WHERE p.created_by LIKE 'cutover-compliance-%'
+   OR p.created_by LIKE 'regression-%'
+   OR p.policy_version LIKE 'cutover-%'
+   OR p.policy_version LIKE 'regression-%';
+
 -- Leaf-to-root deletion.
+-- The alerting subtree is removed first: deliveries and alerts reference
+-- policies, and an alert may reference the case it escalated to.
+DELETE FROM notification_deliveries WHERE alert_policy_id IN (SELECT id FROM fixture_alert_policies);
+DELETE FROM compliance_alerts WHERE id IN (SELECT id FROM fixture_alerts);
+DELETE FROM compliance_alerts WHERE escalated_case_id IN (SELECT id FROM fixture_cases);
+
 DELETE FROM verification_reviewer_decisions WHERE analysis_job_id IN (SELECT id FROM fixture_jobs);
 DELETE FROM document_analysis_evidence WHERE analysis_job_id IN (SELECT id FROM fixture_jobs);
 DELETE FROM document_analysis_jobs WHERE id IN (SELECT id FROM fixture_jobs);
@@ -131,6 +175,8 @@ DELETE FROM beneficiaries WHERE customer_id IN (SELECT id FROM fixture_customers
 DELETE FROM regulatory_deadlines WHERE id IN (SELECT id FROM fixture_deadlines);
 DELETE FROM regulatory_reports WHERE id IN (SELECT id FROM fixture_reports);
 DELETE FROM counterparty_authorizations WHERE legal_entity_id IN (SELECT id FROM fixture_entities);
+DELETE FROM alert_policies WHERE id IN (SELECT id FROM fixture_alert_policies);
+DELETE FROM corridor_policies WHERE id IN (SELECT id FROM fixture_corridor_policies);
 
 -- Activity events reference their subject by object_id, so they are cleared for
 -- every fixture object identifier collected above.
@@ -143,6 +189,9 @@ DELETE FROM activity_events WHERE object_id IN (
   UNION ALL SELECT id FROM fixture_cases
   UNION ALL SELECT id FROM fixture_entities
   UNION ALL SELECT id FROM fixture_reports
+  UNION ALL SELECT id FROM fixture_alert_policies
+  UNION ALL SELECT id FROM fixture_alerts
+  UNION ALL SELECT id FROM fixture_corridor_policies
 );
 DELETE FROM activity_events WHERE EXISTS (SELECT 1 FROM fixture_actors a WHERE activity_events.actor_subject LIKE a.pattern);
 

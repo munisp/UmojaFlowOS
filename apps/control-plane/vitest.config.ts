@@ -14,7 +14,12 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["server/**/*.test.ts", "server/**/*.spec.ts", "client/src/**/*.test.ts", "client/src/**/*.spec.ts", "client/src/**/*.test.tsx"],
-    environmentMatchGlobs: [["client/src/**/*.test.tsx", "jsdom"]],
+    include: ["server/**/*.test.ts", "server/**/*.test.tsx", "server/**/*.spec.ts", "client/src/**/*.test.ts", "client/src/**/*.spec.ts", "client/src/**/*.test.tsx"],
+    // Server-side tests that render console components need a DOM; they still
+    // reach the real router and real PostgreSQL.
+    environmentMatchGlobs: [
+      ["client/src/**/*.test.tsx", "jsdom"],
+      ["server/**/*.test.tsx", "jsdom"],
+    ],
   },
 });
