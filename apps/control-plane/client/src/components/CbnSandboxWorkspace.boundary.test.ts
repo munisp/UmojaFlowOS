@@ -12,7 +12,7 @@ describe("CBN sandbox console workspace boundary", () => {
   });
 
   it("keeps the non-licensing, non-execution, and non-submission boundary visible to the operator", () => {
-    for (const claim of ["does not submit to CBN", "prove admission or licensing", "initiate a payment", "settle value", "not submitted", "not claimed", "non-executable"]) {
+    for (const claim of ["does not submit to CBN", "prove admission or licensing", "initiate a payment", "settle value", "not submitted", "not claimed", "non-executable", "cannot determine CBN eligibility"]) {
       expect(workspace).toContain(claim);
     }
   });
@@ -24,7 +24,7 @@ describe("CBN sandbox console workspace boundary", () => {
   });
 
   it("binds every visible write action to its typed CBN sandbox tRPC procedure", () => {
-    for (const procedure of ["createCbnSandboxDossier", "recordCbnSandboxEvidence", "createCbnSandboxTestPlan", "recordCbnSandboxConsumerRecord", "recordCbnSandboxIncident", "createCbnSandboxReportingPack"]) {
+    for (const procedure of ["createCbnSandboxDossier", "recordCbnSandboxEvidence", "assessCbnSandboxEvidenceCompleteness", "createCbnSandboxTestPlan", "recordCbnSandboxConsumerRecord", "recordCbnSandboxIncident", "createCbnSandboxReportingPack"]) {
       expect(workspace).toContain(`trpc.postgres.${procedure}.useMutation`);
     }
   });

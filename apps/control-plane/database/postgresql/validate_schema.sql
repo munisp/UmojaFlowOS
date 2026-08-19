@@ -11,6 +11,7 @@ END $$;
 DO $$
 BEGIN
   IF to_regclass('public.cbn_sandbox_dossiers') IS NULL
+     OR to_regclass('public.cbn_sandbox_evidence_assessments') IS NULL
      OR to_regclass('public.cbn_sandbox_evidence_items') IS NULL
      OR to_regclass('public.cbn_sandbox_test_plans') IS NULL
      OR to_regclass('public.cbn_sandbox_consumer_records') IS NULL
@@ -18,7 +19,7 @@ BEGIN
      OR to_regclass('public.cbn_sandbox_reporting_packs') IS NULL
      OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='cbn_sandbox_test_plans' AND column_name='wind_down_uri')
      OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='cbn_sandbox_incidents' AND column_name='notification_status') THEN
-    RAISE EXCEPTION 'CBN sandbox dossier, controlled-test, consumer, incident, and reporting boundaries are incomplete';
+    RAISE EXCEPTION 'CBN sandbox dossier, assessment, controlled-test, consumer, incident, and reporting boundaries are incomplete';
   END IF;
 END $$;
 

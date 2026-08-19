@@ -39,6 +39,7 @@ GRANT INSERT ON TABLE
   cbn_sandbox_consumer_records,
   cbn_sandbox_incidents,
   cbn_sandbox_reporting_packs,
+  cbn_sandbox_evidence_assessments,
   user_role_assignments
 TO :"app_role_ident";
 

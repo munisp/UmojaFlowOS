@@ -9,8 +9,10 @@ vi.mock("@/lib/trpc", () => ({
       legalEntities: { useQuery: () => ({ data: [{ id: "entity-1", legalName: "Nigeria Applicant Ltd", jurisdiction: "Nigeria" }] }) },
       customers: { useQuery: () => ({ data: [] }) },
       cbnSandboxReadiness: { useQuery: () => ({ data: undefined, isLoading: false }) },
+      cbnSandboxLatestEvidenceAssessment: { useQuery: () => ({ data: undefined, isLoading: false }) },
       createCbnSandboxDossier: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
       recordCbnSandboxEvidence: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
+      assessCbnSandboxEvidenceCompleteness: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
       createCbnSandboxTestPlan: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
       recordCbnSandboxConsumerRecord: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
       recordCbnSandboxIncident: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
@@ -29,6 +31,7 @@ describe("CBN sandbox workspace", () => {
     expect(screen.getByText(/does not submit to CBN, prove admission or licensing/i)).toBeTruthy();
     expect(screen.getByText(/No CBN dossier selected/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /New dossier/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Assess records/i })).toBeNull();
   });
 
   it("allows an administrator to open a required-evidence dossier form without promising an external result", () => {
@@ -40,5 +43,6 @@ describe("CBN sandbox workspace", () => {
     expect((screen.getByRole("textbox", { name: /Product summary/i }) as HTMLTextAreaElement).minLength).toBe(50);
     expect(screen.getByRole("button", { name: /Record without external claim/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /submit to CBN/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /Assess records/i })).toBeTruthy();
   });
 });

@@ -7,6 +7,7 @@ const dataEnabledCategories = ["corporate_governance", "ownership", "financial_c
 
 type Track = "vasp" | "data_enabled_non_vasp";
 type EvidenceCategory = (typeof vaspCategories)[number];
+type AssessmentOutcome = "internal_record_incomplete" | "internal_record_complete_pending_external_review" | "internal_record_inconsistent";
 
 async function activity(client: PoolClient, actor: Actor, action: string, objectType: string, objectId: string, metadata: Record<string, unknown>) {
   await client.query(
@@ -71,6 +72,40 @@ export async function getCbnSandboxReadiness(dossierId: string) {
     const missing = expected.filter(category => !available.has(category));
     return { dossierId, track: row.track, dossierStatus: row.status, readiness: missing.length === 0 && Boolean(plan.rows[0]) ? "evidence_complete_pending_external_review" : "incomplete", missingEvidenceCategories: missing, documentedTestPlan: Boolean(plan.rows[0]), externalSubmission: false, admission: false, licence: false, providerActivation: false };
   } finally { client.release(); }
+}
+
+async function buildEvidenceCompleteness(client: PoolClient, dossierId: string) {
+  const dossier = await client.query<{ id: string; track: Track }>("SELECT id,track FROM cbn_sandbox_dossiers WHERE id=$1 FOR KEY SHARE", [dossierId]);
+  const row = dossier.rows[0]; if (!row) throw new Error("CBN sandbox dossier does not exist");
+  const evidence = await client.query<{ category: EvidenceCategory }>("SELECT DISTINCT category FROM cbn_sandbox_evidence_items WHERE dossier_id=$1 ORDER BY category", [dossierId]);
+  const requiredCategories = row.track === "vasp" ? [...vaspCategories] : [...dataEnabledCategories];
+  const recordedCategories = evidence.rows.map(item => item.category);
+  const missingCategories = requiredCategories.filter(category => !recordedCategories.includes(category));
+  const plan = await client.query<{ status: string; startsAt: Date; endsAt: Date }>("SELECT status,starts_at AS \"startsAt\",ends_at AS \"endsAt\" FROM cbn_sandbox_test_plans WHERE dossier_id=$1", [dossierId]);
+  const planRow = plan.rows[0];
+  const inconsistencyCodes: string[] = [];
+  if (planRow && planRow.status !== "documented") inconsistencyCodes.push("test_plan_not_documented");
+  if (planRow && planRow.endsAt <= planRow.startsAt) inconsistencyCodes.push("test_plan_window_invalid");
+  const outcome: AssessmentOutcome = inconsistencyCodes.length > 0 ? "internal_record_inconsistent" : missingCategories.length === 0 && Boolean(planRow) ? "internal_record_complete_pending_external_review" : "internal_record_incomplete";
+  return { track: row.track, requiredCategories, recordedCategories, missingCategories, documentedTestPlan: Boolean(planRow), inconsistencyCodes, outcome };
+}
+
+export async function assessCbnSandboxEvidenceCompleteness(actor: Actor, input: { dossierId: string; reviewerRationale: string }) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const assessment = await buildEvidenceCompleteness(client, input.dossierId);
+    const { rows } = await client.query<{ id: string; outcome: AssessmentOutcome }>(`INSERT INTO cbn_sandbox_evidence_assessments (dossier_id,required_categories,recorded_categories,missing_categories,inconsistency_codes,documented_test_plan,outcome,reviewer_rationale,assessed_by) VALUES ($1,$2::jsonb,$3::jsonb,$4::jsonb,$5::jsonb,$6,$7,$8,$9) RETURNING id,outcome`, [input.dossierId, JSON.stringify(assessment.requiredCategories), JSON.stringify(assessment.recordedCategories), JSON.stringify(assessment.missingCategories), JSON.stringify(assessment.inconsistencyCodes), assessment.documentedTestPlan, assessment.outcome, input.reviewerRationale, actor.openId]);
+    const record = rows[0]; if (!record) throw new Error("CBN evidence assessment insert did not return a record");
+    await activity(client, actor, "cbn_sandbox_evidence.assessed", "cbn_sandbox_evidence_assessment", record.id, { dossierId: input.dossierId, track: assessment.track, outcome: record.outcome, missingCategories: assessment.missingCategories, inconsistencyCodes: assessment.inconsistencyCodes, externalEligibility: false, externalSubmission: false, admission: false, licence: false, providerActivation: false });
+    await client.query("COMMIT");
+    return { id: record.id, ...assessment, externalEligibility: false, externalSubmission: false, admission: false, licence: false, providerActivation: false };
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
+export async function latestCbnSandboxEvidenceAssessment(dossierId: string) {
+  const { rows } = await getPool().query(`SELECT id,dossier_id AS "dossierId",required_categories AS "requiredCategories",recorded_categories AS "recordedCategories",missing_categories AS "missingCategories",inconsistency_codes AS "inconsistencyCodes",documented_test_plan AS "documentedTestPlan",outcome,reviewer_rationale AS "reviewerRationale",external_eligibility AS "externalEligibility",external_submission AS "externalSubmission",admission,licence,provider_activation AS "providerActivation",assessed_by AS "assessedBy",assessed_at AS "assessedAt" FROM cbn_sandbox_evidence_assessments WHERE dossier_id=$1 ORDER BY assessed_at DESC LIMIT 1`, [dossierId]);
+  return rows[0] ?? null;
 }
 
 export async function recordCbnSandboxConsumerRecord(actor: Actor, input: { dossierId: string; customerId: string; recordKind: "disclosure_acceptance" | "complaint"; disclosureVersion?: string; evidenceUri: string; details: string }) {

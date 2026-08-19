@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { afterAll, describe, expect, it } from "vitest";
-import { createCbnSandboxDossier, createCbnSandboxReportingPack, createCbnSandboxTestPlan, getCbnSandboxReadiness, recordCbnSandboxEvidence, recordCbnSandboxIncident } from "./cbnSandbox";
+import { assessCbnSandboxEvidenceCompleteness, createCbnSandboxDossier, createCbnSandboxReportingPack, createCbnSandboxTestPlan, getCbnSandboxReadiness, latestCbnSandboxEvidenceAssessment, recordCbnSandboxEvidence, recordCbnSandboxIncident } from "./cbnSandbox";
 import { registerPostgresLegalEntity } from "./legalEntityRegistry";
 import { closePostgresPool, getPool } from "./postgres";
 
@@ -20,6 +20,10 @@ run("CBN Cohort 2 sandbox readiness", () => {
     const readiness = await getCbnSandboxReadiness(dossier.id);
     expect(readiness).toMatchObject({ readiness: "incomplete", documentedTestPlan: true, externalSubmission: false, admission: false, licence: false, providerActivation: false });
     expect(readiness.missingEvidenceCategories).toContain("reserve_attestation");
+    const assessment = await assessCbnSandboxEvidenceCompleteness(actor, { dossierId: dossier.id, reviewerRationale: "This assessment compares only categories and test-plan records already stored in the canonical dossier; it makes no external eligibility determination." });
+    expect(assessment).toMatchObject({ outcome: "internal_record_incomplete", externalEligibility: false, externalSubmission: false, admission: false, licence: false, providerActivation: false });
+    expect(assessment.missingCategories).toContain("reserve_attestation");
+    expect(await latestCbnSandboxEvidenceAssessment(dossier.id)).toMatchObject({ id: assessment.id, outcome: "internal_record_incomplete", externalEligibility: false, externalSubmission: false, admission: false, licence: false, providerActivation: false });
     const incident = await recordCbnSandboxIncident(actor, { dossierId: dossier.id, kind: "operational_resilience", severity: "medium", occurredAt: new Date("2026-09-02T10:00:00.000Z"), detectedAt: new Date("2026-09-02T10:01:00.000Z"), evidenceUri: "https://evidence.example.test/incident", summary: "Controlled test resilience interruption recorded for human review; no payment execution occurred." });
     expect(incident.notificationStatus).toBe("not_submitted");
     const pack = await createCbnSandboxReportingPack(actor, { dossierId: dossier.id, periodStart: new Date("2026-09-01T00:00:00.000Z"), periodEnd: new Date("2026-10-01T00:00:00.000Z"), artifactUri: "https://evidence.example.test/report-pack" });
@@ -31,7 +35,7 @@ afterAll(async () => {
   if (dossierId || entityId) {
     const dossier = dossierId ? `'${dossierId}'::uuid` : "NULL::uuid";
     const entity = entityId ? `'${entityId}'::uuid` : "NULL::uuid";
-    const sql = `DELETE FROM cbn_sandbox_reporting_packs WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_incidents WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_consumer_records WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_test_plans WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_evidence_items WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_dossiers WHERE id=${dossier}; DELETE FROM activity_events WHERE actor_subject='${actor.openId}'; DELETE FROM legal_entities WHERE id=${entity};`;
+    const sql = `DELETE FROM cbn_sandbox_reporting_packs WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_incidents WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_consumer_records WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_evidence_assessments WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_test_plans WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_evidence_items WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_dossiers WHERE id=${dossier}; DELETE FROM activity_events WHERE actor_subject='${actor.openId}'; DELETE FROM legal_entities WHERE id=${entity};`;
     execFileSync("sudo", ["-u", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-q", "-d", "umojaflowos_dev", "-c", sql], { stdio: "pipe" });
   }
   await closePostgresPool();
