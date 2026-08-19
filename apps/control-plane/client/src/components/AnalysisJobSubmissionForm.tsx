@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormEvent, useState } from "react";
-import { SubmitFeedback, useSubmitFeedback } from "@/components/SubmitFeedback";
+import { SubmitFeedback, useRetryableSubmit, useSubmitFeedback } from "@/components/SubmitFeedback";
 
 export type ActiveConsent = {
   id: string;
@@ -57,6 +57,10 @@ export function AnalysisJobSubmissionForm({
   pending: boolean;
   submit: (input: AnalysisSubmission) => void; error?: string | null }) {
   const feedback = useSubmitFeedback(pending, error);
+  // Retry resends the payload that actually failed, not whatever the
+  // form contains at the moment the button is pressed.
+  const retryable = useRetryableSubmit(submit);
+  const submitOnce = retryable.run;
   const [consentId, setConsentId] = useState<string>(consents[0]?.id ?? "");
   const [documentId, setDocumentId] = useState<string>(documents[0]?.id ?? "");
 
@@ -67,7 +71,7 @@ export function AnalysisJobSubmissionForm({
     return <div className="px-5 py-8"><p className="font-bold">No active consent</p><p className="mt-1 text-sm leading-6 text-black/55">A document is analysed only under an active, unexpired consent. Record consent first; a revoked or expired consent is never a lawful basis.</p></div>;
   }
   if (!documents.length) {
-    return <div className="px-5 py-8"><p className="font-bold">No verified document</p><p className="mt-1 text-sm leading-6 text-black/55">Analysis requires a stored document whose upload was finalised with a verified content digest. Ingest a document through protected object storage first.</p></div>;
+    return <div className="px-5 py-8"><p className="font-bold">No verified document</p><p className="mt-1 text-sm leading-6 text-black/55">Analysis requires a stored document whose upload was completed and whose contents were verified against their checksum. Ingest a document through protected object storage first.</p></div>;
   }
 
   const consent = consents.find(row => row.id === consentId) ?? consents[0];
@@ -77,7 +81,7 @@ export function AnalysisJobSubmissionForm({
     className="grid gap-4 px-5 py-5"
     onSubmit={(event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      submit({
+      submitOnce({
         consentId: consent.id,
         kycDocumentId: document.id,
         caseKind: consent.scope,
@@ -109,6 +113,6 @@ export function AnalysisJobSubmissionForm({
       <p className="break-all font-mono text-[10px] text-black/60">{document.storageUrl}</p>
       <p className="text-[10px] text-black/50">Scope {consent.scope.toUpperCase()} · purpose recorded on consent {consent.consentVersion}</p>
     </div>
-    <SubmitFeedback state={feedback} /><Button type="submit" disabled={pending} className="rounded-none bg-[#e11919] font-black uppercase tracking-wide hover:bg-black">{pending ? "Submitting…" : "Submit for document analysis"}</Button>
+    <SubmitFeedback state={feedback} onRetry={retryable.retry} /><Button type="submit" disabled={pending} className="rounded-none bg-[#e11919] font-black uppercase tracking-wide hover:bg-black">{pending ? "Submitting…" : "Submit for document analysis"}</Button>
   </form>;
 }

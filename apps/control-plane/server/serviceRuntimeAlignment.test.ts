@@ -2,11 +2,15 @@
  * Code-backed evidence that every non-TypeScript service is PostgreSQL-first.
  *
  * `docs/service-contracts.md` asserts that the Go, Rust, and Python services
- * hold no authoritative store of their own and compute only over inputs the
- * control plane supplies. That is a claim about dependencies and imports, so it
- * can be checked mechanically instead of trusted: a service that acquired a
- * database client would gain a second system of record, and no schema check at
- * the boundary would ever notice.
+ * hold no authoritative operational store of their own. That is a claim about
+ * dependencies and imports, so it can be checked mechanically instead of
+ * trusted: a service that acquired a database client would gain a second
+ * system of record, and no schema check at the boundary would ever notice.
+ *
+ * Redis is the deliberate narrow exception: the Python event subscriber uses
+ * it only for atomic at-least-once delivery evidence and de-duplication. It is
+ * asserted separately below so no later service can quietly turn Redis into a
+ * payment, balance, customer, or regulatory system of record.
  *
  * These tests read the real manifests and sources in the canonical monorepo. If
  * the monorepo is not present (for example in the managed project alone) they
@@ -38,7 +42,6 @@ const DATABASE_CLIENT_MARKERS = [
   "go-sql-driver",
   // Other stores that would constitute a second system of record
   "mongodb",
-  "redis",
   "cassandra",
 ];
 
@@ -117,6 +120,18 @@ describeAligned("service runtime alignment with the canonical PostgreSQL store",
 
     // And the service must state the backend is not deployed rather than imply one.
     expect(combined).toContain("disabled_without_deployed_tigerbeetle");
+  });
+
+  it("limits Redis to the Python event-evidence boundary rather than an operational record", () => {
+    const reportingService = join(SERVICES_DIR, "reporting-analytics/src/umojaflowos_reporting/service.py");
+    const allPythonSources = readFilesRecursively(join(SERVICES_DIR, "reporting-analytics/src"), [".py"]);
+    const redisSources = allPythonSources.filter(path => readFileSync(path, "utf8").toLowerCase().includes("redis"));
+
+    expect(redisSources).toEqual([reportingService]);
+    const contents = readFileSync(reportingService, "utf8");
+    expect(contents).toContain("class RedisEventEvidenceLedger");
+    expect(contents).toContain("canonical and TigerBeetle");
+    expect(contents).not.toMatch(/(payment|customer|balance|regulatory)\w*\s*=\s*self\._redis\.(?:set|hset|xadd)/i);
   });
 
   it("keeps every service listener free of embedded credentials", () => {

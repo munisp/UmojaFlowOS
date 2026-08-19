@@ -36,7 +36,7 @@ describe("SAR/STR filing draft form", () => {
     // A filing must reference a real case. With none available the form is
     // withheld entirely rather than rendered and rejected on submit.
     expect(screen.queryByRole("button")).toBeNull();
-    expect(screen.getByText(/can only reference an existing canonical compliance case/i)).toBeTruthy();
+    expect(screen.getByText(/can only reference a compliance case already on record/i)).toBeTruthy();
     expect(submit).not.toHaveBeenCalled();
   });
 
@@ -82,7 +82,7 @@ describe("SAR/STR filing register", () => {
     const { unmount } = render(
       <SarStrFilingTable rows={[]} loading canManage={false} pending={false} transition={vi.fn()} />,
     );
-    expect(screen.getByText(/Loading canonical PostgreSQL SAR\/STR filing records/i)).toBeTruthy();
+    expect(screen.getByText(/Loading SAR\/STR filing records/i)).toBeTruthy();
     unmount();
 
     render(<SarStrFilingTable rows={[]} loading={false} canManage={false} pending={false} transition={vi.fn()} />);

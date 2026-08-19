@@ -3,6 +3,7 @@ package ledger
 import (
 	"context"
 	"errors"
+	"net"
 	"strings"
 )
 
@@ -49,14 +50,18 @@ type ClusterConfig struct {
 	Addresses   []string
 	ClusterID   uint32
 	TLSRequired bool
+	// TigerBeetle's native protocol is TCP. Production addresses must terminate
+	// an authenticated encrypted transport (for example, a service-mesh proxy).
+	// This exception exists solely for a locally bound development cluster.
+	AllowInsecureLoopback bool
+	CurrencyLedgers       map[string]uint32
+	AccountCode           uint16
+	TransferCode          uint16
 }
 
 func (c ClusterConfig) Validate() error {
 	if c.ClusterID == 0 {
 		return errors.New("tigerbeetle cluster id is required")
-	}
-	if !c.TLSRequired {
-		return errors.New("tigerbeetle transport must require TLS")
 	}
 	if len(c.Addresses) == 0 {
 		return errors.New("at least one tigerbeetle address is required")
@@ -66,5 +71,28 @@ func (c ClusterConfig) Validate() error {
 			return errors.New("tigerbeetle addresses must not be blank")
 		}
 	}
+	if !c.TLSRequired {
+		if !c.AllowInsecureLoopback {
+			return errors.New("tigerbeetle plaintext transport requires the explicit loopback exemption")
+		}
+		for _, address := range c.Addresses {
+			if !loopbackAddress(address) {
+				return errors.New("tigerbeetle plaintext transport is permitted on loopback only")
+			}
+		}
+	}
 	return nil
+}
+
+func loopbackAddress(address string) bool {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		// TigerBeetle accepts a bare port, which it interprets as loopback.
+		return strings.TrimSpace(address) != "" && !strings.Contains(address, ".") && !strings.Contains(address, ":")
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

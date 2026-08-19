@@ -1,5 +1,51 @@
 # Production-Completion Readiness Baseline
 
+## 2026-08-19 revision (auditable activation, operational history, and middleware integration)
+
+This section supersedes the revisions below while retaining them as an audit
+history. The managed ledger contains **172** tracked items: **167 completed**
+and **5 externally blocked**, or **97.1%** implementation-checklist
+completion. This is not a claim that a payment provider, regulator, or
+production edge deployment has been activated.
+
+The closing validation was deliberately layered. The managed suite ran with
+PostgreSQL and every Go, Rust, Python, and ledger-gateway live service
+regression enabled: **79 files and 529 tests passed with no skips**. The
+canonical `make check` passed the Go, Rust, Python, TypeScript, contract, and
+edge-configuration stages. The complete reporting-analytics pytest suite then
+passed **62 tests**; document-intelligence passed **37 tests**; and the
+canonical PostgreSQL database was purged, analysed, and confirmed to contain no
+fixture rows.
+
+### What was added in this revision
+
+| Area | Measured implementation boundary |
+| --- | --- |
+| Credential governance | Secret-reference changes create attributable audit events recording old and new reference names, actor, and time — never the credential itself. The administrator console shows that history only to authorised administrators. |
+| Operational visibility | Service observations persist as append-only PostgreSQL samples. The application role cannot alter or delete them; interactive charts render the recorded health and counter history and show gaps/unknowns rather than invented values. |
+| Form recovery | Every console form provides a one-click retry only for transport failures that did not reach a business decision. Policy and lifecycle refusals remain non-retryable and retain the server’s exact reason. |
+| Stakeholder language | Storage and deployment implementation terms were removed from operator copy without removing regulatory language that carries business meaning: Nigeria (NGN), Kenya (KES), South Africa (ZAR), CBN, CBK, SARB, SAR/STR, corridor, and final settlement evidence remain explicit. |
+| Workflow and access | The Go payment engine has a live-server-tested Temporal workflow; the same engine verifies permissions with a live Permify deployment. Neither path invokes a provider without its separate provider gate. |
+| Events and evidence | A live Go → Dapr → Redpanda → Python → Redis path was verified. Native Kafka, Dapr, and Fluvio clients fail closed on unavailable, insecure, or malformed configured transports. Redis is constrained by a mechanical runtime guard to at-least-once event evidence and de-duplication only, not an operational system of record. |
+| Data, analytics, and maps | Keycloak federation, OpenSearch redacted projections, S3-compatible immutable lakehouse writes, Apache Sedona Livy submission, and GeoLibre aggregate project generation are implemented as real clients with local protocol regressions. They stay configuration-gated until a provisioned deployment exists. |
+| Double-entry and edge | The payment engine uses the official TigerBeetle client for currency-ledger-scoped idempotent transfers; APISIX routes have mechanically verified Keycloak OIDC guards; open-appsec is configured as its official APISIX attachment-plus-agent prevention deployment; and the Mojaloop FSPIOP client returns only a signed asynchronous HTTP 202 reference, never a settlement claim. |
+
+### Remaining external release gates
+
+| Release gate | Why it cannot be closed by code in this environment |
+| --- | --- |
+| Licensed provider credential and counterparty activation | The administrator workflow, health probe, audit trail, secret-reference boundary, and fail-closed activation path exist. A real counterparty licence and secret are external facts that must not be fabricated. |
+| Executed, reconciled production records-store migration | The transitional source has no business rows. The loader, dependency batches, checksums, and approval-hash gate are tested, but a real authorised migration requires the actual production source. |
+| Evidence-only Ollama runtime validation | The measured host ceiling loads 0.5B and 1.5B models but kills 3B and above; a usable visual model exceeds this environment’s memory. The validator is committed and awaits a larger host. |
+| APISIX/open-appsec, TigerBeetle, Mojaloop, OpenSearch, Keycloak, Spark/Sedona, GeoLibre, and lakehouse deployment checks | Their clients, templates, transport gates, and protocol regressions are implemented. The sandbox cannot host the production runtimes or supply the licensed scheme endpoints; the final live deployment check belongs to a provisioned, approved environment. |
+
+The production-ready statement supported by this evidence is therefore:
+
+> **UmojaFlowOS has a verified provider-independent control plane and
+> activation-gated integrations. It is ready for authorised deployment
+> validation, not authorised to represent live payment execution, regulatory
+> submission, external scheme settlement, or automatic KYC/KYB outcomes.**
+
 ## 2026-08-19 revision (provider activation and observability)
 
 This section supersedes the measured state recorded below it. Earlier revisions

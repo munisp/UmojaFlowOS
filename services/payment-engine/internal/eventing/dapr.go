@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,18 +17,35 @@ import (
 type DaprPublisher struct {
 	BaseURL, PubsubName string
 	Client              *http.Client
+	// Dapr normally runs as a local sidecar. This exemption permits its
+	// plaintext HTTP port only on loopback and only when a deployment has
+	// explicitly selected it. A remote plaintext Dapr endpoint is refused.
+	AllowInsecureLoopback bool
 }
 
 func (p DaprPublisher) Publish(ctx context.Context, topic string, event Envelope) error {
-	if strings.TrimSpace(p.BaseURL) == "" || strings.TrimSpace(p.PubsubName) == "" {
+	if strings.TrimSpace(p.BaseURL) == "" || !safeDaprSegment(p.PubsubName) {
 		return errors.New("dapr pubsub is not configured")
 	}
-	if strings.TrimSpace(topic) == "" {
-		return errors.New("event topic is required")
+	if !safeDaprSegment(topic) {
+		return errors.New("event topic must be a single non-empty path segment")
 	}
 	base, err := url.Parse(p.BaseURL)
 	if err != nil || base.Scheme == "" || base.Host == "" {
 		return errors.New("dapr base URL must be an absolute URL")
+	}
+	if base.User != nil {
+		return errors.New("dapr base URL must not embed credentials")
+	}
+	if base.Scheme == "http" {
+		if !p.AllowInsecureLoopback {
+			return errors.New("dapr plaintext transport requires the explicit loopback exemption")
+		}
+		if !loopbackDaprHost(base.Hostname()) {
+			return fmt.Errorf("dapr plaintext transport is permitted on loopback only, got %q", base.Hostname())
+		}
+	} else if base.Scheme != "https" {
+		return fmt.Errorf("unsupported dapr URL scheme %q", base.Scheme)
 	}
 	endpoint := strings.TrimRight(base.String(), "/") + "/v1.0/publish/" + url.PathEscape(p.PubsubName) + "/" + url.PathEscape(topic)
 	body, err := json.Marshal(event)
@@ -52,4 +70,16 @@ func (p DaprPublisher) Publish(ctx context.Context, topic string, event Envelope
 		return fmt.Errorf("dapr publish returned status %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func safeDaprSegment(value string) bool {
+	return strings.TrimSpace(value) != "" && !strings.ContainsAny(value, "/?#") && !strings.Contains(value, "..")
+}
+
+func loopbackDaprHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

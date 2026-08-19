@@ -47,6 +47,6 @@ describe("registry licence authorisation console rendering", () => {
 
   it("states plainly when no licence evidence is recorded instead of implying coverage", () => {
     render(<CounterpartyAuthorizationTable rows={[]} loading={false} canManage />);
-    expect(screen.getByText(/No canonical PostgreSQL licence authorisation evidence is recorded/)).toBeTruthy();
+    expect(screen.getByText(/No licence authorisation evidence has been recorded/)).toBeTruthy();
   });
 });

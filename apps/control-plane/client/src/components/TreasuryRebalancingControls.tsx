@@ -187,7 +187,7 @@ export function TreasuryRecommendationForm({
     <Label className="grid gap-1.5"><span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Verified near-term funding gap</span><Input name="verifiedNearTermFundingGap" required inputMode="decimal" pattern="^\d+(\.\d{1,8})?$" className="rounded-none border-black/25" placeholder="Verified obligation total" /></Label>
     <Label className="grid gap-1.5"><span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Funding gap source reference</span><Input name="fundingGapSourceReference" required minLength={6} className="rounded-none border-black/25" placeholder="Obligation schedule reference" /></Label>
     <Label className="grid gap-1.5"><span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Recommendation expiry</span><Input name="expiresAt" type="datetime-local" required className="rounded-none border-black/25" /></Label>
-    <p className="text-xs leading-5 text-black/55">The amount is computed by the canonical policy engine from these reconciled inputs and is bounded by the approved cap. Submitting a proposal never moves funds.</p>
+    <p className="text-xs leading-5 text-black/55">The amount is computed by the treasury policy engine from these reconciled inputs and is bounded by the approved cap. Submitting a proposal never moves funds.</p>
     <Button type="submit" disabled={pending} className="rounded-none bg-[#e11919] font-black uppercase tracking-wide hover:bg-black">{pending ? "Proposing…" : "Propose rebalancing"}</Button>
   </form>;
 }

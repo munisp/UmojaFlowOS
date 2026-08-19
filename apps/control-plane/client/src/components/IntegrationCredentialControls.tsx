@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormEvent, useState } from "react";
-import { SubmitFeedback, useSubmitFeedback } from "@/components/SubmitFeedback";
+import { SubmitFeedback, useRetryableSubmit, useSubmitFeedback } from "@/components/SubmitFeedback";
 
 /**
  * Administrator interface for supplying provider credentials and activating an
@@ -53,6 +53,10 @@ export function IntegrationCredentialForm({
   const [secretReference, setSecretReference] = useState("");
   const [endpointUrl, setEndpointUrl] = useState("");
   const feedback = useSubmitFeedback(pending, error);
+  // Retry resends the payload that actually failed, not whatever the
+  // form contains at the moment the button is pressed.
+  const retryable = useRetryableSubmit(submit);
+  const submitOnce = retryable.run;
 
   // A live connection must be suspended before its credential can change, so
   // offering it here would produce a guaranteed server refusal.
@@ -69,7 +73,7 @@ export function IntegrationCredentialForm({
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    submit({ integrationConnectionId: connectionId, secretReference: secretReference.trim(), endpointUrl: endpointUrl.trim() });
+    submitOnce({ integrationConnectionId: connectionId, secretReference: secretReference.trim(), endpointUrl: endpointUrl.trim() });
   };
 
   return (
@@ -122,7 +126,7 @@ export function IntegrationCredentialForm({
         </span>
       </label>
 
-      <SubmitFeedback state={feedback} />
+      <SubmitFeedback state={feedback} onRetry={retryable.retry} />
 
       <div>
         <Button
@@ -251,5 +255,107 @@ export function IntegrationCredentialTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+export type CredentialAuditRow = {
+  id: string;
+  action: string;
+  actorSubject: string;
+  actorRole: string;
+  occurredAt: Date | string;
+  secretReference: string | null;
+  previousSecretReference: string | null;
+  endpoint: string | null;
+  state: string | null;
+  healthCheckPassed: boolean | null;
+  httpStatus: number | null;
+  detail: string | null;
+  reason: string | null;
+};
+
+/**
+ * Renders one audit entry as a sentence rather than a row of codes.
+ *
+ * An auditor reading this is reconstructing a sequence of decisions, and
+ * "credential reference changed from FX_PRIMARY to FX_ROTATED" carries that
+ * meaning in a way `credential_configured` does not.
+ */
+function describeEntry(entry: CredentialAuditRow): string {
+  switch (entry.action) {
+    case "integration_connection.created":
+      return "Connection registered. No credential was supplied and no provider was contacted.";
+    case "integration_connection.credential_configured":
+      return entry.previousSecretReference
+        ? `Credential reference changed from ${entry.previousSecretReference} to ${entry.secretReference}.`
+        : `Credential reference set to ${entry.secretReference}.`;
+    case "integration_connection.activated":
+      return `Provider contacted and responded successfully${entry.httpStatus ? ` (HTTP ${entry.httpStatus})` : ""}. Connection is live.`;
+    case "integration_connection.activation_refused":
+      return `Activation refused: ${entry.detail ?? "the provider did not respond successfully"}${entry.httpStatus ? ` (HTTP ${entry.httpStatus})` : ""}.`;
+    case "integration_connection.suspended":
+      return `Connection suspended. Reason: ${entry.reason ?? "not stated"}.`;
+    default:
+      return entry.action;
+  }
+}
+
+function entryTone(action: string): string {
+  if (action === "integration_connection.activated") return "border-l-black";
+  if (action === "integration_connection.activation_refused" || action === "integration_connection.suspended") {
+    return "border-l-[#e11919]";
+  }
+  return "border-l-black/20";
+}
+
+export function CredentialAuditTrail({
+  entries,
+  loading,
+  connectionSelected,
+}: {
+  entries: CredentialAuditRow[];
+  loading: boolean;
+  connectionSelected: boolean;
+}) {
+  if (!connectionSelected) {
+    return (
+      <div className="px-5 py-8 text-sm leading-6 text-black/55" data-testid="audit-trail-unselected">
+        Select a provider connection above to review its full credential history.
+      </div>
+    );
+  }
+  if (loading) {
+    return (
+      <div className="px-5 py-8 text-sm text-black/55" data-testid="audit-trail-loading">
+        Loading credential history…
+      </div>
+    );
+  }
+  if (entries.length === 0) {
+    // Distinguished from loading: an empty history is a fact about the
+    // connection, not an absence of information.
+    return (
+      <div className="px-5 py-8 text-sm leading-6 text-black/55" data-testid="audit-trail-empty">
+        No credential activity has been recorded for this connection.
+      </div>
+    );
+  }
+
+  return (
+    <ol className="grid gap-0" data-testid="audit-trail-list">
+      {entries.map(entry => (
+        <li
+          key={entry.id}
+          className={`border-b border-black/10 border-l-4 px-5 py-4 ${entryTone(entry.action)}`}
+          data-testid="audit-trail-entry"
+        >
+          <div className="text-sm leading-6">{describeEntry(entry)}</div>
+          <div className="mt-1 text-xs text-black/55">
+            {new Date(entry.occurredAt).toLocaleString()} · {entry.actorSubject} ({entry.actorRole.replaceAll("_", " ")})
+          </div>
+          {entry.endpoint ? <div className="mt-1 break-all text-xs text-black/45">{entry.endpoint}</div> : null}
+        </li>
+      ))}
+    </ol>
   );
 }

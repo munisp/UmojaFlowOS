@@ -2,10 +2,12 @@ import { COOKIE_NAME } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { probeProviderEndpoint } from "./providerHealthCheck";
 import { collectAllServiceStatuses } from "./serviceHealth";
+import { listServiceHealthHistory, recordServiceHealthSamples, summariseServiceAvailability } from "./serviceHealthHistory";
 import {
   activatePostgresIntegrationConnection,
   configurePostgresIntegrationCredential,
   listPostgresIntegrationCredentialStatus,
+  listPostgresCredentialAuditTrail,
   suspendPostgresIntegrationConnection,
 } from "./postgres";
 import { evaluatePostgresLiquidityThresholds, evaluatePostgresPaymentFailures, evaluatePostgresComplianceFlags, computePostgresFxSpread } from "./operationalAlerts";
@@ -93,6 +95,16 @@ export const appRouter = router({
     integrationCredentialStatus: adminProcedure.query(() => listPostgresIntegrationCredentialStatus()),
 
     /**
+     * The credential change history for one integration.
+     *
+     * Administrator-only for the same reason as the status read: a secret
+     * reference name is operational information even though it is not a secret.
+     */
+    integrationCredentialAuditTrail: adminProcedure
+      .input(z.object({ integrationConnectionId: z.string().uuid(), limit: z.number().int().min(1).max(200).optional() }))
+      .query(({ input }) => listPostgresCredentialAuditTrail(input)),
+
+    /**
      * Live health and metrics for the Go, Rust, and Python services.
      *
      * Auditor-readable because operational visibility is a read, and withholding
@@ -101,6 +113,33 @@ export const appRouter = router({
      * only; an unconfigured service is reported as such rather than as failing.
      */
     serviceStatus: auditorProcedure.query(() => collectAllServiceStatuses()),
+
+    /**
+     * Recorded history for trend charts. Auditor-readable for the same reason
+     * the live read is: responding to an incident requires seeing what led to
+     * it.
+     */
+    serviceHealthHistory: auditorProcedure
+      .input(z.object({ sinceMinutes: z.number().int().min(1).max(43200).optional(), service: z.string().optional() }).optional())
+      .query(({ input }) => listServiceHealthHistory(input ?? {})),
+
+    serviceAvailabilitySummary: auditorProcedure
+      .input(z.object({ sinceMinutes: z.number().int().min(1).max(43200).optional() }).optional())
+      .query(({ input }) => summariseServiceAvailability(input?.sinceMinutes ?? 60)),
+
+    /**
+     * Collects one round and records it.
+     *
+     * A mutation rather than a query because it writes. Restricted to
+     * administrators when triggered by hand; the scheduled collector calls the
+     * same underlying functions through the cron endpoint, so both paths record
+     * identically shaped samples.
+     */
+    captureServiceHealthSample: adminProcedure.mutation(async () => {
+      const collected = await collectAllServiceStatuses();
+      const written = await recordServiceHealthSamples(collected.services);
+      return { written, observedAt: collected.observedAt };
+    }),
 
     configureIntegrationCredential: adminProcedure
       .input(z.object({

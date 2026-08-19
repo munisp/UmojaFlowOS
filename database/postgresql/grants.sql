@@ -33,6 +33,9 @@ GRANT INSERT ON TABLE
   verification_reviewer_decisions,
   counterparty_risk_assessments,
   market_observations,
+  -- An observation, once recorded, is a historical fact. Granting UPDATE would
+  -- allow a past incident to be edited out of the trend it appears in.
+  service_health_samples,
   user_role_assignments
 TO :"app_role_ident";
 

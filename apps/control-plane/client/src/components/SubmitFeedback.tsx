@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * Shared submission feedback for console forms.
@@ -16,15 +16,92 @@ import { useEffect, useRef, useState } from "react";
  *  - **A slow submission is distinguished from a stalled one.** Past a
  *    threshold, the operator is told the request is still in flight, so they do
  *    not resubmit an action that may already have been recorded.
+ *  - **Retry is offered only when retrying is safe.** A transport failure left
+ *    the outcome unknown but changed nothing the operator can see, so one click
+ *    should resend it. A business refusal — a consumed rate lock, a missing
+ *    submission reference — will refuse identically every time, so offering
+ *    retry there trains operators to click through refusals instead of reading
+ *    them. See `classifyFailure`.
  */
 
 export type SubmitFeedbackState =
   | { kind: "idle" }
   | { kind: "submitting"; slow: boolean }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; retryable: boolean };
 
 /** Requests slower than this are called out, rather than looking frozen. */
 const SLOW_THRESHOLD_MS = 2_000;
+
+/**
+ * Decides whether resending the identical request could plausibly succeed.
+ *
+ * The distinction is not cosmetic. Retry is offered for failures where the
+ * request did not reach a decision — network loss, timeout, a gateway or
+ * overload response, an aborted connection. It is withheld for every failure
+ * where the server evaluated the request and refused it, because the same
+ * input will be refused again and the operator needs to read the reason rather
+ * than resend.
+ *
+ * A timeout is deliberately treated as retryable *and* the pending notice warns
+ * the action may already have been recorded. Those are consistent: the
+ * platform's mutating procedures are either idempotent by key or refuse a
+ * duplicate outright, so a second attempt is either absorbed or refused with a
+ * clear reason — never silently doubled.
+ */
+export function classifyFailure(message: string): { retryable: boolean } {
+  const text = message.toLowerCase();
+
+  // Unambiguous transport signals are checked first. These are emitted by the
+  // network stack, never by a policy decision, so no refusal can contain one.
+  // "connect ECONNREFUSED …" was previously misread as a refusal because it
+  // contains the substring "refused".
+  const unambiguousTransport = ["econnrefused", "econnreset", "etimedout", "enotfound", "socket hang up", "fetch failed", "failed to fetch"];
+  if (unambiguousTransport.some(token => text.includes(token))) return { retryable: true };
+
+  // Server-side refusals: the request was understood and declined. These are
+  // checked first so a refusal mentioning, say, "connection" in its wording
+  // cannot be misread as a transport failure.
+  const refusal = [
+    "permission",
+    "forbidden",
+    "unauthorized",
+    "unauthorised",
+    "not found",
+    "already",
+    "invalid",
+    "required",
+    "refused",
+    "must ",
+    "cannot ",
+    "no active",
+    "not configured",
+    "expired",
+    "consumed",
+    "conflict",
+    "duplicate",
+  ];
+  if (refusal.some(token => text.includes(token))) return { retryable: false };
+
+  const transport = [
+    "network",
+    "timeout",
+    "timed out",
+    "aborted",
+    "502",
+    "503",
+    "504",
+    "bad gateway",
+    "service unavailable",
+    "gateway timeout",
+    "internal server error",
+  ];
+  if (transport.some(token => text.includes(token))) return { retryable: true };
+
+  // Unrecognised failures are treated as refusals. Withholding a retry button
+  // costs one manual resubmission; offering one on a refusal invites repeated
+  // attempts at something that will never succeed.
+  return { retryable: false };
+}
 
 export function useSubmitFeedback(pending: boolean, error?: string | null): SubmitFeedbackState {
   const [slow, setSlow] = useState(false);
@@ -44,11 +121,38 @@ export function useSubmitFeedback(pending: boolean, error?: string | null): Subm
   }, [pending]);
 
   if (pending) return { kind: "submitting", slow };
-  if (error) return { kind: "error", message: error };
+  if (error) return { kind: "error", message: error, retryable: classifyFailure(error).retryable };
   return { kind: "idle" };
 }
 
-export function SubmitFeedback({ state }: { state: SubmitFeedbackState }) {
+/**
+ * Wraps a submit function so the last attempted payload can be resent.
+ *
+ * Retry deliberately resends the captured payload rather than re-reading the
+ * form. The operator may have started editing the form after the failure, and
+ * silently sending the edited values under a button labelled "retry" would
+ * submit something they never reviewed.
+ */
+export function useRetryableSubmit<TInput>(submit: (input: TInput) => void) {
+  const last = useRef<TInput | null>(null);
+
+  const run = useCallback(
+    (input: TInput) => {
+      last.current = input;
+      submit(input);
+    },
+    [submit],
+  );
+
+  const retry = useCallback(() => {
+    if (last.current === null) return;
+    submit(last.current);
+  }, [submit]);
+
+  return { run, retry, hasAttempt: last.current !== null };
+}
+
+export function SubmitFeedback({ state, onRetry }: { state: SubmitFeedbackState; onRetry?: () => void }) {
   if (state.kind === "idle") return null;
 
   if (state.kind === "submitting") {
@@ -83,7 +187,25 @@ export function SubmitFeedback({ state }: { state: SubmitFeedbackState }) {
       {/* The server's exact wording. A refusal reason is the most useful thing
           on the screen and must not be paraphrased. */}
       <p className="mt-1 text-black/80">{state.message}</p>
-      <p className="mt-1 text-black/55">Nothing was recorded. Correct the input above and submit again.</p>
+      {state.retryable ? (
+        <>
+          <p className="mt-1 text-black/55">
+            The request did not reach the service, so no decision was recorded. Your entries are unchanged and can be sent again.
+          </p>
+          {onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              data-testid="submit-retry"
+              className="mt-2 bg-black px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.14em] text-white transition-transform duration-150 ease-out active:scale-[0.97]"
+            >
+              Retry submission
+            </button>
+          ) : null}
+        </>
+      ) : (
+        <p className="mt-1 text-black/55">Nothing was recorded. Correct the input above and submit again.</p>
+      )}
     </div>
   );
 }

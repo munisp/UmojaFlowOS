@@ -29,7 +29,7 @@ describe("KYC document review workflow", () => {
     const { unmount } = render(
       <KycDocumentReviewTable rows={[]} loading canReview={false} pending={false} submit={vi.fn()} />,
     );
-    expect(screen.getByText(/Loading canonical PostgreSQL KYC document review records/i)).toBeTruthy();
+    expect(screen.getByText(/Loading KYC document review records/i)).toBeTruthy();
     unmount();
 
     render(<KycDocumentReviewTable rows={[]} loading={false} canReview={false} pending={false} submit={vi.fn()} />);

@@ -10,7 +10,7 @@ const localDevelopmentConfig = {
 
 let pool: Pool | undefined;
 
-function getPool() {
+export function getPool() {
   if (!pool) {
     pool = process.env.POSTGRES_DATABASE_URL
       ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL })
@@ -979,6 +979,10 @@ export async function configurePostgresIntegrationCredential(
     await recordActivity(client, actor, "integration_connection.credential_configured", "integration_connection", updated.id, {
       // The reference name is recorded; no credential value exists to record.
       secretReference: input.secretReference.trim(),
+      // The previous reference is recorded alongside the new one. An audit
+      // entry saying only what a value became cannot answer the question an
+      // auditor actually asks, which is what it was changed from.
+      previousSecretReference: connection.secretReference,
       endpoint,
       previousState: connection.state,
       state: updated.state,
@@ -1101,6 +1105,68 @@ export async function suspendPostgresIntegrationConnection(actor: PolicyActor, i
     await client.query("COMMIT");
     return updated;
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
+/**
+ * The attributable history of every credential change, activation attempt, and
+ * suspension for one integration.
+ *
+ * This reads the append-only activity trail rather than a separate audit table,
+ * so the history cannot drift from what was actually recorded at the time of
+ * the action: there is one write, not two that must agree. Reads are ordered
+ * newest first because the question being asked is almost always "what changed
+ * most recently".
+ */
+export type CredentialAuditEntry = {
+  id: string;
+  action: string;
+  actorSubject: string;
+  actorRole: string;
+  occurredAt: Date;
+  secretReference: string | null;
+  previousSecretReference: string | null;
+  endpoint: string | null;
+  state: string | null;
+  healthCheckPassed: boolean | null;
+  httpStatus: number | null;
+  detail: string | null;
+  reason: string | null;
+};
+
+export async function listPostgresCredentialAuditTrail(input: { integrationConnectionId: string; limit?: number }) {
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  const client = await getPool().connect();
+  try {
+    const { rows } = await client.query<CredentialAuditEntry>(
+      `SELECT id,
+              action,
+              actor_subject AS "actorSubject",
+              actor_role::text AS "actorRole",
+              occurred_at AS "occurredAt",
+              metadata->>'secretReference' AS "secretReference",
+              metadata->>'previousSecretReference' AS "previousSecretReference",
+              metadata->>'endpoint' AS "endpoint",
+              metadata->>'state' AS "state",
+              (metadata->>'healthCheckPassed')::boolean AS "healthCheckPassed",
+              (metadata->>'httpStatus')::int AS "httpStatus",
+              metadata->>'detail' AS "detail",
+              metadata->>'reason' AS "reason"
+         FROM activity_events
+        WHERE object_type='integration_connection'
+          AND object_id=$1
+          AND action IN (
+            'integration_connection.created',
+            'integration_connection.credential_configured',
+            'integration_connection.activated',
+            'integration_connection.activation_refused',
+            'integration_connection.suspended'
+          )
+        ORDER BY occurred_at DESC, id DESC
+        LIMIT $2`,
+      [input.integrationConnectionId, limit],
+    );
+    return rows;
+  } finally { client.release(); }
 }
 
 /** Detailed integration view including credential-reference presence, never a value. */

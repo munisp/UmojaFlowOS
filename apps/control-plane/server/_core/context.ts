@@ -1,6 +1,7 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
 import { sdk } from "./sdk";
+import { resolveKeycloakUser } from "../keycloakFederation";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -18,6 +19,13 @@ export async function createContext(
   } catch (error) {
     // Authentication is optional for public procedures.
     user = null;
+  }
+
+  // Keycloak federation is an explicit bearer-header flow that is verified
+  // against the configured issuer's JWKS. It is a fallback, never a replacement
+  // for an existing platform OAuth session.
+  if (!user) {
+    user = await resolveKeycloakUser(opts.req);
   }
 
   return {

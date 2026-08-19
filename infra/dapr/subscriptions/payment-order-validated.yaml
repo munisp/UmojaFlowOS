@@ -9,4 +9,4 @@ spec:
   routes:
     default: /events/payment-order-validated
 scopes:
-  - ledger-gateway
+  - reporting-analytics

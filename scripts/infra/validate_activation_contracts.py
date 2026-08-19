@@ -45,6 +45,15 @@ ALLOWED_NON_SECRET_KEYS = {
     "OPENAPPSEC_MODE",
     "MOJALOOP_SCHEME_AUTHORISATION_REFERENCE",
     "MOJALOOP_PARTICIPANT_ID",
+    # Keycloak is matched by SECRETISH because its name contains "KEY", but
+    # issuer, audience and its activation controls are public OIDC metadata.
+    # Any private client secret still has to use the normal *_SECRET_REF form.
+    "UMOJA_KEYCLOAK_ENABLED",
+    "UMOJA_KEYCLOAK_ISSUER",
+    "UMOJA_KEYCLOAK_AUDIENCE",
+    "UMOJA_KEYCLOAK_TLS_REQUIRED",
+    "UMOJA_KEYCLOAK_FAIL_CLOSED",
+    "KEYCLOAK_OIDC_DISCOVERY_URL",
 }
 
 SECRETISH = re.compile(r"(PASSWORD|TOKEN|SECRET|KEY|CREDENTIAL)")

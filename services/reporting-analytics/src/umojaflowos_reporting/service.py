@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import os
 import threading
 import time
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
+from redis import Redis
+from redis.exceptions import RedisError
 
 from .reporting import ReportValidationError, build_evidence_manifest, validate_report_pack
 from .lakehouse import LakehouseContractError, build_bronze_manifest
@@ -21,6 +25,10 @@ from .stablecoin_exposure import (
     StablecoinPosition,
     build_stablecoin_exposure_report,
 )
+from .opensearch_adapter import OpenSearchConfig, OpenSearchProjectionWriter, OpenSearchUnavailable, redacted_search_document
+from .lakehouse_writer import BronzeLakehouseWriter, LakehouseConfig, LakehouseUnavailable
+from .sedona_livy import SedonaAggregateJobClient, SedonaLivyConfig, SedonaUnavailable
+from .geolibre_project import GeoLibrePublicationError, build_aggregate_project
 
 
 class ReportPackRequest(BaseModel):
@@ -45,6 +53,22 @@ class GeospatialAggregationRequest(BaseModel):
     h3_resolution: int = Field(ge=0, le=15)
     metric_name: str = Field(min_length=1, max_length=255)
     source_rows: list[dict[str, Any]]
+
+
+class SearchProjectionRequest(BaseModel):
+    projection: dict[str, Any]
+
+
+class SedonaAggregateSubmissionRequest(BaseModel):
+    input_uri: str = Field(min_length=8, max_length=2048)
+    output_uri: str = Field(min_length=8, max_length=2048)
+    metric_name: str = Field(min_length=1, max_length=255)
+    h3_resolution: int = Field(ge=5, le=9)
+
+
+class GeoLibreProjectRequest(BaseModel):
+    project_name: str = Field(min_length=1, max_length=120)
+    aggregate_object_key: str = Field(min_length=1, max_length=1024)
 
 
 class ReportAssemblyRequest(BaseModel):
@@ -79,6 +103,123 @@ class StablecoinExposureRequest(BaseModel):
     max_observation_age_minutes: int = Field(gt=0, le=1_440)
     positions: list[StablecoinPositionRequest]
     peg_observations: list[PegObservationRequest]
+
+
+PAYMENT_ORDER_VALIDATED_EVENT = "umojaflowos.payment.order.validated.v1"
+POLICY_DECISION_EVENT = "umojaflowos.policy.decision.v1"
+
+
+class DaprCloudEvent(BaseModel):
+    """The documented CloudEvents envelope Dapr delivers to a subscriber.
+
+    The `data` member remains deliberately narrow and opaque at this boundary:
+    it is evidence from another service, not an instruction to execute a
+    payment or submit a report. The event identity, type, version and
+    correlation ID are checked before it reaches a durable ledger.
+    """
+
+    id: str = Field(min_length=1, max_length=255)
+    source: str = Field(min_length=1, max_length=255)
+    specversion: Literal["1.0"]
+    type: str = Field(min_length=1, max_length=255)
+    topic: str = Field(min_length=1, max_length=255)
+    pubsubname: str = Field(min_length=1, max_length=255)
+    data: dict[str, Any]
+
+
+class EventEvidenceLedger(Protocol):
+    """Durably records a validated stream event before the subscriber ACKs it."""
+
+    def record(self, event: DaprCloudEvent) -> bool:
+        """Persist an event idempotently or raise when the durable store is unavailable."""
+
+
+class UnavailableEventEvidenceLedger:
+    """Safe default until a configured durable event ledger is attached.
+
+    Returning success here would tell Kafka that an event had been processed
+    even though it had nowhere durable to go. Raising makes FastAPI return 503,
+    and Dapr will retry rather than discard it. Redis becomes the configured
+    ledger in the platform-tier integration; this object is deliberately not an
+    in-memory stand-in.
+    """
+
+    def record(self, event: DaprCloudEvent) -> bool:
+        raise RuntimeError("event evidence ledger is unavailable")
+
+
+class RedisEventEvidenceLedger:
+    """Redis-backed idempotency and append-only evidence stream.
+
+    Redis is deliberately *not* the payment or accounting record — PostgreSQL
+    remains canonical and TigerBeetle remains the activation-gated double-entry
+    system. This ledger solves a narrower stream-processing problem: Dapr/Kafka
+    delivery is at-least-once, so a consumer needs a durable atomic marker before
+    it ACKs an event. The Lua transaction sets a hashed event-id marker and
+    appends the exact validated CloudEvent to the operational evidence stream in
+    one server-side operation. If Redis cannot do both, the route returns 503
+    and Dapr retries rather than claiming delivery.
+
+    The stream is immutable from the application's perspective. No `XDEL`,
+    `XTRIM`, `SET`, `DEL`, or expiry operation is exposed; production retention
+    is an operator policy on Redis, not code deciding what evidence may vanish.
+    """
+
+    _STREAM_KEY = "umojaflowos:event-evidence:v1"
+    _DEDUPE_PREFIX = "umojaflowos:event-evidence:seen:v1:"
+    _DEDUPE_TTL_SECONDS = 60 * 60 * 24 * 7
+    _RECORD_SCRIPT = """
+local added = redis.call('SET', KEYS[1], '1', 'NX', 'EX', ARGV[1])
+if added then
+  redis.call('XADD', KEYS[2], '*', 'cloud_event', ARGV[2], 'event_id', ARGV[3], 'event_type', ARGV[4])
+  return 1
+end
+return 0
+"""
+
+    def __init__(self, redis_url: str) -> None:
+        if not redis_url.strip():
+            raise ValueError("Redis URL is required for the event evidence ledger")
+        self._redis = Redis.from_url(redis_url, decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
+        self._record_script = self._redis.register_script(self._RECORD_SCRIPT)
+
+    def verify_connection(self) -> None:
+        """Prove the configured endpoint is a reachable Redis before activation."""
+        try:
+            if not self._redis.ping():
+                raise RuntimeError("Redis did not acknowledge PING")
+        except RedisError as exc:
+            raise RuntimeError("event evidence ledger is unavailable") from exc
+
+    @staticmethod
+    def _dedupe_key(event_id: str) -> str:
+        # Event IDs came from another service. Hashing keeps their untrusted
+        # bytes out of Redis keyspace while retaining collision resistance.
+        digest = hashlib.sha256(event_id.encode("utf-8")).hexdigest()
+        return f"{RedisEventEvidenceLedger._DEDUPE_PREFIX}{digest}"
+
+    def record(self, event: DaprCloudEvent) -> bool:
+        serialized = json.dumps(event.model_dump(), sort_keys=True, separators=(",", ":"))
+        if len(serialized.encode("utf-8")) > 256 * 1024:
+            raise RuntimeError("event evidence exceeds the 256 KiB operational stream limit")
+        data = event.data
+        try:
+            inserted = self._record_script(
+                keys=[self._dedupe_key(str(data["event_id"])), self._STREAM_KEY],
+                args=[self._DEDUPE_TTL_SECONDS, serialized, data["event_id"], data["event_type"]],
+            )
+            return bool(inserted)
+        except RedisError as exc:
+            raise RuntimeError("event evidence ledger is unavailable") from exc
+
+
+def configure_event_evidence_ledger(redis_url: str) -> None:
+    """Activate the stream consumer only after a real Redis PING succeeds."""
+
+    global EVENT_EVIDENCE_LEDGER
+    ledger = RedisEventEvidenceLedger(redis_url)
+    ledger.verify_connection()
+    EVENT_EVIDENCE_LEDGER = ledger
 
 
 app = FastAPI(title="UmojaFlowOS Reporting Analytics", version="1.0.0")
@@ -123,6 +264,8 @@ class ServiceMetrics:
         self.requests_failed = 0  # 5xx: the service itself failed
         self.reports_assembled = 0
         self.exposure_reports = 0
+        self.lakehouse_batches = 0
+        self.sedona_jobs_submitted = 0
 
     def record_request(self, status_code: int) -> None:
         with self._lock:
@@ -140,6 +283,14 @@ class ServiceMetrics:
         with self._lock:
             self.exposure_reports += 1
 
+    def record_lakehouse_batch(self) -> None:
+        with self._lock:
+            self.lakehouse_batches += 1
+
+    def record_sedona_job(self) -> None:
+        with self._lock:
+            self.sedona_jobs_submitted += 1
+
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             return {
@@ -151,12 +302,30 @@ class ServiceMetrics:
                 "requests_failed": self.requests_failed,
                 "reports_assembled": self.reports_assembled,
                 "exposure_reports": self.exposure_reports,
+                "lakehouse_batches": self.lakehouse_batches,
+                "sedona_jobs_submitted": self.sedona_jobs_submitted,
                 "observed_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
                 "regulatory_submission": "disabled_without_verified_channel",
             }
 
 
 METRICS = ServiceMetrics()
+EVENT_EVIDENCE_LEDGER: EventEvidenceLedger = UnavailableEventEvidenceLedger()
+
+
+@app.on_event("startup")
+def configure_event_evidence_ledger_from_environment() -> None:
+    """Opt in only when deployment supplies an explicit Redis URL.
+
+    There is intentionally no localhost default. An unconfigured deployment
+    continues to return 503 to Dapr, making event handling visibly blocked
+    rather than quietly starting against an accidental Redis instance.
+    """
+
+    redis_url = os.environ.get("UMOJA_REDIS_URL")
+    if not redis_url:
+        return
+    configure_event_evidence_ledger(redis_url)
 
 
 @app.middleware("http")
@@ -186,6 +355,48 @@ def health() -> dict[str, str]:
     return {"service": "reporting-analytics", "status": "healthy", "regulatory_submission": "disabled_without_verified_channel"}
 
 
+@app.post("/events/payment-order-validated")
+def receive_payment_or_policy_event(event: DaprCloudEvent) -> dict[str, str]:
+    """Validate and durably record a Dapr-delivered event before acknowledging it.
+
+    Dapr invokes this route for the Kafka `payment.events` subscription. An
+    HTTP success is an acknowledgement to the broker, so the route refuses to
+    return one until a durable evidence ledger has accepted the event. In the
+    absence of configured Redis that produces a 503 and Dapr retries; silently
+    accepting then dropping an event would be a data-loss bug.
+    """
+
+    if event.topic != "payment.events" or event.pubsubname != "kafka":
+        raise HTTPException(status_code=422, detail="event arrived through an unrecognised stream")
+    if event.type not in {"com.dapr.event.sent", PAYMENT_ORDER_VALIDATED_EVENT, POLICY_DECISION_EVENT}:
+        raise HTTPException(status_code=422, detail="event type is not accepted by this subscriber")
+
+    data = event.data
+    required = {"event_id", "event_type", "schema_version", "correlation_id", "payload"}
+    if not required.issubset(data):
+        raise HTTPException(status_code=422, detail="event evidence is incomplete")
+    if data["event_type"] not in {PAYMENT_ORDER_VALIDATED_EVENT, POLICY_DECISION_EVENT}:
+        raise HTTPException(status_code=422, detail="event evidence type is not recognised")
+    if data["schema_version"] != "v1":
+        raise HTTPException(status_code=422, detail="event evidence schema version is not supported")
+    if not isinstance(data["event_id"], str) or not data["event_id"].strip():
+        raise HTTPException(status_code=422, detail="event evidence id is invalid")
+    if not isinstance(data["correlation_id"], str) or not data["correlation_id"].strip():
+        raise HTTPException(status_code=422, detail="event evidence correlation id is invalid")
+    if not isinstance(data["payload"], dict):
+        raise HTTPException(status_code=422, detail="event evidence payload must be an object")
+
+    try:
+        inserted = EVENT_EVIDENCE_LEDGER.record(event)
+    except RuntimeError as exc:
+        # A 503 deliberately tells Dapr/Kafka not to ACK. It is not a user
+        # input refusal; it is a durable-processing outage that must retry.
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    # Dapr treats both results as an ACK. `duplicate` means a prior delivery
+    # was already durably appended; it does not create a second evidence row.
+    return {"status": "SUCCESS", "delivery": "recorded" if inserted else "duplicate"}
+
+
 @app.post("/v1/reports/validate")
 def validate_report(request: ReportPackRequest) -> dict[str, Any]:
     pack = request.model_dump()
@@ -206,6 +417,39 @@ def lakehouse_bronze_manifest(request: LakehouseBatchRequest) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+def configured_lakehouse_writer() -> BronzeLakehouseWriter:
+    endpoint_url = os.environ.get("UMOJA_LAKEHOUSE_ENDPOINT")
+    bucket = os.environ.get("UMOJA_LAKEHOUSE_BUCKET")
+    access_key_id = os.environ.get("UMOJA_LAKEHOUSE_ACCESS_KEY_ID")
+    secret_access_key = os.environ.get("UMOJA_LAKEHOUSE_SECRET_ACCESS_KEY")
+    if not endpoint_url or not bucket or not access_key_id or not secret_access_key:
+        raise LakehouseUnavailable("lakehouse is unavailable until an approved endpoint, bucket, and deployment secrets are configured")
+    return BronzeLakehouseWriter(
+        LakehouseConfig(
+            endpoint_url=endpoint_url,
+            bucket=bucket,
+            access_key_id=access_key_id,
+            secret_access_key=secret_access_key,
+            region_name=os.environ.get("UMOJA_LAKEHOUSE_REGION", "us-east-1"),
+            allow_insecure_loopback=os.environ.get("UMOJA_LAKEHOUSE_ALLOW_INSECURE_LOOPBACK") == "true",
+        )
+    )
+
+
+@app.post("/v1/lakehouse/bronze")
+def write_lakehouse_bronze(request: LakehouseBatchRequest) -> dict[str, Any]:
+    """Write an immutable, redacted bronze evidence batch to configured storage."""
+
+    try:
+        manifest, key, status = configured_lakehouse_writer().write(request.dataset, request.records, request.schema_version)
+        METRICS.record_lakehouse_batch()
+        return {"status": status, "object_key": key, "manifest": manifest.__dict__}
+    except LakehouseContractError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except LakehouseUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @app.post("/v1/geospatial/jurisdiction-aggregation")
 def geospatial_jurisdiction_aggregation(request: GeospatialAggregationRequest) -> dict[str, Any]:
     try:
@@ -219,6 +463,77 @@ def geospatial_jurisdiction_aggregation(request: GeospatialAggregationRequest) -
         return {"aggregation": aggregation.__dict__, "sedona_execution": "disabled_without_approved_spark_sedona_cluster", "geolibre_projection": "disabled_without_approved_aggregate_map_deployment"}
     except GeospatialContractError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/v1/geospatial/sedona/submit")
+def submit_sedona_aggregate(request: SedonaAggregateSubmissionRequest) -> dict[str, Any]:
+    """Submit the aggregate-only Sedona job to a configured Livy cluster."""
+
+    endpoint = os.environ.get("UMOJA_SEDONA_LIVY_URL")
+    token = os.environ.get("UMOJA_SEDONA_LIVY_BEARER_TOKEN")
+    artifact = os.environ.get("UMOJA_SEDONA_AGGREGATE_JOB_URI")
+    if not endpoint or not token or not artifact:
+        raise HTTPException(status_code=503, detail="geospatial aggregation is unavailable until an approved Sedona cluster, job artifact, and deployment secret are configured")
+    try:
+        client = SedonaAggregateJobClient(
+            SedonaLivyConfig(
+                base_url=endpoint,
+                bearer_token=token,
+                aggregate_job_uri=artifact,
+                allow_insecure_loopback=os.environ.get("UMOJA_SEDONA_ALLOW_INSECURE_LOOPBACK") == "true",
+            )
+        )
+        batch_id = client.submit(request.input_uri, request.output_uri, request.metric_name, request.h3_resolution)
+        METRICS.record_sedona_job()
+        return {"status": "submitted", "livy_batch_id": batch_id, "execution": "Apache Sedona aggregate-only job"}
+    except SedonaUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/v1/geospatial/geolibre-project")
+def create_geolibre_project(request: GeoLibreProjectRequest) -> dict[str, Any]:
+    """Create a GeoLibre v0.1.0 viewer project for a signed aggregate object."""
+
+    if not request.aggregate_object_key.startswith("silver/geospatial-aggregates/"):
+        raise HTTPException(status_code=422, detail="GeoLibre projects may reference only approved aggregate map outputs")
+    viewer_url = os.environ.get("UMOJA_GEOLIBRE_VIEWER_URL")
+    if not viewer_url:
+        raise HTTPException(status_code=503, detail="aggregate map is unavailable until an approved GeoLibre viewer deployment is configured")
+    try:
+        data_url = configured_lakehouse_writer().presigned_read_url(request.aggregate_object_key)
+        publication = build_aggregate_project(request.project_name, data_url, viewer_url)
+        return {"project": publication.project, "viewer_url": publication.viewer_url, "data_policy": "aggregate_only"}
+    except (LakehouseUnavailable, GeoLibrePublicationError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/v1/search/project")
+def project_search_document(request: SearchProjectionRequest) -> dict[str, str]:
+    """Write a redacted audit/case search projection only when explicitly configured.
+
+    The environment has no OpenSearch default. This keeps a missing search
+    cluster visibly unavailable instead of silently succeeding against a
+    machine-local endpoint. Inputs are reduced to the approved projection
+    fields before any request is emitted.
+    """
+
+    endpoint = os.environ.get("UMOJA_OPENSEARCH_URL")
+    token = os.environ.get("UMOJA_OPENSEARCH_BEARER_TOKEN")
+    if not endpoint or not token:
+        raise HTTPException(status_code=503, detail="search projection is unavailable until an approved endpoint and deployment secret are configured")
+    try:
+        index, document_id, document = redacted_search_document(request.projection)
+        writer = OpenSearchProjectionWriter(
+            OpenSearchConfig(
+                base_url=endpoint,
+                bearer_token=token,
+                allow_insecure_loopback=os.environ.get("UMOJA_OPENSEARCH_ALLOW_INSECURE_LOOPBACK") == "true",
+            )
+        )
+        outcome = writer.write(index, document_id, document)
+        return {"status": outcome, "index": index, "document_id": document_id}
+    except OpenSearchUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.post("/v1/reports/assemble")

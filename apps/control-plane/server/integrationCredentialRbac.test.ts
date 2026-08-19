@@ -15,6 +15,9 @@ const CREDENTIAL_PROCEDURES = [
   "activateIntegrationConnection",
   "suspendIntegrationConnection",
   "integrationCredentialStatus",
+  // The history names deployment secrets, so it is gated exactly as the state
+  // read is; an auditor role would otherwise learn every secret name.
+  "integrationCredentialAuditTrail",
 ] as const;
 
 function caller(role: string) {
@@ -37,6 +40,7 @@ const INPUTS: Record<string, unknown> = {
     reason: "rotating the provider credential",
   },
   integrationCredentialStatus: undefined,
+  integrationCredentialAuditTrail: { integrationConnectionId: "00000000-0000-0000-0000-000000000000" },
 };
 
 describe("credential configuration access control", () => {
@@ -66,6 +70,11 @@ describe("credential configuration access control", () => {
     const client = caller("admin") as unknown as Record<string, Record<string, (input?: unknown) => Promise<unknown>>>;
     // The read succeeds outright for an administrator.
     await expect(client.postgres.integrationCredentialStatus()).resolves.toBeDefined();
+    // The audit read likewise passes the gate; an unknown connection yields an
+    // empty history rather than a refusal.
+    await expect(
+      client.postgres.integrationCredentialAuditTrail(INPUTS.integrationCredentialAuditTrail),
+    ).resolves.toEqual([]);
     // The mutation fails on the missing record, not on the role, which proves
     // the caller passed the gate.
     await expect(

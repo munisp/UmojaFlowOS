@@ -74,7 +74,7 @@ describe("KYC document upload workflow", () => {
     );
 
     expect(screen.queryByRole("button")).toBeNull();
-    expect(screen.getByText(/can only be accepted for an existing canonical customer/i)).toBeTruthy();
+    expect(screen.getByText(/can only be accepted for a customer already on record/i)).toBeTruthy();
   });
 
   it("states plainly that PostgreSQL never receives document bytes", () => {
