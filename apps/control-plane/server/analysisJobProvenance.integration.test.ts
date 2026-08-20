@@ -10,10 +10,12 @@ import {
   listPostgresDocumentAnalysisJobs,
 } from "./postgres";
 
-const RUN_INTEGRATION = process.env.POSTGRES_INTEGRATION_TEST === "1";
+const RUN_INTEGRATION = process.env.POSTGRES_INTEGRATION_TEST === "1"
+  && Boolean(process.env.DOCUMENT_INTELLIGENCE_SRC_PATH)
+  && Boolean(process.env.OLLAMA_BASE_URL)
+  && Boolean(process.env.OLLAMA_ALLOWED_MODEL_DIGESTS);
 const describeIntegration = RUN_INTEGRATION ? describe : describe.skip;
 
-const SERVICE_SRC = resolve(process.cwd(), "../UmojaFlowOS/services/document-intelligence/src");
 const QWEN_DIGEST = "901cae73216286ea8c5aba8b46d307ff7188f737285ec500c795a12f05225d28";
 const DEEPSEEK_DIGEST = "6995872bfe4c521a67b32da386cd21d5c6e819b6e0d62f79f64ec83be99f5763";
 
@@ -26,29 +28,6 @@ const complianceActor = { openId: `provenance-compliance-${randomUUID()}`, role:
  * drifted model must leave no analysis job behind at all.
  */
 describeIntegration("analysis-job selector-derived provenance", () => {
-  const originalEnv = {
-    src: process.env.DOCUMENT_INTELLIGENCE_SRC_PATH,
-    url: process.env.OLLAMA_BASE_URL,
-    digests: process.env.OLLAMA_ALLOWED_MODEL_DIGESTS,
-  };
-
-  beforeAll(() => {
-    process.env.DOCUMENT_INTELLIGENCE_SRC_PATH = SERVICE_SRC;
-    process.env.OLLAMA_BASE_URL = "http://127.0.0.1:11434";
-    process.env.OLLAMA_ALLOWED_MODEL_DIGESTS = `${QWEN_DIGEST},${DEEPSEEK_DIGEST}`;
-  });
-
-  afterAll(() => {
-    for (const [key, value] of [
-      ["DOCUMENT_INTELLIGENCE_SRC_PATH", originalEnv.src],
-      ["OLLAMA_BASE_URL", originalEnv.url],
-      ["OLLAMA_ALLOWED_MODEL_DIGESTS", originalEnv.digests],
-    ] as const) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
-  });
-
   async function consentFor(caseKind: "kyc" | "kyb") {
     const customer = await createPostgresCustomer(complianceActor, {
       legalName: `Provenance regression ${randomUUID()}`,

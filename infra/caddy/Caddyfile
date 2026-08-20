@@ -1,0 +1,39 @@
+{
+  email {$UMOJA_TLS_CONTACT_EMAIL}
+  admin off
+  servers {
+    protocols h1 h2 h3
+    trusted_proxies static private_ranges
+  }
+}
+
+{$UMOJA_PUBLIC_HOST} {
+  encode zstd gzip
+  request_body {
+    max_size 10MB
+  }
+  header {
+    -Server
+    Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    Cross-Origin-Opener-Policy "same-origin"
+    Cross-Origin-Resource-Policy "same-origin"
+    Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; connect-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+  }
+  @api path /api/* /auth/* /payment-engine/* /risk-compliance/* /ledger-gateway/* /reporting/*
+  handle @api {
+    reverse_proxy {$UMOJA_APISIX_UPSTREAM:https://apisix:9080} {
+      header_up X-Forwarded-Proto https
+      header_up X-Request-ID {http.request.uuid}
+    }
+  }
+  handle {
+    reverse_proxy {$UMOJA_CONTROL_PLANE_UPSTREAM:http://control-plane:3000} {
+      header_up X-Forwarded-Proto https
+      header_up X-Request-ID {http.request.uuid}
+    }
+  }
+}

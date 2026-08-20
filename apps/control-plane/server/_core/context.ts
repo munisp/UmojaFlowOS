@@ -1,6 +1,6 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
-import type { User } from "../../drizzle/schema";
-import { sdk } from "./sdk";
+import type { PlatformIdentity } from "../identity";
+import { authenticateSession } from "./oidc";
 import { resolveKeycloakUser } from "../keycloakFederation";
 import { resolvePostgresOperatingRole, type PlatformUser } from "../postgresRoleResolver";
 
@@ -13,10 +13,10 @@ export type TrpcContext = {
 export async function createContext(
   opts: CreateExpressContextOptions
 ): Promise<TrpcContext> {
-  let user: User | null = null;
+  let user: PlatformIdentity | null = null;
 
   try {
-    user = await sdk.authenticateRequest(opts.req);
+    user = await authenticateSession(opts.req);
   } catch (error) {
     // Authentication is optional for public procedures.
     user = null;

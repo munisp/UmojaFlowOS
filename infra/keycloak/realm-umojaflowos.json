@@ -6,13 +6,39 @@
   "resetPasswordAllowed": false,
   "rememberMe": false,
   "bruteForceProtected": true,
+  "failureFactor": 5,
+  "quickLoginCheckMilliSeconds": 1000,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "maxDeltaTimeSeconds": 43200,
   "sslRequired": "external",
+  "accessTokenLifespan": 300,
+  "accessTokenLifespanForImplicitFlow": 300,
+  "ssoSessionIdleTimeout": 900,
+  "ssoSessionMaxLifespan": 28800,
+  "revokeRefreshToken": true,
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "otpPolicyLookAheadWindow": 1,
+  "requiredActions": [
+    { "alias": "CONFIGURE_TOTP", "name": "Configure OTP", "providerId": "CONFIGURE_TOTP", "enabled": true, "defaultAction": true, "priority": 10 }
+  ],
   "roles": {
     "realm": [
-      { "name": "admin", "description": "UmojaFlowOS administrator" },
-      { "name": "compliance_officer", "description": "UmojaFlowOS compliance officer" },
-      { "name": "treasury_operator", "description": "UmojaFlowOS treasury operator" },
-      { "name": "auditor", "description": "UmojaFlowOS auditor" }
+      { "name": "umojaflowos_admin", "description": "UmojaFlowOS administrator" },
+      { "name": "umojaflowos_compliance_officer", "description": "UmojaFlowOS compliance officer" },
+      { "name": "umojaflowos_treasury_operator", "description": "UmojaFlowOS treasury operator" },
+      { "name": "umojaflowos_auditor", "description": "UmojaFlowOS auditor" }
+      ,{ "name": "provider_contact", "description": "Provider contact" }
+      ,{ "name": "cbn_liaison", "description": "CBN liaison" }
+      ,{ "name": "trade_sponsor", "description": "Trade sponsor" }
+      ,{ "name": "procurement_owner", "description": "Procurement owner" }
+      ,{ "name": "trade_finance_operator", "description": "Trade-finance operator" }
+      ,{ "name": "supplier_representative", "description": "Supplier representative" }
+      ,{ "name": "authorised_dealer_liaison", "description": "Authorised-dealer liaison" }
+      ,{ "name": "reconciliation_reviewer", "description": "Reconciliation reviewer" }
     ]
   },
   "clients": [

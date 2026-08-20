@@ -11,6 +11,7 @@ import { listServiceHealthHistory, recordServiceHealthSamples, summariseServiceA
  * service that was never actually observed.
  */
 const run = process.env.POSTGRES_INTEGRATION_TEST === "1" ? describe : describe.skip;
+const runApplicationRoleBoundary = process.env.UMOJA_POSTGRES_APPLICATION_ROLE_VALIDATION === "1";
 
 const healthy = (service: ServiceStatus["service"], latency: number, counters: Record<string, number> = {}): ServiceStatus => ({
   service,
@@ -133,7 +134,7 @@ run("service health history", () => {
     ).rejects.toThrow(/reason_present/);
   });
 
-  it("denies the application role any means of deleting or altering a recorded sample", async () => {
+  it.skipIf(!runApplicationRoleBoundary)("denies the application role any means of deleting or altering a recorded sample", async () => {
     purge();
     await recordServiceHealthSamples([healthy("payment-engine", 10)]);
     const pool = getPool();

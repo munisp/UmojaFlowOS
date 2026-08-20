@@ -1,15 +1,15 @@
-import type { User } from "../drizzle/schema";
+import type { PlatformIdentity } from "./identity";
 import { getPool } from "./postgres";
 import type { OperatingRole } from "./operatingRoles";
 
-export type PlatformUser = Omit<User, "role"> & { role: OperatingRole };
+export type PlatformUser = Omit<PlatformIdentity, "role"> & { role: OperatingRole };
 
 /**
  * The transitional identity provider may establish a session but is not allowed
  * to create either external stakeholder authority. `provider_contact` and
  * `cbn_liaison` are resolvable only from canonical PostgreSQL assignments.
  */
-export async function resolvePostgresOperatingRole(user: User): Promise<PlatformUser> {
+export async function resolvePostgresOperatingRole(user: PlatformIdentity): Promise<PlatformUser | null> {
   const { rows } = await getPool().query<{ role: OperatingRole }>(
     `SELECT role::text AS role, 1 AS precedence
        FROM operator_role_assignments
@@ -24,5 +24,5 @@ export async function resolvePostgresOperatingRole(user: User): Promise<Platform
   );
   const assigned = rows[0]?.role;
   if (assigned) return { ...user, role: assigned };
-  return user;
+  return null;
 }

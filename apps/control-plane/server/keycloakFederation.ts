@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Request } from "express";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
-import type { User } from "../drizzle/schema";
+import type { PlatformIdentity } from "./identity";
 
 type PlatformRole = "admin" | "compliance_officer" | "treasury_operator" | "auditor";
 
@@ -44,9 +44,8 @@ export function configuredKeycloak(): KeycloakConfiguration | null {
 }
 
 function authorizationToken(request: Request): string | null {
-  // An explicit selector prevents a Manus OAuth bearer token from accidentally
-  // being sent to a Keycloak JWKS verifier, and prevents issuer probing on
-  // normal platform requests.
+  // An explicit selector prevents unrelated bearer credentials from being sent
+  // to the Keycloak JWKS verifier and avoids issuer probing on normal requests.
   if (request.header("x-umoja-identity-provider") !== "keycloak") return null;
   const header = request.header("authorization");
   if (!header?.startsWith("Bearer ")) return null;
@@ -74,7 +73,7 @@ function federatedOpenId(subject: string): string {
   return `kc_${createHash("sha256").update(subject).digest("hex").slice(0, 61)}`;
 }
 
-export async function resolveKeycloakUser(request: Request): Promise<User | null> {
+export async function resolveKeycloakUser(request: Request): Promise<PlatformIdentity | null> {
   const token = authorizationToken(request);
   const configuration = configuredKeycloak();
   if (!token || !configuration) return null;

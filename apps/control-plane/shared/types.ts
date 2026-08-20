@@ -1,7 +1,6 @@
 /**
- * Unified type exports
- * Import shared types from this single entry point.
+ * Shared deployment-neutral types.
+ * Canonical business records are defined by PostgreSQL migrations and API contracts.
  */
 
-export type * from "../drizzle/schema";
 export * from "./_core/errors";

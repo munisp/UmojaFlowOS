@@ -25,10 +25,10 @@ function fakeResponse() {
 describe("regulatory deadline reminder callback", () => {
   it("returns a retry-safe 403 for an unauthenticated caller without evaluating anything", async () => {
     const { res, captured } = fakeResponse();
-    // No cron credentials are attached, so authentication fails.
+    // No scheduler secret and schedule identifier are attached, so authentication fails.
     await regulatoryDeadlineReminders({ headers: {}, originalUrl: "/api/scheduled/reminders" } as never, res as never);
     expect(captured.status).toBe(403);
-    expect(captured.body).toEqual({ error: "cron_only" });
+    expect(captured.body).toEqual({ error: "scheduler_only" });
   });
 
   it("reads and writes only canonical PostgreSQL state", () => {
@@ -40,8 +40,9 @@ describe("regulatory deadline reminder callback", () => {
     expect(SOURCE).toContain("evaluatePostgresRegulatoryDeadlines");
   });
 
-  it("rejects a non-cron authenticated caller", () => {
-    expect(SOURCE).toContain("if (!user.isCron || !user.taskUid) return res.status(403)");
+  it("rejects a caller that lacks the configured scheduler secret", () => {
+    expect(SOURCE).toContain("const invocation = authenticateScheduledInvocation(req)");
+    expect(SOURCE).toContain('if (!invocation) return res.status(403).json({ error: "scheduler_only" })');
   });
 
   it("skips an orphaned or disabled schedule instead of evaluating it", () => {

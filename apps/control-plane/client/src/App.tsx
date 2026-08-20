@@ -5,13 +5,15 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import PublicLanding from "./pages/PublicLanding";
 import StakeholderOnboarding from "./pages/StakeholderOnboarding";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
-      <Route path={"/"} component={StakeholderOnboarding} />
+      <Route path={"/"} component={PublicLanding} />
+      <Route path={"/enroll"} component={StakeholderOnboarding} />
       <Route path={"/console"} component={Home} />
       <Route path={"/console/:module"} component={Home} />
       <Route path={"/404"} component={NotFound} />

@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { postgresTestPsqlArguments } from "./testPostgres";
 import { beginCounterpartyRecertification, createCounterpartyOnboarding, decideCounterpartyOnboardingGate } from "./counterpartyOnboarding";
 import {
   closePostgresPool,
@@ -18,7 +19,7 @@ const treasury = { openId: `onboarding-treasury-${crypto.randomUUID()}`, role: "
 function purgeFixtureRows() {
   execFileSync(
     "psql",
-    ["-v", "ON_ERROR_STOP=1", "-q", process.env.POSTGRES_DATABASE_URL ?? "postgresql:///umojaflowos_dev", "-f", "-"],
+    ["-v", "ON_ERROR_STOP=1", "-q", ...postgresTestPsqlArguments(), "-f", "-"],
     { input: readFileSync(new URL("../../../database/postgresql/purge_regression_fixtures.sql", import.meta.url)) },
   );
 }

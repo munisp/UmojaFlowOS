@@ -19,7 +19,6 @@ const TEMPLATE_COMPONENTS = new Set([
   "DashboardLayout.tsx",
   "DashboardLayoutSkeleton.tsx",
   "ErrorBoundary.tsx",
-  "ManusDialog.tsx",
   "Map.tsx",
 ]);
 

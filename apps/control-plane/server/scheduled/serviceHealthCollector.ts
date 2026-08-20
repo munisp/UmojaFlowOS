@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 
-import { sdk } from "../_core/sdk";
+import { authenticateScheduledInvocation } from "./schedulerAuth";
 import { collectAllServiceStatuses } from "../serviceHealth";
 import { recordServiceHealthSamples } from "../serviceHealthHistory";
 
@@ -17,14 +17,8 @@ import { recordServiceHealthSamples } from "../serviceHealthHistory";
  * itself the observation worth recording.
  */
 export async function serviceHealthCollector(req: Request, res: Response) {
-  let user: Awaited<ReturnType<typeof sdk.authenticateRequest>>;
-  try {
-    user = await sdk.authenticateRequest(req);
-  } catch {
-    return res.status(403).json({ error: "cron_only" });
-  }
-
-  if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron_only" });
+  const invocation = authenticateScheduledInvocation(req);
+  if (!invocation) return res.status(403).json({ error: "scheduler_only" });
 
   try {
     const collected = await collectAllServiceStatuses();
@@ -39,6 +33,6 @@ export async function serviceHealthCollector(req: Request, res: Response) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return res.status(500).json({ error: message, context: { url: req.originalUrl, taskUid: user.taskUid }, timestamp: new Date().toISOString() });
+    return res.status(500).json({ error: message, context: { url: req.originalUrl, taskUid: invocation.taskUid }, timestamp: new Date().toISOString() });
   }
 }

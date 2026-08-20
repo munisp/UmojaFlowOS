@@ -42,6 +42,10 @@ import {
 } from "./postgres";
 
 const runIntegration = process.env.POSTGRES_INTEGRATION_TEST === "1";
+const runStorageIntegration = runIntegration
+  && Boolean(process.env.UMOJA_OBJECT_STORAGE_BUCKET)
+  && Boolean(process.env.UMOJA_OBJECT_STORAGE_ACCESS_KEY_ID)
+  && Boolean(process.env.UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY);
 
 type Role = "admin" | "compliance_officer" | "treasury_operator" | "auditor";
 
@@ -52,7 +56,7 @@ function contextFor(role: Role, openId: string): TrpcContext {
       openId,
       name: `${role} operator`,
       email: `${openId}@example.com`,
-      loginMethod: "manus",
+      loginMethod: "keycloak",
       role,
       createdAt: new Date("2026-08-18T00:00:00.000Z"),
       updatedAt: new Date("2026-08-18T00:00:00.000Z"),
@@ -319,7 +323,7 @@ describe.skipIf(!runIntegration)("console form submissions reaching canonical Po
     expect(stored?.status).toBe("draft");
   });
 
-  it("records a KYC document review decision through the real control", async () => {
+  it.skipIf(!runStorageIntegration)("records a KYC document review decision through the real control", async () => {
     const officer = unique("regression-form-officer");
     const caller = appRouter.createCaller(contextFor("compliance_officer", officer));
 

@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { closePostgresPool, createPostgresCustomer, createPostgresKycDocumentUploadIntent, describePostgresTableColumns, finalizePostgresKycDocumentUpload, listPostgresActivityEventsForObjects, listPostgresKycDocuments, updatePostgresKycDocumentReview } from "./postgres";
 
-const runIntegration = process.env.POSTGRES_INTEGRATION_TEST === "1";
+const runIntegration = process.env.POSTGRES_INTEGRATION_TEST === "1"
+  && Boolean(process.env.UMOJA_OBJECT_STORAGE_BUCKET)
+  && Boolean(process.env.UMOJA_OBJECT_STORAGE_ACCESS_KEY_ID)
+  && Boolean(process.env.UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY);
 const officer = { openId: `kyc-lifecycle-${Date.now()}`, role: "compliance_officer" as const };
 
 /**

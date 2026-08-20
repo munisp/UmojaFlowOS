@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 
-import { sdk } from "../_core/sdk";
+import { authenticateScheduledInvocation } from "./schedulerAuth";
 import {
   evaluatePostgresRegulatoryDeadlines,
   getPostgresScheduledJobByTaskUid,
@@ -20,17 +20,11 @@ import { expirePostgresRateLocks } from "../paymentWorkflow";
  * misrouted request is not retried indefinitely by the scheduler.
  */
 export async function regulatoryDeadlineReminders(req: Request, res: Response) {
-  let user: Awaited<ReturnType<typeof sdk.authenticateRequest>>;
-  try {
-    user = await sdk.authenticateRequest(req);
-  } catch {
-    return res.status(403).json({ error: "cron_only" });
-  }
-
-  if (!user.isCron || !user.taskUid) return res.status(403).json({ error: "cron_only" });
+  const invocation = authenticateScheduledInvocation(req);
+  if (!invocation) return res.status(403).json({ error: "scheduler_only" });
 
   try {
-    const scheduledJob = await getPostgresScheduledJobByTaskUid(user.taskUid);
+    const scheduledJob = await getPostgresScheduledJobByTaskUid(invocation.taskUid);
     if (!scheduledJob || !scheduledJob.enabled || scheduledJob.purpose !== "regulatory_deadline_reminders") {
       // An orphaned or disabled schedule is reported as handled so the
       // scheduler stops retrying it, but nothing is evaluated.
@@ -39,10 +33,10 @@ export async function regulatoryDeadlineReminders(req: Request, res: Response) {
 
     // The scheduler is not a human operator, so it acts with read-only
     // authority. Both operations below are evaluations, never approvals.
-    const actor = { openId: user.openId, role: "auditor" as const };
+    const actor = { openId: invocation.openId, role: "auditor" as const };
     const rateLocks = await expirePostgresRateLocks(actor);
     const deadlines = await evaluatePostgresRegulatoryDeadlines(actor);
-    await markPostgresScheduledJobExecuted(user.taskUid);
+    await markPostgresScheduledJobExecuted(invocation.taskUid);
 
     return res.json({ ok: true, ...deadlines, ...rateLocks });
   } catch (error) {

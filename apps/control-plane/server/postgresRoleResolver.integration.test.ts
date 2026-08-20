@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import type { User } from "../drizzle/schema";
+import type { PlatformIdentity } from "./identity";
 import { getPool } from "./postgres";
 import { resolvePostgresOperatingRole } from "./postgresRoleResolver";
 
 const enabled = process.env.POSTGRES_INTEGRATION === "1";
 
-function transitionalIdentity(subject: string): User {
+function transitionalIdentity(subject: string): PlatformIdentity {
   return {
     id: 1,
     openId: subject,
@@ -28,12 +28,12 @@ describe.runIf(enabled)("PostgreSQL external stakeholder role resolution", () =>
       [subject],
     );
     const resolved = await resolvePostgresOperatingRole(transitionalIdentity(subject));
-    expect(resolved.role).toBe("provider_contact");
-    expect(resolved.openId).toBe(subject);
+    expect(resolved?.role).toBe("provider_contact");
+    expect(resolved?.openId).toBe(subject);
   });
 
-  it("does not invent an external role when canonical PostgreSQL has no assignment", async () => {
+  it("fails closed when canonical PostgreSQL has no assignment", async () => {
     const resolved = await resolvePostgresOperatingRole(transitionalIdentity(`postgres-role-resolver-${randomUUID()}`));
-    expect(resolved.role).toBe("auditor");
+    expect(resolved).toBeNull();
   });
 });

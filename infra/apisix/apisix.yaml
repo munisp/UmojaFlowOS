@@ -1,12 +1,8 @@
 routes:
   - id: control-plane-api
     uri: /api/*
-    upstream:
-      type: roundrobin
-      nodes:
-        control-plane: 1
-      scheme: http
-    plugins:
+    upstream: { type: roundrobin, nodes: { control-plane: 1 }, scheme: http }
+    plugins: &protected_api
       openid-connect:
         bearer_only: true
         discovery: ${KEYCLOAK_OIDC_DISCOVERY_URL}
@@ -14,63 +10,85 @@ routes:
         realm: umojaflowos
         ssl_verify: true
         timeout: 3000
+        use_jwks: true
+        required_scopes: [openid]
+      limit-req:
+        rate: 30
+        burst: 60
+        nodelay: true
+        key: remote_addr
+        rejected_code: 429
+      limit-conn:
+        conn: 20
+        burst: 10
+        default_conn_delay: 0.01
+        key: remote_addr
+        rejected_code: 429
+      limit-count:
+        count: 300
+        time_window: 60
+        rejected_code: 429
+        key_type: var
+        key: remote_addr
+        policy: redis
+        redis_host: ${UMOJA_REDIS_HOST}
+        redis_port: 6379
+        redis_password: $ENV://UMOJA_REDIS_PASSWORD
+        redis_ssl: true
+        redis_ssl_verify: true
+        allow_degradation: false
+      opa:
+        host: ${UMOJA_OPA_URL}
+        policy: umojaflowos/gateway
+        ssl_verify: true
+        timeout: 1500
+        with_route: true
+      request-id:
+        include_in_response: true
+        header_name: X-Request-ID
   - id: payment-engine-api
     uri: /payment-engine/*
-    upstream:
-      type: roundrobin
-      nodes:
-        payment-engine: 1
-      scheme: http
+    upstream: { type: roundrobin, nodes: { payment-engine: 1 }, scheme: http }
     plugins:
-      openid-connect:
-        bearer_only: true
-        discovery: ${KEYCLOAK_OIDC_DISCOVERY_URL}
-        client_id: umojaflowos-gateway
-        realm: umojaflowos
-        ssl_verify: true
-        timeout: 3000
+      <<: *protected_api
+      limit-req: { rate: 15, burst: 30, nodelay: true, key: remote_addr, rejected_code: 429 }
+      limit-count:
+        count: 90
+        time_window: 60
+        rejected_code: 429
+        key_type: var
+        key: remote_addr
+        policy: redis
+        redis_host: ${UMOJA_REDIS_HOST}
+        redis_port: 6379
+        redis_password: $ENV://UMOJA_REDIS_PASSWORD
+        redis_ssl: true
+        redis_ssl_verify: true
+        allow_degradation: false
   - id: risk-compliance-api
     uri: /risk-compliance/*
-    upstream:
-      type: roundrobin
-      nodes:
-        risk-compliance-core: 1
-      scheme: http
-    plugins:
-      openid-connect:
-        bearer_only: true
-        discovery: ${KEYCLOAK_OIDC_DISCOVERY_URL}
-        client_id: umojaflowos-gateway
-        realm: umojaflowos
-        ssl_verify: true
-        timeout: 3000
+    upstream: { type: roundrobin, nodes: { risk-compliance-core: 1 }, scheme: http }
+    plugins: *protected_api
   - id: ledger-gateway-api
     uri: /ledger-gateway/*
-    upstream:
-      type: roundrobin
-      nodes:
-        ledger-gateway: 1
-      scheme: http
+    upstream: { type: roundrobin, nodes: { ledger-gateway: 1 }, scheme: http }
     plugins:
-      openid-connect:
-        bearer_only: true
-        discovery: ${KEYCLOAK_OIDC_DISCOVERY_URL}
-        client_id: umojaflowos-gateway
-        realm: umojaflowos
-        ssl_verify: true
-        timeout: 3000
+      <<: *protected_api
+      limit-req: { rate: 15, burst: 30, nodelay: true, key: remote_addr, rejected_code: 429 }
+      limit-count:
+        count: 90
+        time_window: 60
+        rejected_code: 429
+        key_type: var
+        key: remote_addr
+        policy: redis
+        redis_host: ${UMOJA_REDIS_HOST}
+        redis_port: 6379
+        redis_password: $ENV://UMOJA_REDIS_PASSWORD
+        redis_ssl: true
+        redis_ssl_verify: true
+        allow_degradation: false
   - id: reporting-api
     uri: /reporting/*
-    upstream:
-      type: roundrobin
-      nodes:
-        reporting-analytics: 1
-      scheme: http
-    plugins:
-      openid-connect:
-        bearer_only: true
-        discovery: ${KEYCLOAK_OIDC_DISCOVERY_URL}
-        client_id: umojaflowos-gateway
-        realm: umojaflowos
-        ssl_verify: true
-        timeout: 3000
+    upstream: { type: roundrobin, nodes: { reporting-analytics: 1 }, scheme: http }
+    plugins: *protected_api

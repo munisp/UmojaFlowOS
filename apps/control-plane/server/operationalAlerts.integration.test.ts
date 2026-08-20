@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
+import { postgresTestConnectionConfig } from "./testPostgres";
 import {
   computePostgresFxSpread,
   evaluatePostgresComplianceFlags,
@@ -21,7 +22,7 @@ const actor = { subject: "regression-alert-actor", role: "treasury_operator" };
 const complianceActor = { subject: "regression-alert-compliance", role: "compliance_officer" };
 
 function pool() {
-  return new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL ?? "postgresql:///umojaflowos_dev" });
+  return new Pool(postgresTestConnectionConfig());
 }
 
 maybe("operational alert evaluation", () => {

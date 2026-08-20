@@ -36,6 +36,24 @@ export async function getPostgresReadiness() {
   }
 }
 
+export async function getPostgresDashboardSnapshot() {
+  const client = await getPool().connect();
+  try {
+    const [counterpartyCounts, integrationCounts, paymentCounts, caseCounts, reportCounts, latestEvents] = await Promise.all([
+      client.query<{ state: string; count: string }>("SELECT counterparty_type AS state, count(*)::text AS count FROM counterparties GROUP BY counterparty_type"),
+      client.query<{ state: string; count: string }>("SELECT state::text AS state, count(*)::text AS count FROM integration_connections GROUP BY state"),
+      client.query<{ state: string; count: string }>("SELECT status::text AS state, count(*)::text AS count FROM payment_orders GROUP BY status"),
+      client.query<{ state: string; count: string }>("SELECT status::text AS state, count(*)::text AS count FROM compliance_cases GROUP BY status"),
+      client.query<{ state: string; count: string }>("SELECT status::text AS state, count(*)::text AS count FROM regulatory_reports GROUP BY status"),
+      client.query<{ id: string; actorSubject: string; actorRole: string; action: string; objectType: string; objectId: string | null; metadata: unknown; occurredAt: Date }>(
+        `SELECT id, actor_subject AS "actorSubject", actor_role::text AS "actorRole", action, object_type AS "objectType", object_id AS "objectId", metadata, occurred_at AS "occurredAt"
+           FROM activity_events ORDER BY occurred_at DESC, id DESC LIMIT 12`,
+      ),
+    ]);
+    return { counterpartyCounts: counterpartyCounts.rows, integrationCounts: integrationCounts.rows, paymentCounts: paymentCounts.rows, caseCounts: caseCounts.rows, reportCounts: reportCounts.rows, latestEvents: latestEvents.rows };
+  } finally { client.release(); }
+}
+
 const canonicalTables = [
   "activity_events", "alert_policies", "beneficiaries", "compliance_cases", "corridor_policies", "counterparties", "counterparty_authorizations", "counterparty_onboardings", "counterparty_onboarding_gate_decisions", "counterparty_risk_assessments", "customers", "document_analysis_evidence", "document_analysis_jobs", "integration_connections", "kyc_documents", "kyc_document_upload_intents", "legal_entities", "liquidity_positions", "market_observations", "notification_deliveries", "payment_legs", "payment_orders", "policy_decisions", "rate_locks", "regulatory_deadlines", "regulatory_reports", "sar_str_filings", "scheduled_jobs", "treasury_buffer_policies", "treasury_rebalancing_recommendations", "treasury_stress_test_runs", "user_role_assignments", "verification_consents", "verification_reviewer_decisions",
 ] as const;
@@ -304,7 +322,7 @@ export async function finalizePostgresKycDocumentUpload(actor: Actor, uploadInte
     if (contentType !== intent.mimeType || bytes.byteLength !== Number(intent.sizeBytes)) throw new Error("uploaded KYC document metadata does not match its declared secure-upload intent");
     const actualSha256 = createHash("sha256").update(bytes).digest("hex");
     if (actualSha256 !== intent.contentSha256) throw new Error("uploaded KYC document checksum does not match its declared secure-upload intent");
-    const { rows } = await client.query<{ id: string; reviewStatus: string }>("INSERT INTO kyc_documents (customer_id, document_type, storage_key, storage_url, original_filename, mime_type, size_bytes, uploaded_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, review_status AS \"reviewStatus\"", [intent.customerId, intent.documentType, intent.storageKey, `/manus-storage/${intent.storageKey}`, intent.originalFilename, intent.mimeType, Number(intent.sizeBytes), actor.openId]);
+    const { rows } = await client.query<{ id: string; reviewStatus: string }>("INSERT INTO kyc_documents (customer_id, document_type, storage_key, storage_url, original_filename, mime_type, size_bytes, uploaded_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, review_status AS \"reviewStatus\"", [intent.customerId, intent.documentType, intent.storageKey, `/storage/${intent.storageKey}`, intent.originalFilename, intent.mimeType, Number(intent.sizeBytes), actor.openId]);
     const document = rows[0];
     if (!document) throw new Error("KYC document metadata insert did not return a record");
     await client.query("UPDATE kyc_document_upload_intents SET finalized_at=now() WHERE id=$1", [uploadIntentId]);

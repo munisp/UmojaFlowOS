@@ -12,7 +12,7 @@ function contextFor(role: "admin" | "compliance_officer" | "treasury_operator" |
       openId,
       name: `${role} operator`,
       email: `${openId}@example.com`,
-      loginMethod: "manus",
+      loginMethod: "keycloak",
       role,
       createdAt: new Date("2026-08-18T00:00:00.000Z"),
       updatedAt: new Date("2026-08-18T00:00:00.000Z"),
@@ -30,7 +30,7 @@ describe.skipIf(!runIntegration)("counterparty licence authorisation lifecycle",
 
   it("keeps licence lifecycle transitions administrator-only, persisted, and auditor-visible", async () => {
     const administrator = appRouter.createCaller(contextFor("admin", `registry-admin-${Date.now()}`));
-    const counterparty = await administrator.umoja.registry.createPostgres({
+    const counterparty = await administrator.postgres.createCounterparty({
       legalName: `Registry Regression PSP ${Date.now()}`,
       counterpartyType: "licensed_psp",
       jurisdiction: "Nigeria",
@@ -48,21 +48,21 @@ describe.skipIf(!runIntegration)("counterparty licence authorisation lifecycle",
 
     for (const role of ["auditor", "compliance_officer", "treasury_operator"] as const) {
       const caller = appRouter.createCaller(contextFor(role, `registry-${role}-${Date.now()}`));
-      await expect(caller.umoja.registry.transitionPostgresAuthorization({ authorizationId: authorization.id, status: "verified" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+      await expect(caller.postgres.transitionCounterpartyAuthorization({ authorizationId: authorization.id, status: "verified" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     }
 
-    const verified = await administrator.umoja.registry.transitionPostgresAuthorization({ authorizationId: authorization.id, status: "verified" });
+    const verified = await administrator.postgres.transitionCounterpartyAuthorization({ authorizationId: authorization.id, status: "verified" });
     expect(verified.status).toBe("verified");
 
     const visibleToAuditor = await appRouter
       .createCaller(contextFor("auditor", `registry-auditor-read-${Date.now()}`))
-      .umoja.registry.listPostgresAuthorizations();
+      .postgres.counterpartyAuthorizations();
     const persisted = visibleToAuditor.find(record => record.id === authorization.id);
     expect(persisted?.status).toBe("verified");
     expect(persisted?.verifiedAt).toBeTruthy();
     expect(persisted?.counterpartyId).toBe(counterparty.id);
 
-    await expect(administrator.umoja.registry.transitionPostgresAuthorization({ authorizationId: authorization.id, status: "verified" })).rejects.toThrow(/invalid counterparty authorization lifecycle transition/);
+    await expect(administrator.postgres.transitionCounterpartyAuthorization({ authorizationId: authorization.id, status: "verified" })).rejects.toThrow(/invalid counterparty authorization lifecycle transition/);
 
     const events = await listPostgresActivityEventsForObjects([authorization.id]);
     const transition = events.find(event => event.action === "counterparty_authorization.transitioned");
