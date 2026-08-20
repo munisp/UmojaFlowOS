@@ -12,6 +12,22 @@ jobs:
   validate:
     name: Contracts and services
     runs-on: ubuntu-latest
+    env:
+      POSTGRES_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/umojaflowos_dev
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: umojaflowos_dev
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d umojaflowos_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -35,6 +51,11 @@ jobs:
           cache-dependency-path: apps/control-plane/pnpm-lock.yaml
       - name: Enable pinned package manager
         run: corepack enable
+      - name: Apply canonical PostgreSQL schema
+        run: |
+          for migration in database/postgresql/[0-9]*.sql; do
+            psql "$POSTGRES_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
       - name: Run contract and service checks
         run: make check
 
