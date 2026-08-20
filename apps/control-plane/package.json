@@ -7,7 +7,7 @@
     "dev": "NODE_ENV=development tsx watch server/_core/index.ts",
     "build": "vite build && esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
-    "check": "pnpm postgres:boundary && tsc --noEmit",
+    "check": "pnpm postgres:boundary && node ../../infra/security-stack/security-preflight.test.mjs && tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
     "test:postgres": "POSTGRES_INTEGRATION_TEST=1 vitest run server/postgres.integration.test.ts",
