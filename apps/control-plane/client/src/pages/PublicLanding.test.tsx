@@ -17,6 +17,8 @@ describe("PublicLanding", () => {
     expect(screen.getByRole("heading", { name: /partner readiness begins with evidence/i })).toBeTruthy();
     expect(screen.getByText(/a request is not an activation/i)).toBeTruthy();
     expect(screen.getByRole("heading", { name: /a clear next step for every role/i })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /your role should define what you can see and do/i })).toBeTruthy();
+    expect(screen.getByText(/high-impact actions stay closed/i)).toBeTruthy();
   });
 
   it("offers pre-auth onboarding and sign-in paths", () => {
