@@ -43,6 +43,7 @@ GRANT INSERT ON TABLE
   vasp_regulatory_evidence_items,
   vasp_travel_rule_evidence_items,
   vasp_travel_rule_route_assessments,
+  vasp_offshore_counterparty_assessments,
   user_role_assignments,
   external_stakeholder_evidence
 TO :"app_role_ident";
@@ -71,6 +72,8 @@ GRANT INSERT, UPDATE ON TABLE
   cbn_sandbox_dossiers,
   cbn_sandbox_test_plans,
   vasp_regulatory_profiles,
+  vasp_offshore_counterparty_profiles,
+  vasp_offshore_counterparty_evidence_items,
   payment_orders,
   payment_legs,
   rate_locks,
