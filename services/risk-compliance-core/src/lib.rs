@@ -47,6 +47,68 @@ pub struct PolicyResult {
     pub reason_codes: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ControlAssuranceRiskInput {
+    pub control_coverage_present: bool,
+    pub separation_of_duties_clear: bool,
+    pub evidence_fresh: bool,
+    pub counterparty_route_ready: bool,
+    pub reconciliation_reference_present: bool,
+    pub stablecoin_policy_covered: bool,
+    pub adapter_certification_state: String,
+    pub audit_packet_reference_present: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ControlAssuranceRiskDecision {
+    pub outcome: String,
+    pub reason_codes: Vec<String>,
+    pub provider_activation_initiated: bool,
+    pub external_execution_initiated: bool,
+    pub audit_packet_generated: bool,
+}
+
+pub fn assess_control_assurance(input: ControlAssuranceRiskInput) -> ControlAssuranceRiskDecision {
+    let mut reasons = Vec::new();
+    if !input.control_coverage_present {
+        reasons.push("control_coverage_missing".to_owned());
+    }
+    if !input.separation_of_duties_clear {
+        reasons.push("separation_of_duties_conflict".to_owned());
+    }
+    if !input.evidence_fresh {
+        reasons.push("evidence_freshness_missing".to_owned());
+    }
+    if !input.counterparty_route_ready {
+        reasons.push("counterparty_route_readiness_missing".to_owned());
+    }
+    if !input.reconciliation_reference_present {
+        reasons.push("reconciliation_reference_missing".to_owned());
+    }
+    if !input.stablecoin_policy_covered {
+        reasons.push("stablecoin_policy_coverage_missing".to_owned());
+    }
+    if input.adapter_certification_state != "ready_for_controlled_test" {
+        reasons.push("adapter_certification_not_ready".to_owned());
+    }
+    if !input.audit_packet_reference_present {
+        reasons.push("audit_packet_reference_missing".to_owned());
+    }
+    reasons.sort();
+
+    ControlAssuranceRiskDecision {
+        outcome: if reasons.is_empty() {
+            "assurance_ready_for_independent_review".to_owned()
+        } else {
+            "blocked".to_owned()
+        },
+        reason_codes: reasons,
+        provider_activation_initiated: false,
+        external_execution_initiated: false,
+        audit_packet_generated: false,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum EventStreamState {
