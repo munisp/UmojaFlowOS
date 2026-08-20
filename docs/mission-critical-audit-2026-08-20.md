@@ -8,13 +8,13 @@
 | Domain | Score | Evidence-based posture |
 |---|---:|---|
 | Identity and privileged access | 82/100 | Keycloak JWT issuer/audience/signature validation, role ambiguity rejection, and new MFA-claim enforcement are tested; production Keycloak policy deployment remains external. |
-| Payment and flow-of-funds control | 76/100 | Provider execution remains fail-closed and exact PostgreSQL numeric target derivation is implemented; payment-row immutability at the database privilege layer remains an open high-priority item. |
+| Payment and flow-of-funds control | 86/100 | Provider execution remains fail-closed, target derivation uses exact PostgreSQL numeric arithmetic, and database triggers protect payment-order and payment-leg economic identity. |
 | Ledger and reconciliation | 78/100 | TigerBeetle activation is gated; ledger validation/reconciliation rejects malformed, negative, imbalanced, and unreconciled records. Live TigerBeetle cluster evidence remains external. |
-| Database integrity | 74/100 | Fresh PostgreSQL migration sequence and schema gate now pass; broad application-role updates to payment lifecycle rows remain a material residual risk. |
+| Database integrity | 84/100 | Fresh PostgreSQL migration sequence and schema gate now pass; payment economic identity is database-immutable while governed lifecycle fields remain operational. |
 | Edge and denial-of-service controls | 75/100 | APISIX validator now requires OPA, request/connection controls, and Redis fail-closed quotas; open-appsec prevention attachment remains an external deployment gate. |
 | CI and supply-chain assurance | 86/100 | Go toolchain aligns with payment-engine requirements, PostgreSQL schema validation is mandatory, all migrations are restored, and canonical CI run `32429260429` passed. |
 
-**Current technical assurance score: 79/100.** This is appropriate for a hardened pre-production control plane, **not** for unrestricted live flow-of-funds activation.
+**Current technical assurance score: 84/100.** This is appropriate for a hardened pre-production control plane, **not** for unrestricted live flow-of-funds activation.
 
 ## Confirmed Findings and Remediation
 
@@ -28,6 +28,6 @@
 
 ## Residual Risks and Required Gates
 
-The remaining material risk is **database-level payment identity immutability**: the application database role can still broadly update payment lifecycle records. Before any provider, stablecoin, payment, settlement, or TigerBeetle activation, constrain updates to governed state-transition fields and enforce append-only transition records at the PostgreSQL privilege/procedure boundary.
+The remaining material risks are **deployment proof and external authority**, not an open economic-identity rewrite path: payment-order and payment-leg economic identity fields are now protected by PostgreSQL triggers. Before any provider, stablecoin, payment, settlement, or TigerBeetle activation, independently validate the deployed database role, append-only transition records, provider licensing, counterparty connectivity, and ledger-cluster controls.
 
 Open-appsec prevention, Caddy/APISIX/OPA/Redis/Keycloak deployment, non-owner PostgreSQL application-role testing, external provider credentials, TigerBeetle cluster activation, sanctioned screening, custody, Travel Rule transmission, and reconciled liquidity evidence remain external activation gates. No active code path in this audit authorizes payment, FX, custody, settlement, stablecoin movement, provider activation, or regulatory submission.
