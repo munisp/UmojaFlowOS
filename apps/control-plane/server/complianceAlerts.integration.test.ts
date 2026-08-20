@@ -22,9 +22,7 @@ const RUN = process.env.POSTGRES_INTEGRATION_TEST === "1";
 const suite = RUN ? describe : describe.skip;
 
 const pool = new Pool({
-  host: "/var/run/postgresql",
-  database: "umojaflowos_dev",
-  user: "ubuntu",
+  connectionString: process.env.POSTGRES_DATABASE_URL ?? "postgresql:///umojaflowos_dev",
   max: 3,
 });
 

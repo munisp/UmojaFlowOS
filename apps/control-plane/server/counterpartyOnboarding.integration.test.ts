@@ -17,8 +17,8 @@ const treasury = { openId: `onboarding-treasury-${crypto.randomUUID()}`, role: "
 
 function purgeFixtureRows() {
   execFileSync(
-    "sudo",
-    ["-u", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-q", "-d", "umojaflowos_dev", "-f", "-"],
+    "psql",
+    ["-v", "ON_ERROR_STOP=1", "-q", process.env.POSTGRES_DATABASE_URL ?? "postgresql:///umojaflowos_dev", "-f", "-"],
     { input: readFileSync(new URL("../../../database/postgresql/purge_regression_fixtures.sql", import.meta.url)) },
   );
 }

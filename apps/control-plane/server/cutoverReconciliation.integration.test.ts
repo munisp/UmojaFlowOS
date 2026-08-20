@@ -43,7 +43,7 @@ async function runDryRun(extraEnv = {}) {
 }
 
 async function countRows(table) {
-  const client = new pg.Client({ host: "/var/run/postgresql", database: "umojaflowos_dev", user: process.env.POSTGRES_LOCAL_USER ?? "ubuntu" });
+  const client = new pg.Client({ connectionString: process.env.POSTGRES_DATABASE_URL ?? "postgresql:///umojaflowos_dev" });
   await client.connect();
   try {
     const { rows } = await client.query(`SELECT count(*)::int AS count FROM ${table}`);

@@ -21,11 +21,7 @@ const actor = { subject: "regression-alert-actor", role: "treasury_operator" };
 const complianceActor = { subject: "regression-alert-compliance", role: "compliance_officer" };
 
 function pool() {
-  return new Pool({
-    host: "/var/run/postgresql",
-    database: "umojaflowos_dev",
-    user: process.env.POSTGRES_LOCAL_USER ?? "ubuntu",
-  });
+  return new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL ?? "postgresql:///umojaflowos_dev" });
 }
 
 maybe("operational alert evaluation", () => {

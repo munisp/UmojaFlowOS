@@ -114,11 +114,7 @@ describe("provider activation gate", () => {
     // the base migrations live in the canonical monorepo while later ones live
     // here; only the database holds the whole picture.
     const { Client } = await import("pg");
-    const client = new Client({
-      host: "/var/run/postgresql",
-      database: "umojaflowos_dev",
-      user: process.env.POSTGRES_LOCAL_USER ?? "ubuntu",
-    });
+    const client = new Client({ connectionString: process.env.POSTGRES_DATABASE_URL ?? "postgresql:///umojaflowos_dev" });
     await client.connect();
     try {
       const { rows } = await client.query<{ column_name: string }>(
