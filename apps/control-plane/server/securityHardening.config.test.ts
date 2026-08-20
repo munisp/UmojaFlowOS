@@ -34,4 +34,18 @@ describe("defense-in-depth deployment configuration", () => {
     expect(policy).toContain('default result := {"allow": false');
     expect(policy).toContain("has_privileged_role");
   });
+
+  it("keeps the deployable security stack cloud-agnostic, private behind Caddy, PostgreSQL-only, and secret-reference based", () => {
+    const composition = read("infra/security-stack/compose.yaml");
+    expect(composition).toContain("image: caddy:");
+    expect(composition).toContain("image: apache/apisix:");
+    expect(composition).toContain("image: openpolicyagent/opa:");
+    expect(composition).toContain("image: quay.io/keycloak/keycloak:");
+    expect(composition).toContain("image: postgres:16");
+    expect(composition).toContain("internal: true");
+    expect(composition).toContain("UMOJA_POSTGRES_URL: postgresql://");
+    expect(composition).toContain("managed secret injector");
+    expect(composition).not.toContain("mysql");
+    expect(composition).not.toContain("manus");
+  });
 });

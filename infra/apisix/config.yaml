@@ -1,0 +1,15 @@
+apisix:
+  node_listen: 9080
+  enable_admin: false
+  enable_admin_cors: false
+deployment:
+  role: data_plane
+  role_data_plane:
+    config_provider: yaml
+nginx_config:
+  error_log_level: warn
+  http:
+    keepalive_timeout: 60s
+    client_header_timeout: 10s
+    client_body_timeout: 10s
+    send_timeout: 15s

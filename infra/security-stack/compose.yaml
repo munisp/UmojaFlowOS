@@ -1,0 +1,222 @@
+name: umojaflowos-security-stack
+
+services:
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    depends_on:
+      apisix:
+        condition: service_healthy
+      control-plane:
+        condition: service_healthy
+    environment:
+      UMOJA_PUBLIC_HOST: ${UMOJA_PUBLIC_HOST:?set a real public hostname}
+      UMOJA_TLS_CONTACT_EMAIL: ${UMOJA_TLS_CONTACT_EMAIL:?set the certificate contact email}
+      UMOJA_APISIX_UPSTREAM: http://apisix:9080
+      UMOJA_CONTROL_PLANE_UPSTREAM: http://control-plane:3000
+    ports:
+      - "${UMOJA_HTTPS_PORT:-443}:443"
+    volumes:
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - edge
+      - protected
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  apisix:
+    image: apache/apisix:3.10.0-debian
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    environment:
+      UMOJA_REDIS_HOST: redis
+      UMOJA_REDIS_PASSWORD: ${UMOJA_REDIS_PASSWORD:?supply through a managed secret injector}
+      KEYCLOAK_OIDC_DISCOVERY_URL: ${KEYCLOAK_OIDC_DISCOVERY_URL:?set the external HTTPS discovery URL}
+      UMOJA_OPA_URL: https://opa:8181
+    expose:
+      - "9080"
+    volumes:
+      - ../apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro
+      - ../apisix/apisix.yaml:/usr/local/apisix/conf/apisix.yaml:ro
+    networks:
+      - protected
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /usr/local/apisix/logs
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9080/healthz || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  opa:
+    image: openpolicyagent/opa:0.70.0-static
+    restart: unless-stopped
+    command: ["run", "--server", "--addr=0.0.0.0:8181", "/policies"]
+    expose:
+      - "8181"
+    volumes:
+      - ../opa:/policies:ro
+    networks:
+      - protected
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    healthcheck:
+      test: ["CMD", "/opa", "eval", "--format=raw", "1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7.4.2-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--protected-mode", "yes", "--requirepass", "${UMOJA_REDIS_PASSWORD:?supply through a managed secret injector}"]
+    expose:
+      - "6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - protected
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$UMOJA_REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:16.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${UMOJA_POSTGRES_DATABASE:?set the PostgreSQL database name}
+      POSTGRES_USER: ${UMOJA_POSTGRES_OWNER:?supply the PostgreSQL owner through a managed secret injector}
+      POSTGRES_PASSWORD: ${UMOJA_POSTGRES_OWNER_PASSWORD:?supply through a managed secret injector}
+    expose:
+      - "5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - protected
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.0
+    restart: unless-stopped
+    command: ["start", "--optimized", "--import-realm"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${UMOJA_POSTGRES_DATABASE:?set the PostgreSQL database name}
+      KC_DB_USERNAME: ${UMOJA_POSTGRES_OWNER:?supply the PostgreSQL owner through a managed secret injector}
+      KC_DB_PASSWORD: ${UMOJA_POSTGRES_OWNER_PASSWORD:?supply through a managed secret injector}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${UMOJA_KEYCLOAK_BOOTSTRAP_ADMIN:?supply through a managed secret injector}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${UMOJA_KEYCLOAK_BOOTSTRAP_PASSWORD:?supply through a managed secret injector}
+      KC_HOSTNAME: ${UMOJA_PUBLIC_HOST:?set a real public hostname}
+      KC_HOSTNAME_STRICT: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+    expose:
+      - "8080"
+    volumes:
+      - ../keycloak/realm-umojaflowos.json:/opt/keycloak/data/import/realm-umojaflowos.json:ro
+    networks:
+      - protected
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 15s
+      timeout: 3s
+      retries: 8
+
+  control-plane:
+    image: ${UMOJA_CONTROL_PLANE_IMAGE:?provide an immutable control-plane image reference}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    environment:
+      UMOJA_POSTGRES_URL: postgresql://${UMOJA_APP_DB_USER:?supply through a managed secret injector}:${UMOJA_APP_DB_PASSWORD:?supply through a managed secret injector}@postgres:5432/${UMOJA_POSTGRES_DATABASE:?set the PostgreSQL database name}
+      UMOJA_OIDC_ISSUER: ${UMOJA_OIDC_ISSUER:?set the external HTTPS issuer}
+      UMOJA_OIDC_CLIENT_ID: ${UMOJA_OIDC_CLIENT_ID:?set the Keycloak client identifier}
+      UMOJA_OIDC_CLIENT_SECRET: ${UMOJA_OIDC_CLIENT_SECRET:?supply through a managed secret injector}
+      UMOJA_SESSION_SECRET: ${UMOJA_SESSION_SECRET:?supply through a managed secret injector}
+      UMOJA_STORAGE_ENDPOINT: ${UMOJA_STORAGE_ENDPOINT:?set the private S3-compatible endpoint}
+      UMOJA_STORAGE_BUCKET: ${UMOJA_STORAGE_BUCKET:?set the approved evidence bucket}
+      UMOJA_STORAGE_ACCESS_KEY: ${UMOJA_STORAGE_ACCESS_KEY:?supply through a managed secret injector}
+      UMOJA_STORAGE_SECRET_KEY: ${UMOJA_STORAGE_SECRET_KEY:?supply through a managed secret injector}
+    expose:
+      - "3000"
+    networks:
+      - protected
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/ || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+networks:
+  edge:
+    driver: bridge
+  protected:
+    driver: bridge
+    internal: true
+
+volumes:
+  caddy-data:
+  caddy-config:
+  postgres-data:
+  redis-data:
