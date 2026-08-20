@@ -40,6 +40,9 @@ GRANT INSERT ON TABLE
   cbn_sandbox_incidents,
   cbn_sandbox_reporting_packs,
   cbn_sandbox_evidence_assessments,
+  vasp_regulatory_evidence_items,
+  vasp_travel_rule_evidence_items,
+  vasp_travel_rule_route_assessments,
   user_role_assignments,
   external_stakeholder_evidence
 TO :"app_role_ident";
@@ -67,6 +70,7 @@ GRANT INSERT, UPDATE ON TABLE
   control_evidence_outbox,
   cbn_sandbox_dossiers,
   cbn_sandbox_test_plans,
+  vasp_regulatory_profiles,
   payment_orders,
   payment_legs,
   rate_locks,

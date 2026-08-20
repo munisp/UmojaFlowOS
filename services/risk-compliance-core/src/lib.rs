@@ -68,6 +68,75 @@ pub struct ControlAssuranceRiskDecision {
     pub audit_packet_generated: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VaspReadinessRiskInput {
+    pub supervisory_path_evidence_present: bool,
+    pub corporate_evidence_present: bool,
+    pub principal_officer_evidence_present: bool,
+    pub nfiu_evidence_present: bool,
+    pub aml_programme_present: bool,
+    pub cyber_controls_present: bool,
+    pub incident_plan_present: bool,
+    pub travel_rule_data_complete: bool,
+    pub counterparty_evidence_present: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VaspReadinessRiskDecision {
+    pub outcome: String,
+    pub reason_codes: Vec<String>,
+    pub external_submission_initiated: bool,
+    pub travel_rule_transmission: bool,
+    pub provider_activation_initiated: bool,
+    pub custody_initiated: bool,
+    pub value_movement_initiated: bool,
+}
+
+pub fn assess_vasp_readiness(input: VaspReadinessRiskInput) -> VaspReadinessRiskDecision {
+    let mut reasons = Vec::new();
+    if !input.supervisory_path_evidence_present {
+        reasons.push("SUPERVISORY_PATH_EVIDENCE_MISSING".to_owned());
+    }
+    if !input.corporate_evidence_present {
+        reasons.push("CORPORATE_EVIDENCE_MISSING".to_owned());
+    }
+    if !input.principal_officer_evidence_present {
+        reasons.push("PRINCIPAL_OFFICER_EVIDENCE_MISSING".to_owned());
+    }
+    if !input.nfiu_evidence_present {
+        reasons.push("NFIU_EVIDENCE_MISSING".to_owned());
+    }
+    if !input.aml_programme_present {
+        reasons.push("AML_CFT_CPF_PROGRAMME_MISSING".to_owned());
+    }
+    if !input.cyber_controls_present {
+        reasons.push("CYBER_CONTROLS_MISSING".to_owned());
+    }
+    if !input.incident_plan_present {
+        reasons.push("INCIDENT_REPORTING_PLAN_MISSING".to_owned());
+    }
+    if !input.travel_rule_data_complete {
+        reasons.push("TRAVEL_RULE_DATA_MISSING".to_owned());
+    }
+    if !input.counterparty_evidence_present {
+        reasons.push("COUNTERPARTY_EVIDENCE_MISSING".to_owned());
+    }
+    reasons.sort();
+    VaspReadinessRiskDecision {
+        outcome: if reasons.is_empty() {
+            "INTERNAL_RECORD_COMPLETE_PENDING_EXTERNAL_REVIEW".to_owned()
+        } else {
+            "INTERNAL_RECORD_INCOMPLETE".to_owned()
+        },
+        reason_codes: reasons,
+        external_submission_initiated: false,
+        travel_rule_transmission: false,
+        provider_activation_initiated: false,
+        custody_initiated: false,
+        value_movement_initiated: false,
+    }
+}
+
 pub fn assess_control_assurance(input: ControlAssuranceRiskInput) -> ControlAssuranceRiskDecision {
     let mut reasons = Vec::new();
     if !input.control_coverage_present {

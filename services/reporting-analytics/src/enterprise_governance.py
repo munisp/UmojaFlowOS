@@ -40,3 +40,22 @@ def summarize_control_assurance(records: list[dict]) -> dict:
         "audit_packet_generated": False,
         "authoritative_for_execution": False,
     }
+
+
+def summarize_vasp_readiness(records: list[dict]) -> dict:
+    """Summarize supplied VASP readiness records without regulatory or execution authority."""
+    category_counts = Counter(str(record.get("category", "unavailable")) for record in records)
+    route_counts = Counter(str(record.get("route_state", "unavailable")) for record in records)
+    missing = sorted(str(record["missing_category"]) for record in records if record.get("missing_category"))
+    return {
+        "record_count": len(records),
+        "evidence_category_counts": dict(sorted(category_counts.items())),
+        "route_state_counts": dict(sorted(route_counts.items())),
+        "missing_categories": missing,
+        "external_submission_initiated": False,
+        "travel_rule_transmission": False,
+        "provider_activation_initiated": False,
+        "custody_initiated": False,
+        "value_movement_initiated": False,
+        "authoritative_for_execution": False,
+    }

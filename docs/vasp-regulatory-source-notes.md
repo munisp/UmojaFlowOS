@@ -1,0 +1,21 @@
+# VASP Regulatory Source Notes
+
+_Research captured 20 August 2026. This is implementation planning material, not a licence opinion or a statement that UmojaFlowOS or any user is approved by a regulator._
+
+## Primary-source findings
+
+| Source | Confirmed point relevant to UmojaFlowOS | Product implication |
+|---|---|---|
+| [CBN reforms and initiatives](https://www.cbn.gov.ng/AboutCBN/Reforms.html) | CBN records that it issued VASP bank-account operating guidance on 22 December 2023 and frames the objective in terms of systemic-risk and financial-stability safeguards. It also records strengthened AML/CFT/cybersecurity supervision and early-warning systems. | A platform can give regulated institutions evidence-led readiness, risk, and audit controls. It must not claim to open accounts, clear payments, settle value, or confer CBN approval. |
+| [SEC ARIP VASP onboarding checklist](https://home.sec.gov.ng/about/resources/checklists/accelerated-regulatory-incubation-program-arip-checklist-for-vasp-onboarding/) | ARIP covers local or foreign VASPs serving Nigeria and identifies corporate documentation, principal officers, NFIU registration evidence, risk controls, incident/customer-complaint reporting, SEC inspection rights, AML/CFT/CPF including Travel Rule, and transition/exit planning. | Provide a dossier and evidence-control layer, an incident/complaint evidence model, a Travel Rule readiness assessment, and an exit/transition register—not an automated application submission or a licence assertion. |
+| [SEC rules and regulations](https://home.sec.gov.ng/our-mandate/regulation/rules-and-regulations/) | SEC identifies its 2022 digital-assets rules as covering issuance, offering platforms, custodians, VASPs, and exchanges. | Design controls must distinguish orchestration from exchange, custody, issuance, brokerage, and investment-advice authority. |
+| [SEC FinPort RI and ARIP](https://sec.gov.ng/fintech-and-innovation-hub-finport/finport-programs-ri-and-arip/) | ARIP describes conditional approval-in-principle, operational-readiness checks, reporting, controls and restrictions, and a transition to full registration. | Treat a supervisory pathway as evidence-backed readiness, not as an active operating licence; make approval scope, restrictions, reports, and exit condition first-class records. |
+| [FATF virtual assets](https://www.fatf-gafi.org/en/topics/virtual-assets.html) | FATF says VASPs need preventive measures comparable to financial institutions, including CDD, record keeping, suspicious transaction reporting, and secure originator/beneficiary-information transfer. | Preserve counterparties, beneficiary/originator evidence, monitoring outcomes, review decisions, and escalation references; never transmit Travel Rule data without a licensed, validated counterparty route. |
+| [FATF 2025 targeted update](https://www.fatf-gafi.org/en/publications/Fatfrecommendations/targeted-update-virtual-assets-vasps-2025.html) | FATF highlights gaps in licensing/registration, offshore-VASP risk, and Travel Rule implementation; it notes heightened stablecoin illicit-finance risk. | Make VASP jurisdiction, licence scope, offshore risk, stablecoin route eligibility, and Travel Rule interoperability auditable and fail closed when evidence is incomplete. |
+
+## Guardrails for implementation
+
+1. **No licence claim.** A record of an SEC/CBN/other-regulator reference is evidence awaiting human verification; it does not establish eligibility, approval, bank access, exchange access, custody authority, or regulated status.
+2. **No automatic external action.** The platform may assess readiness and preserve audit evidence. It must not originate payment, FX, stablecoin transfer, custody, exchange order, regulatory filing, or Travel Rule transmission without separately verified counterparty and approval controls.
+3. **USDC and USDT only.** Stablecoin controls retain the platform policy that only USDC and USDT may be assessed; neither asset is treated as an approved payment instrument or a value guarantee.
+4. **PostgreSQL remains canonical.** All VASP readiness and evidence records belong to canonical PostgreSQL; MySQL/TiDB remains excluded from deployable runtime.
