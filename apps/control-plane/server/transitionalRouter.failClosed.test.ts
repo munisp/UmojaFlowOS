@@ -53,4 +53,9 @@ describe("transitional router fail-closed boundary", () => {
     expect(source).toMatch(/\.query\(/);
     expect(source).toMatch(/db\.list\w+/);
   });
+
+  it("refuses provider-contact and CBN-liaison authority in the frozen transitional path", () => {
+    expect(source).toMatch(/legacyOperatingRoles\.has\(user\.role\)/);
+    expect(source).toMatch(/External stakeholder roles have no authority in the frozen transitional data path/);
+  });
 });
