@@ -8,7 +8,9 @@ DECLARE
     'payment_legs', 'payment_orders', 'policy_decisions', 'rate_locks',
     'postgres_cutover_runs', 'postgres_cutover_table_reconciliations', 'regulatory_deadlines', 'regulatory_reports', 'sar_str_filings',
     'scheduled_jobs', 'user_role_assignments', 'operator_role_assignments',
-    'external_stakeholder_assignments', 'external_stakeholder_evidence'
+    'external_stakeholder_assignments', 'external_stakeholder_evidence',
+    'vasp_regulatory_profiles', 'vasp_regulatory_evidence_items', 'vasp_travel_rule_evidence_items', 'vasp_travel_rule_route_assessments',
+    'vasp_offshore_counterparty_profiles', 'vasp_offshore_counterparty_evidence_items', 'vasp_offshore_counterparty_assessments'
   ];
 BEGIN
   IF (SELECT count(*) FROM pg_tables WHERE schemaname = 'public' AND tablename = ANY(expected_tables)) <> array_length(expected_tables, 1) THEN
