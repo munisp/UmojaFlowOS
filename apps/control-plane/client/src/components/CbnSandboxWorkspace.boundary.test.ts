@@ -7,7 +7,7 @@ const navigation = readFileSync(new URL("./DashboardLayout.tsx", import.meta.url
 
 describe("CBN sandbox console workspace boundary", () => {
   it("makes the dedicated workspace reachable from navigation and routing", () => {
-    expect(navigation).toContain('{ icon: ClipboardCheck, label: "CBN Sandbox", path: "/sandbox" }');
+    expect(navigation).toContain('{ icon: ClipboardCheck, label: "CBN Sandbox", path: "/console/sandbox" }');
     expect(home).toContain('module === "sandbox" && <CbnSandboxWorkspace');
   });
 
