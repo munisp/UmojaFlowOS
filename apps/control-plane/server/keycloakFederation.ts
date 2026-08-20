@@ -66,6 +66,12 @@ function selectedRole(payload: JWTPayload): PlatformRole | null {
   return selected.length === 1 ? selected[0] : null;
 }
 
+function mfaAssured(payload: JWTPayload): boolean {
+  const amr = Array.isArray(payload.amr) ? payload.amr.filter((value): value is string => typeof value === "string") : [];
+  const acr = typeof payload.acr === "string" ? payload.acr.toLowerCase() : "";
+  return amr.some(value => ["otp", "mfa", "2fa"].includes(value.toLowerCase())) || ["mfa", "2fa", "loa2", "loa3"].some(value => acr.includes(value));
+}
+
 function federatedOpenId(subject: string): string {
   // The local identity column is capped at 64 characters. A fixed namespaced
   // hash is stable, fits the column, and avoids persisting the provider's raw
@@ -85,7 +91,7 @@ export async function resolveKeycloakUser(request: Request): Promise<PlatformIde
     });
     const role = selectedRole(payload);
     const subject = typeof payload.sub === "string" && payload.sub.trim() ? payload.sub : null;
-    if (!role || !subject) return null;
+    if (!role || !subject || !mfaAssured(payload)) return null;
     const now = new Date();
     return {
       id: 0,

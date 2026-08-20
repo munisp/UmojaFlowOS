@@ -232,8 +232,7 @@ export async function createPostgresPaymentOrder(
     sourceAmount: string;
   },
 ) {
-  const sourceAmount = Number(input.sourceAmount);
-  if (!Number.isFinite(sourceAmount) || sourceAmount <= 0) {
+  if (!/^\d+(\.\d{1,12})?$/.test(input.sourceAmount) || input.sourceAmount === "0") {
     throw new Error("A positive source amount is required");
   }
 
@@ -278,9 +277,9 @@ export async function createPostgresPaymentOrder(
       throw new Error("Beneficiary does not belong to the specified customer");
     }
 
-    const rate = Number(lock.lockedRate);
-    if (!Number.isFinite(rate) || rate <= 0) throw new Error("Locked rate is unusable; payment drafting fails closed");
-    const targetAmount = (sourceAmount * rate).toFixed(8);
+    const derived = await client.query<{ targetAmount: string }>("SELECT round($1::numeric * $2::numeric, 8)::text AS \"targetAmount\"", [input.sourceAmount, lock.lockedRate]);
+    const targetAmount = derived.rows[0]?.targetAmount;
+    if (!targetAmount || targetAmount === "0.00000000") throw new Error("Locked rate is unusable; payment drafting fails closed");
 
     const inserted = await client.query<{ id: string; status: string; targetAmount: string }>(
       `INSERT INTO payment_orders

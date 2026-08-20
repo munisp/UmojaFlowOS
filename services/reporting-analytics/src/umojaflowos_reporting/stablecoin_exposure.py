@@ -131,6 +131,10 @@ def build_stablecoin_exposure_report(
     buckets: dict[tuple[str, str], list[StablecoinPosition]] = {}
     for position in positions:
         _validate_position(position)
+        if position.reconciled_at > as_of:
+            raise ExposureReportError(
+                f"position {position.account_reference} has a reconciliation timestamp after the report cutoff"
+            )
         if as_of - position.reconciled_at > max_position_age:
             raise ExposureReportError(
                 f"position {position.account_reference} was reconciled outside the permitted window"
@@ -146,6 +150,8 @@ def build_stablecoin_exposure_report(
         if observation is None:
             raise ExposureReportError(f"no peg observation supplied for {asset}")
         _validate_observation(observation)
+        if observation.observed_at > as_of:
+            raise ExposureReportError(f"peg observation for {asset} is after the report cutoff")
         if as_of - observation.observed_at > max_observation_age:
             raise ExposureReportError(f"peg observation for {asset} is stale")
 

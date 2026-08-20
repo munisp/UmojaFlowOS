@@ -93,6 +93,13 @@ def test_fails_closed_on_a_position_reconciled_outside_the_window():
         build([position(minutes_old=60 * 30)], {"USDC": observation("USDC")})
 
 
+def test_fails_closed_on_future_dated_position_or_peg_observation():
+    with pytest.raises(ExposureReportError, match="after the report cutoff"):
+        build([position(minutes_old=-1)], {"USDC": observation("USDC")})
+    with pytest.raises(ExposureReportError, match="after the report cutoff"):
+        build([position()], {"USDC": observation("USDC", minutes_old=-1)})
+
+
 def test_fails_closed_when_no_positions_are_supplied():
     with pytest.raises(ExposureReportError, match="no reconciled stablecoin positions"):
         build([], {"USDC": observation("USDC")})

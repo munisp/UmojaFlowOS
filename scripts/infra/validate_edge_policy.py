@@ -44,6 +44,10 @@ def validate(raw: object) -> list[str]:
         upstream = route.get("upstream")
         plugins = route.get("plugins")
         oidc = plugins.get("openid-connect") if isinstance(plugins, dict) else None
+        opa = plugins.get("opa") if isinstance(plugins, dict) else None
+        limit_req = plugins.get("limit-req") if isinstance(plugins, dict) else None
+        limit_conn = plugins.get("limit-conn") if isinstance(plugins, dict) else None
+        limit_count = plugins.get("limit-count") if isinstance(plugins, dict) else None
         if not isinstance(upstream, dict) or upstream.get("scheme") != "http" or not upstream.get("nodes"):
             failures.append(f"{route_id}: must define a private upstream")
         if not isinstance(oidc, dict):
@@ -59,6 +63,14 @@ def validate(raw: object) -> list[str]:
             failures.append(f"{route_id}: must use the configured Keycloak discovery URL")
         if oidc.get("client_id") != "umojaflowos-gateway" or oidc.get("realm") != "umojaflowos":
             failures.append(f"{route_id}: must use the UmojaFlowOS gateway client and realm")
+        if not isinstance(opa, dict) or opa.get("policy") != "umojaflowos/gateway" or opa.get("ssl_verify") is not True:
+            failures.append(f"{route_id}: missing fail-closed OPA policy guard")
+        if not isinstance(limit_req, dict) or limit_req.get("rejected_code") != 429:
+            failures.append(f"{route_id}: missing request-rate limit")
+        if not isinstance(limit_conn, dict) or limit_conn.get("rejected_code") != 429:
+            failures.append(f"{route_id}: missing connection limit")
+        if not isinstance(limit_count, dict) or limit_count.get("policy") != "redis" or limit_count.get("redis_ssl_verify") is not True or limit_count.get("allow_degradation") is not False:
+            failures.append(f"{route_id}: missing Redis-backed fail-closed quota")
     if found != EXPECTED_ROUTES:
         failures.append(f"APISIX service routes differ from the approved set: {found!r}")
     return failures

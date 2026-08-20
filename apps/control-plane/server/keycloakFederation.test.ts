@@ -69,6 +69,7 @@ describe("Keycloak federation", () => {
       const token = await sign({
         name: "Amina Compliance",
         email: "amina@example.test",
+        amr: ["pwd", "otp"],
         realm_access: { roles: ["offline_access", "umojaflowos_compliance_officer"] },
       });
       const user = await resolveKeycloakUser(keycloakRequest(token));
@@ -81,6 +82,8 @@ describe("Keycloak federation", () => {
 
   it("refuses an invalid audience, a signature from another key, and ambiguous authority", async () => {
     await withJwksServer(async (_issuer, sign) => {
+      const nonMfa = await sign({ realm_access: { roles: ["umojaflowos_auditor"] } });
+      expect(await resolveKeycloakUser(keycloakRequest(nonMfa))).toBeNull();
       const wrongAudience = await sign({ realm_access: { roles: ["umojaflowos_auditor"] } }, "another-client");
       expect(await resolveKeycloakUser(keycloakRequest(wrongAudience))).toBeNull();
 
