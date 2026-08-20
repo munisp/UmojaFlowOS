@@ -13,8 +13,8 @@ DECLARE
     'vasp_offshore_counterparty_profiles', 'vasp_offshore_counterparty_evidence_items', 'vasp_offshore_counterparty_assessments'
   ];
 BEGIN
-  IF (SELECT count(*) FROM pg_tables WHERE schemaname = 'public' AND tablename = ANY(expected_tables)) <> array_length(expected_tables, 1) THEN
-    RAISE EXCEPTION 'canonical PostgreSQL table set is incomplete';
+  IF EXISTS (SELECT 1 FROM unnest(expected_tables) AS expected(tablename) WHERE to_regclass('public.' || expected.tablename) IS NULL) THEN
+    RAISE EXCEPTION 'canonical PostgreSQL table set is incomplete: %', (SELECT string_agg(expected.tablename, ', ' ORDER BY expected.tablename) FROM unnest(expected_tables) AS expected(tablename) WHERE to_regclass('public.' || expected.tablename) IS NULL);
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'kyc_documents' AND column_name = 'storage_key') THEN
     RAISE EXCEPTION 'kyc_documents must retain object-storage references, not bytes';
