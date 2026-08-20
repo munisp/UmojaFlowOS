@@ -117,13 +117,39 @@ services:
     image: postgres:16.4-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${UMOJA_POSTGRES_DATABASE:?set the PostgreSQL database name}
-      POSTGRES_USER: ${UMOJA_POSTGRES_OWNER:?supply the PostgreSQL owner through a managed secret injector}
-      POSTGRES_PASSWORD: ${UMOJA_POSTGRES_OWNER_PASSWORD:?supply through a managed secret injector}
+      POSTGRES_DB: ${UMOJA_CONTROL_POSTGRES_DATABASE:?set the control-plane PostgreSQL database name}
+      POSTGRES_USER: ${UMOJA_CONTROL_POSTGRES_OWNER:?supply through a managed secret injector}
+      POSTGRES_PASSWORD: ${UMOJA_CONTROL_POSTGRES_OWNER_PASSWORD:?supply through a managed secret injector}
+      UMOJA_APP_DB_USER: ${UMOJA_APP_DB_USER:?supply the application principal through a managed secret injector}
+      UMOJA_APP_DB_PASSWORD: ${UMOJA_APP_DB_PASSWORD:?supply through a managed secret injector}
     expose:
       - "5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - protected
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  keycloak-postgres:
+    image: postgres:16.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${UMOJA_KEYCLOAK_POSTGRES_DATABASE:?set the Keycloak PostgreSQL database name}
+      POSTGRES_USER: ${UMOJA_KEYCLOAK_POSTGRES_OWNER:?supply through a managed secret injector}
+      POSTGRES_PASSWORD: ${UMOJA_KEYCLOAK_POSTGRES_OWNER_PASSWORD:?supply through a managed secret injector}
+    expose:
+      - "5432"
+    volumes:
+      - keycloak-postgres-data:/var/lib/postgresql/data
     networks:
       - protected
     security_opt:
@@ -141,13 +167,13 @@ services:
     restart: unless-stopped
     command: ["start", "--optimized", "--import-realm"]
     depends_on:
-      postgres:
+      keycloak-postgres:
         condition: service_healthy
     environment:
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/${UMOJA_POSTGRES_DATABASE:?set the PostgreSQL database name}
-      KC_DB_USERNAME: ${UMOJA_POSTGRES_OWNER:?supply the PostgreSQL owner through a managed secret injector}
-      KC_DB_PASSWORD: ${UMOJA_POSTGRES_OWNER_PASSWORD:?supply through a managed secret injector}
+      KC_DB_URL: jdbc:postgresql://keycloak-postgres:5432/${UMOJA_KEYCLOAK_POSTGRES_DATABASE:?set the Keycloak PostgreSQL database name}
+      KC_DB_USERNAME: ${UMOJA_KEYCLOAK_POSTGRES_OWNER:?supply through a managed secret injector}
+      KC_DB_PASSWORD: ${UMOJA_KEYCLOAK_POSTGRES_OWNER_PASSWORD:?supply through a managed secret injector}
       KC_BOOTSTRAP_ADMIN_USERNAME: ${UMOJA_KEYCLOAK_BOOTSTRAP_ADMIN:?supply through a managed secret injector}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${UMOJA_KEYCLOAK_BOOTSTRAP_PASSWORD:?supply through a managed secret injector}
       KC_HOSTNAME: ${UMOJA_PUBLIC_HOST:?set a real public hostname}
@@ -182,7 +208,7 @@ services:
       keycloak:
         condition: service_healthy
     environment:
-      UMOJA_POSTGRES_URL: postgresql://${UMOJA_APP_DB_USER:?supply through a managed secret injector}:${UMOJA_APP_DB_PASSWORD:?supply through a managed secret injector}@postgres:5432/${UMOJA_POSTGRES_DATABASE:?set the PostgreSQL database name}
+      UMOJA_POSTGRES_URL: postgresql://${UMOJA_APP_DB_USER:?supply through a managed secret injector}:${UMOJA_APP_DB_PASSWORD:?supply through a managed secret injector}@postgres:5432/${UMOJA_CONTROL_POSTGRES_DATABASE:?set the control-plane PostgreSQL database name}
       UMOJA_OIDC_ISSUER: ${UMOJA_OIDC_ISSUER:?set the external HTTPS issuer}
       UMOJA_OIDC_CLIENT_ID: ${UMOJA_OIDC_CLIENT_ID:?set the Keycloak client identifier}
       UMOJA_OIDC_CLIENT_SECRET: ${UMOJA_OIDC_CLIENT_SECRET:?supply through a managed secret injector}
@@ -219,4 +245,5 @@ volumes:
   caddy-data:
   caddy-config:
   postgres-data:
+  keycloak-postgres-data:
   redis-data:

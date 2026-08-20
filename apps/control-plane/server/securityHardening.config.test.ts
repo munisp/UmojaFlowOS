@@ -45,6 +45,11 @@ describe("defense-in-depth deployment configuration", () => {
     expect(composition).toContain("internal: true");
     expect(composition).toContain("UMOJA_POSTGRES_URL: postgresql://");
     expect(composition).toContain("managed secret injector");
+    expect(composition).toContain("keycloak-postgres:");
+    expect(composition).toContain("keycloak-postgres-data:");
+    expect(composition).toContain("UMOJA_CONTROL_POSTGRES_DATABASE");
+    expect(composition).toContain("UMOJA_KEYCLOAK_POSTGRES_DATABASE");
+    expect(composition).not.toContain("KC_DB_URL: jdbc:postgresql://postgres:");
     expect(composition).not.toContain("mysql");
     expect(composition).not.toContain("manus");
   });
