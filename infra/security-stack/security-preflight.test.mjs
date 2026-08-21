@@ -32,6 +32,11 @@ function validEnvironment() {
     UMOJA_OPA_BUNDLE_DIGEST: digest,
     UMOJA_KEYCLOAK_REALM_SHA256: digest,
     UMOJA_CADDY_TLS_MODE: "external",
+    UMOJA_PROVIDER_ACTIVATION_EVIDENCE_URI: "https://evidence.umoja.internal/provider-activation",
+    UMOJA_TIGERBEETLE_CLUSTER_EVIDENCE_URI: "https://evidence.umoja.internal/tigerbeetle-cluster",
+    UMOJA_MODEL_RUNTIME_CAPACITY_EVIDENCE_URI: "https://evidence.umoja.internal/model-runtime",
+    UMOJA_EMAIL_DELIVERY_EVIDENCE_URI: "https://evidence.umoja.internal/email-delivery",
+    UMOJA_CONTROLLED_TEST_EVIDENCE_URI: "https://evidence.umoja.internal/controlled-test",
   };
 }
 

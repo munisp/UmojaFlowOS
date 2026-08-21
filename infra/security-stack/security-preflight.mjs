@@ -26,6 +26,11 @@ const REQUIRED = [
   "UMOJA_OPA_BUNDLE_DIGEST",
   "UMOJA_KEYCLOAK_REALM_SHA256",
   "UMOJA_CADDY_TLS_MODE",
+  "UMOJA_PROVIDER_ACTIVATION_EVIDENCE_URI",
+  "UMOJA_TIGERBEETLE_CLUSTER_EVIDENCE_URI",
+  "UMOJA_MODEL_RUNTIME_CAPACITY_EVIDENCE_URI",
+  "UMOJA_EMAIL_DELIVERY_EVIDENCE_URI",
+  "UMOJA_CONTROLLED_TEST_EVIDENCE_URI",
 ];
 
 const SECRET_KEYS = new Set(REQUIRED.filter(key => /PASSWORD|SECRET|ACCESS_KEY/.test(key)));
@@ -77,6 +82,9 @@ export function validateSecurityStackEnvironment(env) {
   if (typeof env.UMOJA_OIDC_ISSUER === "string" && !isHttpsUrl(env.UMOJA_OIDC_ISSUER)) block("UMOJA_OIDC_ISSUER", "https_issuer_required");
   if (typeof env.UMOJA_STORAGE_ENDPOINT === "string" && !isPrivateServiceEndpoint(env.UMOJA_STORAGE_ENDPOINT)) block("UMOJA_STORAGE_ENDPOINT", "private_https_storage_endpoint_required");
   if (typeof env.UMOJA_CADDY_TLS_MODE === "string" && !["managed", "external"].includes(env.UMOJA_CADDY_TLS_MODE)) block("UMOJA_CADDY_TLS_MODE", "approved_tls_mode_required");
+  for (const key of ["UMOJA_PROVIDER_ACTIVATION_EVIDENCE_URI", "UMOJA_TIGERBEETLE_CLUSTER_EVIDENCE_URI", "UMOJA_MODEL_RUNTIME_CAPACITY_EVIDENCE_URI", "UMOJA_EMAIL_DELIVERY_EVIDENCE_URI", "UMOJA_CONTROLLED_TEST_EVIDENCE_URI"]) {
+    if (typeof env[key] === "string" && !isHttpsUrl(env[key])) block(key, "https_evidence_reference_required");
+  }
   for (const key of SECRET_KEYS) {
     const value = env[key];
     if (typeof value === "string" && value.trim().length > 0 && value.trim().length < 24) block(key, "minimum_secret_length_not_met");
