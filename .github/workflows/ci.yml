@@ -64,6 +64,8 @@ jobs:
         run: pnpm exec vitest run server/segregationOfDutiesMonitor.integration.test.ts --pool=threads --poolOptions.threads.singleThread=true
       - name: Run Splink DuckDB entity-resolution fixture
         run: python3 scripts/entity_resolution/test_splink_duckdb_fixture.py
+      - name: Run Wazuh-to-PagerDuty mock receiver tests
+        run: pytest -q tests/test_wazuh_pagerduty_integration.py
       - name: Validate Wazuh XML and verifier scripts
         run: |
           bash -n scripts/infra/verify_sod_alerting_and_worm.sh
