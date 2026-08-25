@@ -104,3 +104,33 @@ jobs:
           kubectl -n security rollout status deployment/umoja-wazuh --timeout=5m
           kubectl -n security get pods -o wide
           kubectl -n security get networkpolicy
+
+  rollback:
+    name: Roll back failed staging release
+    needs: deploy
+    if: ${{ always() && needs.deploy.result == 'failure' }}
+    runs-on: ubuntu-latest
+    environment: staging-rollback
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure approved Kubernetes context
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}
+        run: |
+          test -n "$KUBECONFIG_B64" || { echo 'STAGING_KUBECONFIG_B64 is required for rollback' >&2; exit 2; }
+          printf '%s' "$KUBECONFIG_B64" | base64 --decode > "$RUNNER_TEMP/kubeconfig"
+          chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+      - name: Roll back to last deployed Helm revision
+        run: |
+          revision=$(helm history umoja-wazuh --namespace security --output json \
+            | jq -r '[.[] | select(.status == "deployed")][-1].revision // empty')
+          test -n "$revision" || { echo 'No previously deployed Helm revision is available' >&2; exit 1; }
+          echo "Rolling back to deployed revision $revision"
+          helm rollback umoja-wazuh "$revision" \
+            --namespace security --wait --timeout 10m
+      - name: Verify rollback health
+        run: |
+          kubectl -n security rollout status deployment/umoja-wazuh --timeout=5m
+          kubectl -n security get pods -o wide
+          kubectl -n security get events --sort-by=.lastTimestamp | tail -50
