@@ -4,23 +4,29 @@
 Usage from Wazuh manager integration:
   custom-umoja-sod-incident.py <alert-json-file>
 
-The endpoint and HMAC secret are supplied only through the manager environment.
-This handler creates an incident notification; it never changes UmojaFlowOS state.
+The endpoint, HMAC secret, and Prometheus textfile path are supplied only
+through the manager environment. This handler creates an incident notification;
+it never changes UmojaFlowOS state.
 """
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import hmac
 import json
 import os
 import ssl
 import sys
+import tempfile
+import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 ALLOWED_RULE_IDS = {"100810", "100811", "100812", "100820"}
 MAX_ALERT_BYTES = 262_144
 TIMEOUT_SECONDS = 5
+DEFAULT_METRICS_PATH = "/var/lib/node_exporter/textfile_collector/umoja_sod_incident.prom"
 
 
 def fail(reason: str) -> int:
@@ -28,7 +34,60 @@ def fail(reason: str) -> int:
     return 1
 
 
-def main() -> int:
+def _metrics_path() -> Path:
+    return Path(os.environ.get("UMOJA_SOD_METRICS_PATH", DEFAULT_METRICS_PATH))
+
+
+def _write_metrics(duration_seconds: float, success: bool) -> None:
+    """Update Prometheus textfile metrics using an exclusive lock and atomic replace."""
+    path = _metrics_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = path.with_name(f".{path.name}.lock")
+        with lock_path.open("a+", encoding="utf-8") as lock:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            state_path = path.with_name(f".{path.name}.state.json")
+            state = {"requests": 0, "successes": 0, "failures": 0, "duration_sum": 0.0}
+            try:
+                state.update(json.loads(state_path.read_text(encoding="utf-8")))
+            except (FileNotFoundError, json.JSONDecodeError, OSError):
+                pass
+            state["requests"] = int(state["requests"]) + 1
+            state["successes"] = int(state["successes"]) + int(success)
+            state["failures"] = int(state["failures"]) + int(not success)
+            state["duration_sum"] = float(state["duration_sum"]) + duration_seconds
+            state_path.write_text(json.dumps(state, sort_keys=True), encoding="utf-8")
+            exposition = (
+                "# HELP umoja_sod_incident_requests_total Total Wazuh SoD incident-handler invocations.\n"
+                "# TYPE umoja_sod_incident_requests_total counter\n"
+                f"umoja_sod_incident_requests_total {state['requests']}\n"
+                "# HELP umoja_sod_incident_successes_total Successfully delivered incident notifications.\n"
+                "# TYPE umoja_sod_incident_successes_total counter\n"
+                f"umoja_sod_incident_successes_total {state['successes']}\n"
+                "# HELP umoja_sod_incident_failures_total Failed incident-handler invocations.\n"
+                "# TYPE umoja_sod_incident_failures_total counter\n"
+                f"umoja_sod_incident_failures_total {state['failures']}\n"
+                "# HELP umoja_sod_incident_duration_seconds_sum Total handler execution time in seconds.\n"
+                "# TYPE umoja_sod_incident_duration_seconds_sum counter\n"
+                f"umoja_sod_incident_duration_seconds_sum {state['duration_sum']:.9f}\n"
+            )
+            fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as output:
+                    output.write(exposition)
+                    output.flush()
+                    os.fsync(output.fileno())
+                os.replace(temporary, path)
+            finally:
+                if os.path.exists(temporary):
+                    os.unlink(temporary)
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+    except (OSError, ValueError, TypeError) as exc:
+        # Metrics must never turn a valid alert delivery into a failed delivery.
+        print(f"umoja_sod_metrics_error={type(exc).__name__}", file=sys.stderr)
+
+
+def _run() -> int:
     if len(sys.argv) != 2:
         return fail("usage_requires_alert_json_path")
     alert_path = sys.argv[1]
@@ -97,6 +156,16 @@ def main() -> int:
         return fail(f"incident_delivery_failed:{type(exc).__name__}")
     print(f"umoja_sod_incident_delivered=1 correlation_id={payload.get('correlationId', '')}")
     return 0
+
+
+def main() -> int:
+    started = time.monotonic()
+    result = 1
+    try:
+        result = _run()
+        return result
+    finally:
+        _write_metrics(time.monotonic() - started, result == 0)
 
 
 if __name__ == "__main__":

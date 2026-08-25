@@ -7,6 +7,7 @@ import json
 import ssl
 import subprocess
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -95,6 +96,7 @@ def test_exception_alert_is_signed_and_received(
     monkeypatch.setattr(handler_module.sys, "argv", [str(HANDLER_PATH), str(alert_path)])
     monkeypatch.setenv("UMOJA_SOD_INCIDENT_ENDPOINT", f"https://localhost:{server.server_port}/v2/enqueue")
     monkeypatch.setenv("UMOJA_SOD_INCIDENT_HMAC_SECRET_FILE", str(secret_path))
+    monkeypatch.setenv("UMOJA_SOD_METRICS_PATH", str(tmp_path / "metrics" / "umoja.prom"))
 
     assert handler_module.main() == 0
     assert len(ReceiverHandler.requests) == 1
@@ -125,3 +127,35 @@ def test_audit_tamper_rule_is_forwarded_and_invalid_path_is_rejected(
     write_alert(alert_path, "100820", {"syscheck": {"path": "/tmp/not-the-audit-log"}})
     assert handler_module.main() == 1
     assert len(ReceiverHandler.requests) == 1
+
+
+def test_critical_alert_fails_closed_during_pagerduty_outage(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    secret_path = tmp_path / "incident.secret"
+    secret_path.write_bytes(b"ci-only-test-secret")
+    alert_path = tmp_path / "outage.json"
+    write_alert(
+        alert_path,
+        "100810",
+        {
+            "event": "sod_monitor_evaluation",
+            "evaluationState": "exceptions_detected",
+            "exceptionDigest": "b" * 64,
+            "exceptionCount": 1,
+            "correlationId": "22222222-2222-2222-2222-222222222222",
+        },
+    )
+    metrics_path = tmp_path / "metrics" / "umoja.prom"
+    monkeypatch.setenv("UMOJA_SOD_INCIDENT_ENDPOINT", "https://localhost:9/v2/enqueue")
+    monkeypatch.setenv("UMOJA_SOD_INCIDENT_HMAC_SECRET_FILE", str(secret_path))
+    monkeypatch.setenv("UMOJA_SOD_METRICS_PATH", str(metrics_path))
+    monkeypatch.setattr(handler_module.sys, "argv", [str(HANDLER_PATH), str(alert_path)])
+
+    started = time.monotonic()
+    assert handler_module.main() == 1
+    assert time.monotonic() - started < 5.0
+    metrics = metrics_path.read_text(encoding="utf-8")
+    assert "umoja_sod_incident_requests_total 1" in metrics
+    assert "umoja_sod_incident_successes_total 0" in metrics
+    assert "umoja_sod_incident_failures_total 1" in metrics
