@@ -1,17 +1,42 @@
-FROM golang:1.25.4-alpine AS build
+# syntax=docker/dockerfile:1
 
-WORKDIR /src
+# tigerbeetle-go is a CGO binding shipping prebuilt glibc-linked static
+# archives (pkg/native/x86_64-linux/libtb_client.a, no musl variant) - build
+# and run on Debian/glibc, not Alpine/musl (confirmed reproducibly broken
+# for the same class of dependency, confluent-kafka-go/librdkafka, in the
+# sibling vpp repo: "undefined reference to `__strdup'" etc. across dozens
+# of musl-missing glibc symbols).
+FROM golang:1.25-bookworm AS builder
+
+WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends build-essential \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY go.mod go.sum ./
 RUN go mod download
-COPY . ./
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/payment-engine ./cmd/payment-engine
 
-FROM alpine:3.21
+COPY . .
+RUN CGO_ENABLED=1 GOOS=linux go build -o payment-engine ./cmd/payment-engine
 
-RUN addgroup -S umoja && adduser -S -D -H -G umoja umoja \
-  && mkdir -p /var/lib/umojaflowos/webhook-evidence /var/lib/umojaflowos/webhook-reconciliation \
-  && chown -R umoja:umoja /var/lib/umojaflowos
-COPY --from=build /out/payment-engine /usr/local/bin/payment-engine
-USER umoja:umoja
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates dumb-init curl \
+  && rm -rf /var/lib/apt/lists/* \
+  && addgroup --system app && adduser --system --ingroup app app
+
+WORKDIR /app
+COPY --from=builder --chown=app:app /app/payment-engine ./payment-engine
+
+ENV PORT=8081
 EXPOSE 8081
-ENTRYPOINT ["/usr/local/bin/payment-engine"]
+
+USER app
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD curl -fsS "http://127.0.0.1:${PORT}/healthz" >/dev/null 2>&1 || exit 1
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["./payment-engine"]

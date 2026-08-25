@@ -3,10 +3,20 @@ import fs from "fs";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
-import { createServer as createViteServer } from "vite";
-import viteConfig from "../../vite.config";
 
 export async function setupVite(app: Express, server: Server) {
+  // Dynamic import: `vite` is a devDependency, not installed in the
+  // production image (`pnpm install --prod`). This module is imported
+  // unconditionally by server/_core/index.ts (serveStatic, used in prod,
+  // lives here too), so a static top-level `import ... from "vite"` here
+  // crashed every production boot with ERR_MODULE_NOT_FOUND before any app
+  // code ran, even though setupVite itself is only ever called in
+  // development. (Same bug, same fix, as the sibling vpp repo.)
+  const [{ createServer: createViteServer }, { default: viteConfig }] = await Promise.all([
+    import("vite"),
+    import("../../vite.config"),
+  ]);
+
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
