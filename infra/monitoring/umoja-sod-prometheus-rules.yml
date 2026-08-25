@@ -39,3 +39,49 @@ groups:
         annotations:
           summary: UmojaFlowOS SoD incident-handler metrics are absent
           description: Prometheus cannot find the handler textfile metrics. Check the Wazuh manager mount and node-exporter collector.
+
+      - alert: UmojaLedgerReconciliationDiscrepancy
+        expr: umoja_ledger_reconciliation_last_run_status{status="discrepancy"} == 1
+        for: 0m
+        labels:
+          severity: critical
+          service: ledger-reconciliation
+          compliance_domain: ledger_integrity
+        annotations:
+          summary: UmojaFlowOS ledger reconciliation discrepancy
+          description: The latest TigerBeetle/PostgreSQL reconciliation run recorded one or more discrepancies.
+          runbook_url: https://docs.example.invalid/runbooks/tigerbeetle-reconciliation
+
+      - alert: UmojaLedgerReconciliationIndeterminate
+        expr: umoja_ledger_reconciliation_last_run_status{status="indeterminate"} == 1
+        for: 0m
+        labels:
+          severity: critical
+          service: ledger-reconciliation
+          compliance_domain: ledger_integrity
+        annotations:
+          summary: UmojaFlowOS ledger reconciliation is indeterminate
+          description: The latest reconciliation could not establish ledger consistency; do not treat the period as reconciled.
+          runbook_url: https://docs.example.invalid/runbooks/tigerbeetle-reconciliation
+
+      - alert: UmojaLedgerReconciliationDiscrepancyCount
+        expr: umoja_ledger_reconciliation_last_discrepancy_count > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: ledger-reconciliation
+          compliance_domain: ledger_integrity
+        annotations:
+          summary: UmojaFlowOS reconciliation discrepancy count is nonzero
+          description: The latest reconciliation contains {{ $value }} discrepancy record(s).
+
+      - alert: UmojaLedgerReconciliationStale
+        expr: time() - umoja_ledger_reconciliation_last_run_timestamp_seconds > 4500
+        for: 15m
+        labels:
+          severity: critical
+          service: ledger-reconciliation
+          compliance_domain: ledger_integrity
+        annotations:
+          summary: UmojaFlowOS ledger reconciliation is stale
+          description: No successful reconciliation metric update has been observed within the expected hourly schedule plus grace period.
