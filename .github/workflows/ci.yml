@@ -59,6 +59,32 @@ jobs:
           done
       - name: Run contract and service checks
         run: make check postgres-check
+      - name: Run SoD monitor integration test
+        working-directory: apps/control-plane
+        run: pnpm exec vitest run server/segregationOfDutiesMonitor.integration.test.ts --pool=threads --poolOptions.threads.singleThread=true
+      - name: Validate Wazuh XML and verifier scripts
+        run: |
+          bash -n scripts/infra/verify_sod_alerting_and_worm.sh
+          bash -n scripts/infra/verify_worm_retention_aws_openssl.sh
+          python3 -m py_compile infra/wazuh/custom-umoja-sod-incident.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          ET.parse(Path('infra/wazuh/umoja-sod-rules.xml.template'))
+          ET.parse(Path('infra/wazuh/umoja-sod-agent-ossec.conf.template'))
+          ET.parse(Path('infra/wazuh/umoja-sod-manager-integration.conf.template'))
+          ET.fromstring('<root>' + Path('infra/wazuh/umoja-sod-decoders.xml.template').read_text() + '</root>')
+          PY
+      - name: Run SoD acceptance gate in synthetic CI-only WORM mode
+        run: |
+          cat > /tmp/umoja-ci-worm-stub.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          echo synthetic-worm-verifier=passed
+          EOF
+          chmod 700 /tmp/umoja-ci-worm-stub.sh
+          CI=true WORM_VERIFIER_MODE=synthetic WORM_VERIFY_SCRIPT=/tmp/umoja-ci-worm-stub.sh \
+            bash scripts/infra/verify_sod_alerting_and_worm.sh check
 
   secrets:
     name: Secret scanning

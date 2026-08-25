@@ -57,6 +57,11 @@ fi
 [[ "$WORM_VERIFY_SCRIPT" = /* ]] || { echo "WORM_VERIFY_SCRIPT must be absolute" >&2; exit 2; }
 [[ -x "$WORM_VERIFY_SCRIPT" ]] || { echo "WORM_VERIFY_SCRIPT must be executable" >&2; exit 2; }
 "$WORM_VERIFY_SCRIPT"
-echo "worm_verification=passed"
+if [[ "${WORM_VERIFIER_MODE:-independent}" == "synthetic" ]]; then
+  [[ "${CI:-}" == "true" ]] || { echo "synthetic WORM verifier is permitted only in CI" >&2; exit 2; }
+  echo "worm_verification=synthetic_only"
+else
+  echo "worm_verification=passed"
+fi
 
 echo "sod_alerting_acceptance=passed"
