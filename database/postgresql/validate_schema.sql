@@ -10,7 +10,8 @@ DECLARE
     'scheduled_jobs', 'user_role_assignments', 'operator_role_assignments',
     'external_stakeholder_assignments', 'external_stakeholder_evidence',
     'vasp_regulatory_profiles', 'vasp_regulatory_evidence_items', 'vasp_travel_rule_evidence_items', 'vasp_travel_rule_route_assessments',
-    'vasp_offshore_counterparty_profiles', 'vasp_offshore_counterparty_evidence_items', 'vasp_offshore_counterparty_assessments'
+    'vasp_offshore_counterparty_profiles', 'vasp_offshore_counterparty_evidence_items', 'vasp_offshore_counterparty_assessments',
+    'ledger_account_bindings', 'tigerbeetle_transfer_facts', 'aml_screening_checks', 'provider_send_requests', 'regulatory_submission_attempts', 'vasp_readiness_assurance_items'
   ];
 BEGIN
   IF EXISTS (SELECT 1 FROM unnest(expected_tables) AS expected(tablename) WHERE to_regclass('public.' || expected.tablename) IS NULL) THEN
@@ -39,6 +40,16 @@ BEGIN
      OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='cbn_sandbox_reporting_packs' AND column_name='submission_reference')
      OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='cbn_sandbox_evidence_assessments' AND column_name='external_eligibility') THEN
     RAISE EXCEPTION 'CBN sandbox readiness must preserve test wind-down, internal evidence assessment, and non-assertive external evidence boundaries';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='tigerbeetle_transfer_facts' AND column_name='reconciliation_state')
+     OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='aml_screening_checks' AND column_name='evidence_sha256')
+     OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='provider_send_requests' AND column_name='finality_state')
+     OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='regulatory_submission_attempts' AND column_name='external_reference') THEN
+    RAISE EXCEPTION 'live pipeline evidence tables must preserve reconciliation and externally attributable receipt boundaries';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='vasp_readiness_assurance_items' AND column_name='external_attestation_sha256')
+     OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='vasp_readiness_assurance_items' AND column_name='verified_by') THEN
+    RAISE EXCEPTION 'readiness assurance items must retain external-attestation and independent-verifier evidence';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='operator_role_assignments' AND column_name='subject')
      OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='external_stakeholder_assignments' AND column_name='stakeholder_subject')

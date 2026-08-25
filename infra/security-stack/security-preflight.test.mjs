@@ -12,6 +12,8 @@ function validEnvironment() {
     UMOJA_TLS_CONTACT_EMAIL: "security@umoja.internal",
     UMOJA_CONTROL_PLANE_IMAGE: `registry.umoja.internal/umojaflowos/control-plane@${digest}`,
     UMOJA_PAYMENT_ENGINE_IMAGE: `registry.umoja.internal/umojaflowos/payment-engine@${digest}`,
+    UMOJA_RISK_CORE_IMAGE: `registry.umoja.internal/umojaflowos/risk-core@${digest}`,
+    UMOJA_REPORTING_IMAGE: `registry.umoja.internal/umojaflowos/reporting@${digest}`,
     UMOJA_CONTROL_POSTGRES_DATABASE: "control",
     UMOJA_CONTROL_POSTGRES_OWNER: "control_owner",
     UMOJA_CONTROL_POSTGRES_OWNER_PASSWORD: secret,
@@ -46,6 +48,9 @@ function validEnvironment() {
     UMOJA_YELLOWCARD_WEBHOOK_SECRET_REFERENCE: "file:///run/secret-injector/yellowcard/webhook-current",
     UMOJA_YELLOWCARD_REPLAY_REDIS_PASSWORD_SECRET_REFERENCE: "file:///run/secret-injector/yellowcard/replay-redis-password",
     UMOJA_YELLOWCARD_MATERIAL_MOUNT_PATH: "/run/secret-injector/yellowcard",
+    UMOJA_SCREENING_MATERIAL_MOUNT_PATH: "/run/secret-injector/screening",
+    UMOJA_REGULATORY_SUBMISSION_MATERIAL_MOUNT_PATH: "/run/secret-injector/regulatory",
+    UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE: "file:///run/secret-injector/yellowcard/ledger-projection-hmac",
   };
 }
 

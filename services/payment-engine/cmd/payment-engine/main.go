@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -81,6 +85,31 @@ func newHandler(now func() time.Time, configuredLedgerBackend ...string) http.Ha
 }
 
 func newHandlerWithWebhook(now func() time.Time, webhook http.Handler, configuredLedgerBackend ...string) http.Handler {
+	return newHandlerWithWebhookAndPosting(now, webhook, nil, nil, configuredLedgerBackend...)
+}
+
+type ledgerPostingRequest struct {
+	TransferID      string `json:"transfer_id"`
+	CorrelationID   string `json:"correlation_id"`
+	Currency        string `json:"currency"`
+	AmountMinor     string `json:"amount_minor"`
+	DebitAccountID  string `json:"debit_account_id"`
+	CreditAccountID string `json:"credit_account_id"`
+	PendingID       string `json:"pending_id,omitempty"`
+}
+
+func parsePostingUint(value string, field string, optional bool) (uint64, error) {
+	if optional && strings.TrimSpace(value) == "" {
+		return 0, nil
+	}
+	parsed, err := strconv.ParseUint(strings.TrimSpace(value), 10, 64)
+	if err != nil || parsed == 0 {
+		return 0, fmt.Errorf("%s must be a positive unsigned integer", field)
+	}
+	return parsed, nil
+}
+
+func newHandlerWithWebhookAndPosting(now func() time.Time, webhook http.Handler, posting *ledger.PostingService, execution http.Handler, configuredLedgerBackend ...string) http.Handler {
 	ledgerBackend := "disabled_without_deployed_tigerbeetle"
 	if len(configuredLedgerBackend) > 0 && configuredLedgerBackend[0] != "" {
 		ledgerBackend = configuredLedgerBackend[0]
@@ -111,6 +140,52 @@ func newHandlerWithWebhook(now func() time.Time, webhook http.Handler, configure
 	})
 	if webhook != nil {
 		mux.Handle("POST /v1/providers/yellowcard/webhooks", webhook)
+	}
+	if execution != nil {
+		mux.Handle("POST /v1/providers/yellowcard/sends", execution)
+	}
+	if posting != nil {
+		mux.HandleFunc("POST /v1/ledger/postings", func(w http.ResponseWriter, r *http.Request) {
+			defer r.Body.Close()
+			var input ledgerPostingRequest
+			decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64*1024))
+			if err := decoder.Decode(&input); err != nil {
+				http.Error(w, "invalid ledger posting request", http.StatusBadRequest)
+				return
+			}
+			transferID, err := parsePostingUint(input.TransferID, "transfer_id", false)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+				return
+			}
+			amount, err := parsePostingUint(input.AmountMinor, "amount_minor", false)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+				return
+			}
+			debit, err := parsePostingUint(input.DebitAccountID, "debit_account_id", false)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+				return
+			}
+			credit, err := parsePostingUint(input.CreditAccountID, "credit_account_id", false)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+				return
+			}
+			pending, err := parsePostingUint(input.PendingID, "pending_id", true)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+				return
+			}
+			fact, err := posting.PostConfirmedTransfer(r.Context(), ledger.PostingRequest{TransferID: transferID, CorrelationID: input.CorrelationID, Currency: input.Currency, Amount: amount, DebitAccountID: debit, CreditAccountID: credit, PendingID: pending})
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{"transfer_id": strconv.FormatUint(fact.TransferID, 10), "correlation_id": fact.CorrelationID, "reconciliation_state": "pending"})
+		})
 	}
 	mux.HandleFunc("POST /v1/orders/validate", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
@@ -178,6 +253,38 @@ func main() {
 		panic(err)
 	}
 	defer ledgerRuntime.Close()
+	var posting *ledger.PostingService
+	if ledgerRuntime.Backend == "configured_reachable_tigerbeetle" {
+		resolver := provider.FileSecretResolver{Root: os.Getenv("UMOJA_PROVIDER_MATERIAL_ROOT")}
+		sharedSecret, resolveErr := resolver.Resolve(context.Background(), os.Getenv("UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE"))
+		if resolveErr != nil {
+			panic(resolveErr)
+		}
+		sink, sinkErr := ledger.NewHTTPProjectionSink(ledger.HTTPProjectionSinkConfig{
+			Endpoint: os.Getenv("UMOJA_LEDGER_PROJECTION_ENDPOINT"), SharedSecret: sharedSecret.Value,
+			AllowInsecureLoopback: os.Getenv("UMOJA_LEDGER_PROJECTION_ALLOW_INSECURE_LOOPBACK") == "true",
+		})
+		if sinkErr != nil {
+			panic(sinkErr)
+		}
+		posting, err = ledgerRuntime.NewPostingService(sink, time.Now)
+		if err != nil {
+			panic(err)
+		}
+	}
+	var executionHandler http.Handler
+	executionRuntime, executionErr := provider.YellowCardExecutionRuntimeFromEnvironment(context.Background(), os.Getenv)
+	if executionErr != nil {
+		panic(executionErr)
+	}
+	if executionRuntime.Enabled {
+		resolver := provider.FileSecretResolver{Root: os.Getenv("UMOJA_PROVIDER_MATERIAL_ROOT")}
+		approvalSecret, resolveErr := resolver.Resolve(context.Background(), os.Getenv("UMOJA_YELLOWCARD_EXECUTION_APPROVAL_HMAC_SECRET_REFERENCE"))
+		if resolveErr != nil {
+			panic(resolveErr)
+		}
+		executionHandler = provider.YellowCardExecutionHandler{Sender: executionRuntime.Sender, ApprovalSecret: approvalSecret.Value, Now: time.Now, MaxAge: 5 * time.Minute, MaxBodyBytes: 64 * 1024}
+	}
 	webhookRuntime, err := provider.WebhookRuntimeFromEnvironment(os.Getenv)
 	if err != nil {
 		panic(err)
@@ -186,7 +293,7 @@ func main() {
 	if port == "" {
 		port = "8081"
 	}
-	if err := http.ListenAndServe(":"+port, newHandlerWithWebhook(time.Now, webhookRuntime, ledgerRuntime.Backend)); err != nil {
+	if err := http.ListenAndServe(":"+port, newHandlerWithWebhookAndPosting(time.Now, webhookRuntime, posting, executionHandler, ledgerRuntime.Backend)); err != nil {
 		panic(err)
 	}
 }

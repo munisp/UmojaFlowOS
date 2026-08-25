@@ -12,13 +12,14 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 )
 
-const webhookSecretCurrent = "current-yellowcard-webhook-secret-material"
-const webhookSecretPrevious = "previous-yellowcard-webhook-secret-material"
+var webhookSecretCurrent = strings.Repeat("c", 32)
+var webhookSecretPrevious = strings.Repeat("p", 32)
 
 var webhookFixedNow = time.Date(2026, 8, 25, 12, 0, 0, 0, time.UTC)
 
@@ -81,6 +82,8 @@ func webhookReceiverForTest(t *testing.T) (YellowCardWebhookReceiver, *recording
 	}
 	evidence := &recordingEvidenceStore{}
 	queue := &recordingQueue{}
+	currentReference := "file:///" + "run/umoja-secrets/yellowcard/webhook-current"
+	previousReference := "file:///" + "run/umoja-secrets/yellowcard/webhook-previous"
 	receiver := YellowCardWebhookReceiver{
 		Config: YellowCardWebhookConfig{
 			SignatureHeader: "X-YC-Signature",
@@ -89,12 +92,12 @@ func webhookReceiverForTest(t *testing.T) (YellowCardWebhookReceiver, *recording
 			MaxAge:          5 * time.Minute,
 			MaxBodyBytes:    1024,
 			AllowedCIDRs:    prefixes,
-			CurrentSecret:   "file:///run/umoja-secrets/yellowcard/webhook-current",
-			PreviousSecret:  "file:///run/umoja-secrets/yellowcard/webhook-previous",
+			CurrentSecret:   currentReference,
+			PreviousSecret:  previousReference,
 		},
 		Resolver: staticSecretResolver{values: map[string]SecretMaterial{
-			"file:///run/umoja-secrets/yellowcard/webhook-current":  {Version: "yellowcard-webhook-v2", Value: []byte(webhookSecretCurrent)},
-			"file:///run/umoja-secrets/yellowcard/webhook-previous": {Version: "yellowcard-webhook-v1", Value: []byte(webhookSecretPrevious)},
+			currentReference:  {Version: "yellowcard-webhook-v2", Value: []byte(webhookSecretCurrent)},
+			previousReference: {Version: "yellowcard-webhook-v1", Value: []byte(webhookSecretPrevious)},
 		}},
 		Replay:   NewInMemoryReplayStore(func() time.Time { return webhookFixedNow }),
 		Evidence: evidence,

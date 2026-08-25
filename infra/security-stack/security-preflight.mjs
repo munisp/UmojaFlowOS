@@ -4,6 +4,8 @@ const REQUIRED = [
   "UMOJA_TLS_CONTACT_EMAIL",
   "UMOJA_CONTROL_PLANE_IMAGE",
   "UMOJA_PAYMENT_ENGINE_IMAGE",
+  "UMOJA_RISK_CORE_IMAGE",
+  "UMOJA_REPORTING_IMAGE",
   "UMOJA_CONTROL_POSTGRES_DATABASE",
   "UMOJA_CONTROL_POSTGRES_OWNER",
   "UMOJA_CONTROL_POSTGRES_OWNER_PASSWORD",
@@ -38,6 +40,9 @@ const REQUIRED = [
   "UMOJA_YELLOWCARD_WEBHOOK_SECRET_REFERENCE",
   "UMOJA_YELLOWCARD_REPLAY_REDIS_PASSWORD_SECRET_REFERENCE",
   "UMOJA_YELLOWCARD_MATERIAL_MOUNT_PATH",
+  "UMOJA_SCREENING_MATERIAL_MOUNT_PATH",
+  "UMOJA_REGULATORY_SUBMISSION_MATERIAL_MOUNT_PATH",
+  "UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE",
 ];
 
 const SECRET_KEYS = new Set([
@@ -53,9 +58,12 @@ const SECRET_KEYS = new Set([
 const FILE_REFERENCE_KEYS = new Set([
   "UMOJA_YELLOWCARD_WEBHOOK_SECRET_REFERENCE",
   "UMOJA_YELLOWCARD_REPLAY_REDIS_PASSWORD_SECRET_REFERENCE",
+  "UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE",
 ]);
 const MOUNT_PATH_KEYS = new Set([
   "UMOJA_YELLOWCARD_MATERIAL_MOUNT_PATH",
+  "UMOJA_SCREENING_MATERIAL_MOUNT_PATH",
+  "UMOJA_REGULATORY_SUBMISSION_MATERIAL_MOUNT_PATH",
 ]);
 const TLS_PATH_KEYS = new Set([
   "UMOJA_APISIX_TRUST_BUNDLE_PATH",
@@ -101,7 +109,7 @@ export function validateSecurityStackEnvironment(env) {
   if (typeof env.UMOJA_DEPLOYMENT_APPROVAL_ID === "string" && !/^SEC-[A-Z0-9][A-Z0-9-]{5,}$/i.test(env.UMOJA_DEPLOYMENT_APPROVAL_ID)) {
     block("UMOJA_DEPLOYMENT_APPROVAL_ID", "invalid_security_approval_reference");
   }
-  for (const key of ["UMOJA_CONTROL_PLANE_IMAGE", "UMOJA_PAYMENT_ENGINE_IMAGE"]) {
+  for (const key of ["UMOJA_CONTROL_PLANE_IMAGE", "UMOJA_PAYMENT_ENGINE_IMAGE", "UMOJA_RISK_CORE_IMAGE", "UMOJA_REPORTING_IMAGE"]) {
     if (typeof env[key] === "string" && !/@sha256:[a-f0-9]{64}$/i.test(env[key])) block(key, "immutable_image_digest_required");
   }
   for (const key of ["UMOJA_OPA_BUNDLE_DIGEST", "UMOJA_KEYCLOAK_REALM_SHA256"]) {
@@ -131,6 +139,31 @@ export function validateSecurityStackEnvironment(env) {
   for (const key of FILE_REFERENCE_KEYS) {
     const value = env[key];
     if (typeof value === "string" && value.trim().length > 0 && !/^file:\/\/\/[^?#]+$/.test(value)) block(key, "managed_file_secret_reference_required");
+  }
+
+  const requireWhenEnabled = (flag, keys) => {
+    const enabled = env[flag];
+    if (enabled !== "true" && enabled !== "false" && typeof enabled !== "undefined") block(flag, "boolean_flag_required");
+    if (enabled === "true") {
+      for (const key of keys) {
+        const value = env[key];
+        if (typeof value !== "string" || value.trim().length === 0 || PLACEHOLDER.test(value)) block(key, "required_when_activation_enabled");
+      }
+    }
+  };
+  requireWhenEnabled("UMOJA_TIGERBEETLE_ENABLED", [
+    "UMOJA_TIGERBEETLE_CLUSTER_ID", "UMOJA_TIGERBEETLE_ADDRESSES", "UMOJA_TIGERBEETLE_NGN_LEDGER", "UMOJA_TIGERBEETLE_KES_LEDGER", "UMOJA_TIGERBEETLE_ZAR_LEDGER", "UMOJA_TIGERBEETLE_ACCOUNT_CODE", "UMOJA_TIGERBEETLE_TRANSFER_CODE", "UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE",
+  ]);
+  requireWhenEnabled("UMOJA_SCREENING_ENABLED", ["UMOJA_SCREENING_ENDPOINT", "UMOJA_SCREENING_API_KEY_SECRET_REFERENCE"]);
+  requireWhenEnabled("UMOJA_YELLOWCARD_EXECUTION_ENABLED", ["UMOJA_YELLOWCARD_EXECUTION_BASE_URL", "UMOJA_YELLOWCARD_API_KEY_SECRET_REFERENCE", "UMOJA_YELLOWCARD_HMAC_SECRET_REFERENCE", "UMOJA_YELLOWCARD_EXECUTION_APPROVAL_HMAC_SECRET_REFERENCE"]);
+  requireWhenEnabled("UMOJA_REGULATORY_SUBMISSION_ENABLED", ["UMOJA_REGULATORY_SUBMISSION_ENDPOINT", "UMOJA_REGULATORY_SUBMISSION_CHANNEL_REFERENCE", "UMOJA_REGULATORY_SUBMISSION_API_KEY_SECRET_REFERENCE"]);
+  for (const key of ["UMOJA_SCREENING_API_KEY_SECRET_REFERENCE", "UMOJA_YELLOWCARD_API_KEY_SECRET_REFERENCE", "UMOJA_YELLOWCARD_HMAC_SECRET_REFERENCE", "UMOJA_YELLOWCARD_EXECUTION_APPROVAL_HMAC_SECRET_REFERENCE", "UMOJA_REGULATORY_SUBMISSION_API_KEY_SECRET_REFERENCE"]) {
+    const value = env[key];
+    if (typeof value === "string" && value.trim().length > 0 && !/^file:\/\/\/[^?#]+$/.test(value)) block(key, "managed_file_secret_reference_required");
+  }
+  for (const key of ["UMOJA_SCREENING_ENDPOINT", "UMOJA_YELLOWCARD_EXECUTION_BASE_URL", "UMOJA_REGULATORY_SUBMISSION_ENDPOINT"]) {
+    const value = env[key];
+    if (typeof value === "string" && value.trim().length > 0 && !isHttpsUrl(value)) block(key, "https_endpoint_required");
   }
 
   const result = [...blockers.entries()].map(([key, reason]) => ({ key, reason }));

@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { probeProviderEndpoint } from "./providerHealthCheck";
 import { collectAllServiceStatuses } from "./serviceHealth";
 import { listServiceHealthHistory, recordServiceHealthSamples, summariseServiceAvailability } from "./serviceHealthHistory";
+import { evaluateServiceHealthSlo } from "./serviceHealthSlo";
 import {
   activatePostgresIntegrationConnection,
   configurePostgresIntegrationCredential,
@@ -14,7 +15,7 @@ import { evaluatePostgresLiquidityThresholds, evaluatePostgresPaymentFailures, e
 import { raisePostgresComplianceAlert, acknowledgePostgresComplianceAlert, escalatePostgresComplianceAlert, dismissPostgresComplianceAlert, listPostgresComplianceAlerts } from "./complianceAlerts";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { adminProcedure, auditorProcedure, cbnLiaisonProcedure, complianceOnlyProcedure, complianceProcedure, providerContactProcedure, publicProcedure, router, treasuryProcedure } from "./_core/trpc";
+import { adminProcedure, assuranceVerifierProcedure, auditorProcedure, cbnLiaisonProcedure, complianceOnlyProcedure, complianceProcedure, providerContactProcedure, publicProcedure, router, treasuryProcedure } from "./_core/trpc";
 import { listPostgresActiveVerificationConsents, listPostgresAnalysisReadyDocuments } from "./analysisSubmission";
 import { registerPostgresLegalEntity } from "./legalEntityRegistry";
 import { disposeComplianceCase } from "./complianceCaseWorkflow";
@@ -22,6 +23,7 @@ import { beginCounterpartyRecertification, createCounterpartyOnboarding, decideC
 import { assessCbnSandboxEvidenceCompleteness, createCbnSandboxDossier, createCbnSandboxReportingPack, createCbnSandboxTestPlan, getCbnSandboxReadiness, latestCbnSandboxEvidenceAssessment, listCbnSandboxDossiers, recordCbnSandboxConsumerRecord, recordCbnSandboxEvidence, recordCbnSandboxIncident } from "./cbnSandbox";
 import { assessVaspOffshoreCounterpartyProfile, assessVaspTravelRuleRoute, createVaspOffshoreCounterpartyProfile, createVaspRegulatoryProfile, getVaspSupervisoryReadiness, listVaspRegulatoryProfiles, listVaspTravelRuleAssessments, offshoreExposureEvidenceCategories, recordVaspOffshoreCounterpartyEvidence, recordVaspSupervisoryEvidence, recordVaspTravelRuleEvidence, supervisoryEvidenceCategories, travelRuleEvidenceCategories } from "./vaspReadiness";
 import { assessImtoReadiness, createImtoReadinessProfile, imtoEvidenceCategories, recordImtoReadinessEvidence } from "./imtoReadiness";
+import { assessReadinessAssurance, initialiseReadinessAssurance, listReadinessAssurance, readinessAssuranceAreas, recordReadinessAssuranceEvidence, rejectReadinessAssuranceEvidence, verifyReadinessAssuranceEvidence } from "./vaspReadinessAssurance";
 import { assignExternalStakeholder, listCbnLiaisonAssignments, listProviderContactAssignments, recordExternalStakeholderEvidence } from "./externalStakeholders";
 import { resolveSelectedModel } from "./modelProvenance";
 import { transitionPostgresPaymentLeg, createPostgresPaymentLeg, createPostgresPaymentOrder, expirePostgresRateLocks, listPostgresPaymentLegs, listPostgresPaymentOrders, transitionPostgresPaymentOrder } from "./paymentWorkflow";
@@ -80,6 +82,12 @@ export const appRouter = router({
     recordImtoReadinessEvidence: complianceProcedure.input(z.object({ profileId: z.string().uuid(), category: z.enum(imtoEvidenceCategories), evidenceUri: z.string().url().refine(value => value.startsWith("https://"), "Evidence must use HTTPS"), evidenceSha256: z.string().regex(/^[a-f0-9]{64}$/) })).mutation(({ ctx,input }) => recordImtoReadinessEvidence({ openId: ctx.user.openId, role: ctx.user.role },input)),
     assessImtoReadiness: complianceProcedure.input(z.object({ profileId: z.string().uuid(), reviewerRationale: z.string().trim().min(20).max(4000) })).mutation(({ ctx,input }) => assessImtoReadiness({ openId: ctx.user.openId, role: ctx.user.role },input)),
     createVaspRegulatoryProfile: adminProcedure.input(z.object({ dossierId: z.string().uuid(), supervisoryPath: z.enum(["sec_arip", "sec_full_registration", "other_supervisory_path"]), operationalModelSummary: z.string().trim().min(50).max(4000) })).mutation(({ ctx, input }) => createVaspRegulatoryProfile({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    initialiseReadinessAssurance: adminProcedure.input(z.object({ dossierId: z.string().uuid() })).mutation(({ ctx, input }) => initialiseReadinessAssurance({ openId: ctx.user.openId, role: ctx.user.role }, input.dossierId)),
+    readinessAssurance: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => listReadinessAssurance(input.dossierId)),
+    assessReadinessAssurance: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => assessReadinessAssurance(input.dossierId)),
+    recordReadinessAssuranceEvidence: complianceProcedure.input(z.object({ dossierId: z.string().uuid(), area: z.enum(readinessAssuranceAreas), evidenceUri: z.string().url().refine(value => value.startsWith("https://"), "Evidence must use HTTPS"), evidenceSha256: z.string().regex(/^[a-f0-9]{64}$/) })).mutation(({ ctx, input }) => recordReadinessAssuranceEvidence({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    verifyReadinessAssuranceEvidence: assuranceVerifierProcedure.input(z.object({ dossierId: z.string().uuid(), area: z.enum(readinessAssuranceAreas), externalVerifier: z.string().trim().min(3).max(255), externalAttestationUri: z.string().url().refine(value => value.startsWith("https://"), "Attestation must use HTTPS"), externalAttestationSha256: z.string().regex(/^[a-f0-9]{64}$/), rationale: z.string().trim().min(20).max(4000) })).mutation(({ ctx, input }) => verifyReadinessAssuranceEvidence({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    rejectReadinessAssuranceEvidence: assuranceVerifierProcedure.input(z.object({ dossierId: z.string().uuid(), area: z.enum(readinessAssuranceAreas), rationale: z.string().trim().min(20).max(4000) })).mutation(({ ctx, input }) => rejectReadinessAssuranceEvidence({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     recordVaspSupervisoryEvidence: complianceProcedure.input(z.object({ profileId: z.string().uuid(), category: z.enum(supervisoryEvidenceCategories), evidenceUri: z.string().url().refine(value => value.startsWith("https://"), "Evidence must use HTTPS"), evidenceSha256: z.string().regex(/^[a-f0-9]{64}$/) })).mutation(({ ctx, input }) => recordVaspSupervisoryEvidence({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     recordVaspTravelRuleEvidence: complianceProcedure.input(z.object({ dossierId: z.string().uuid(), counterpartyId: z.string().uuid(), category: z.enum(travelRuleEvidenceCategories), evidenceUri: z.string().url().refine(value => value.startsWith("https://"), "Evidence must use HTTPS"), evidenceSha256: z.string().regex(/^[a-f0-9]{64}$/) })).mutation(({ ctx, input }) => recordVaspTravelRuleEvidence({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     assessVaspTravelRuleRoute: complianceProcedure.input(z.object({ dossierId: z.string().uuid(), counterpartyId: z.string().uuid(), reviewerRationale: z.string().trim().min(20).max(4000) })).mutation(({ ctx, input }) => assessVaspTravelRuleRoute({ openId: ctx.user.openId, role: ctx.user.role }, input)),
@@ -197,6 +205,18 @@ export const appRouter = router({
     serviceAvailabilitySummary: auditorProcedure
       .input(z.object({ sinceMinutes: z.number().int().min(1).max(43200).optional() }).optional())
       .query(({ input }) => summariseServiceAvailability(input?.sinceMinutes ?? 60)),
+
+    /**
+     * A measured resilience SLO report. A missing or sparse sample set remains
+     * `insufficient_evidence`, never a synthetic passing result.
+     */
+    serviceHealthSlo: auditorProcedure
+      .input(z.object({
+        sinceMinutes: z.number().int().min(60).max(43200).optional(),
+        targetAvailability: z.number().min(0.9).max(1).optional(),
+        minimumSamples: z.number().int().min(1).max(20000).optional(),
+      }).optional())
+      .query(({ input }) => evaluateServiceHealthSlo(input ?? {})),
 
     /**
      * Collects one round and records it.

@@ -32,6 +32,11 @@ from .lakehouse_catalog import CATALOG_SOURCES, write_catalog_evidence
 from .lifecycle_event_lakehouse import LifecycleEventProjectionError, project_lifecycle_event
 from .sedona_livy import SedonaAggregateJobClient, SedonaLivyConfig, SedonaUnavailable
 from .geolibre_project import GeoLibrePublicationError, build_aggregate_project
+from .regulatory_submission import (
+    AuthorisedRegulatoryChannel,
+    RegulatorySubmissionRequest,
+    RegulatorySubmissionUnavailable,
+)
 
 
 class ReportPackRequest(BaseModel):
@@ -85,6 +90,16 @@ class ReportAssemblyRequest(BaseModel):
     period_end: str
     regulated_entity_id: str = Field(min_length=1, max_length=255)
     transactions: list[dict[str, Any]]
+
+
+class AuthorisedReportSubmissionRequest(BaseModel):
+    regulator: Literal["CBN", "CBK", "SARB"]
+    report_type: str = Field(min_length=4, max_length=255)
+    regulated_entity_id: str = Field(min_length=1, max_length=255)
+    artifact_uri: str = Field(pattern=r"^https://", max_length=2048)
+    artifact_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    evidence_manifest: dict[str, Any]
+    correlation_id: str = Field(min_length=1, max_length=255)
 
 
 class StablecoinPositionRequest(BaseModel):
@@ -314,12 +329,13 @@ class ServiceMetrics:
                 "lakehouse_batches": self.lakehouse_batches,
                 "sedona_jobs_submitted": self.sedona_jobs_submitted,
                 "observed_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-                "regulatory_submission": "disabled_without_verified_channel",
+                "regulatory_submission": "configured_authorised_channel" if REGULATORY_CHANNEL else "disabled_without_verified_channel",
             }
 
 
 METRICS = ServiceMetrics()
 EVENT_EVIDENCE_LEDGER: EventEvidenceLedger = UnavailableEventEvidenceLedger()
+REGULATORY_CHANNEL: AuthorisedRegulatoryChannel | None = None
 
 
 @app.on_event("startup")
@@ -335,6 +351,15 @@ def configure_event_evidence_ledger_from_environment() -> None:
     if not redis_url:
         return
     configure_event_evidence_ledger(redis_url)
+
+
+@app.on_event("startup")
+def configure_regulatory_channel_from_environment() -> None:
+    global REGULATORY_CHANNEL
+    try:
+        REGULATORY_CHANNEL = AuthorisedRegulatoryChannel.from_environment()
+    except RegulatorySubmissionUnavailable as exc:
+        raise RuntimeError(f"regulated submission channel cannot start safely: {exc}") from exc
 
 
 @app.middleware("http")
@@ -361,7 +386,11 @@ def metrics() -> dict[str, Any]:
 
 @app.get("/healthz")
 def health() -> dict[str, str]:
-    return {"service": "reporting-analytics", "status": "healthy", "regulatory_submission": "disabled_without_verified_channel"}
+    return {
+        "service": "reporting-analytics",
+        "status": "healthy",
+        "regulatory_submission": "configured_authorised_channel" if REGULATORY_CHANNEL else "disabled_without_verified_channel",
+    }
 
 
 @app.post("/events/payment-order-validated")
@@ -429,6 +458,38 @@ def validate_report(request: ReportPackRequest) -> dict[str, Any]:
         return {"valid": True, "manifest": manifest.__dict__, "regulatory_submission": "disabled_without_verified_channel"}
     except ReportValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/v1/reports/submit-authorised")
+def submit_authorised_report(request: AuthorisedReportSubmissionRequest) -> dict[str, Any]:
+    """Submit a reviewed artefact only through the configured authorised channel.
+
+    The receipt is attributable evidence, not a statement of CBN approval,
+    settlement, or licence. A missing channel is an explicit 503; no submission
+    reference is manufactured locally.
+    """
+    if REGULATORY_CHANNEL is None:
+        raise HTTPException(status_code=503, detail="regulatory submission channel is not configured")
+    try:
+        receipt = REGULATORY_CHANNEL.submit(
+            RegulatorySubmissionRequest(
+                regulator=request.regulator,
+                report_type=request.report_type,
+                regulated_entity_id=request.regulated_entity_id,
+                artifact_uri=request.artifact_uri,
+                artifact_digest=request.artifact_digest,
+                evidence_manifest=request.evidence_manifest,
+                correlation_id=request.correlation_id,
+            )
+        )
+    except RegulatorySubmissionUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {
+        "channel_reference": receipt.channel_reference,
+        "external_reference": receipt.external_reference,
+        "state": receipt.state,
+        "response_evidence_sha256": receipt.response_evidence_sha256,
+    }
 
 
 @app.post("/v1/lakehouse/bronze-manifest")

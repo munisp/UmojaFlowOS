@@ -41,6 +41,10 @@ func (DisabledYellowCardClient) CreateRFQ(context.Context, YellowCardRFQ) (Yello
 	return YellowCardRFQResult{}, errors.New("Yellow Card provider is not configured and RFQ creation is disabled")
 }
 
+func (DisabledYellowCardClient) SubmitSend(context.Context, YellowCardSend) (YellowCardSendResult, error) {
+	return YellowCardSendResult{}, errors.New("Yellow Card provider is not configured and Send execution is disabled")
+}
+
 // YellowCardSigner keeps both API-key lookup and secret-key HMAC generation in
 // a deployment secret boundary. The HTTP adapter never accepts a key from an
 // API request, counterparty record, PostgreSQL row, or browser form.

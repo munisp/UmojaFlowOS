@@ -107,6 +107,25 @@ services:
       UMOJA_YELLOWCARD_REPLAY_KEY_PREFIX: "yellowcard:webhook:"
       UMOJA_YELLOWCARD_WEBHOOK_EVIDENCE_DIRECTORY: /var/lib/umojaflowos/webhook-evidence
       UMOJA_YELLOWCARD_WEBHOOK_RECONCILIATION_QUEUE_DIRECTORY: /var/lib/umojaflowos/webhook-reconciliation
+      UMOJA_YELLOWCARD_EXECUTION_ENABLED: ${UMOJA_YELLOWCARD_EXECUTION_ENABLED:-false}
+      UMOJA_YELLOWCARD_EXECUTION_BASE_URL: ${UMOJA_YELLOWCARD_EXECUTION_BASE_URL:-}
+      UMOJA_YELLOWCARD_ALLOW_FORCE_ACCEPT: "false"
+      UMOJA_YELLOWCARD_API_KEY_SECRET_REFERENCE: ${UMOJA_YELLOWCARD_API_KEY_SECRET_REFERENCE:-}
+      UMOJA_YELLOWCARD_HMAC_SECRET_REFERENCE: ${UMOJA_YELLOWCARD_HMAC_SECRET_REFERENCE:-}
+      UMOJA_YELLOWCARD_EXECUTION_APPROVAL_HMAC_SECRET_REFERENCE: ${UMOJA_YELLOWCARD_EXECUTION_APPROVAL_HMAC_SECRET_REFERENCE:-}
+      UMOJA_TIGERBEETLE_ENABLED: ${UMOJA_TIGERBEETLE_ENABLED:-false}
+      UMOJA_TIGERBEETLE_CLUSTER_ID: ${UMOJA_TIGERBEETLE_CLUSTER_ID:-}
+      UMOJA_TIGERBEETLE_ADDRESSES: ${UMOJA_TIGERBEETLE_ADDRESSES:-}
+      UMOJA_TIGERBEETLE_NGN_LEDGER: ${UMOJA_TIGERBEETLE_NGN_LEDGER:-}
+      UMOJA_TIGERBEETLE_KES_LEDGER: ${UMOJA_TIGERBEETLE_KES_LEDGER:-}
+      UMOJA_TIGERBEETLE_ZAR_LEDGER: ${UMOJA_TIGERBEETLE_ZAR_LEDGER:-}
+      UMOJA_TIGERBEETLE_ACCOUNT_CODE: ${UMOJA_TIGERBEETLE_ACCOUNT_CODE:-}
+      UMOJA_TIGERBEETLE_TRANSFER_CODE: ${UMOJA_TIGERBEETLE_TRANSFER_CODE:-}
+      UMOJA_TIGERBEETLE_TLS_REQUIRED: "true"
+      UMOJA_TIGERBEETLE_ALLOW_INSECURE_LOOPBACK: "false"
+      UMOJA_LEDGER_PROJECTION_ENDPOINT: https://${UMOJA_PUBLIC_HOST}/internal/ledger/projections
+      UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE: ${UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE:-}
+      UMOJA_LEDGER_PROJECTION_ALLOW_INSECURE_LOOPBACK: "false"
     expose:
       - "8081"
     volumes:
@@ -125,6 +144,63 @@ services:
       - /tmp
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8081/healthz || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  risk-compliance-core:
+    image: ${UMOJA_RISK_CORE_IMAGE:?provide an immutable risk-compliance image reference}
+    restart: unless-stopped
+    environment:
+      PORT: "8082"
+      UMOJA_SCREENING_ENABLED: ${UMOJA_SCREENING_ENABLED:-false}
+      UMOJA_SCREENING_ENDPOINT: ${UMOJA_SCREENING_ENDPOINT:-}
+      UMOJA_SCREENING_API_KEY_SECRET_REFERENCE: ${UMOJA_SCREENING_API_KEY_SECRET_REFERENCE:-}
+      UMOJA_SCREENING_MATERIAL_ROOT: /run/umoja-secrets
+      UMOJA_SCREENING_ALLOW_INSECURE_LOOPBACK: "false"
+    expose:
+      - "8082"
+    volumes:
+      - ${UMOJA_SCREENING_MATERIAL_MOUNT_PATH:?mount screening secret-manager material outside source control}:/run/umoja-secrets:ro
+    networks:
+      - protected
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8082/healthz || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  reporting-analytics:
+    image: ${UMOJA_REPORTING_IMAGE:?provide an immutable reporting image reference}
+    restart: unless-stopped
+    environment:
+      UMOJA_REGULATORY_SUBMISSION_ENABLED: ${UMOJA_REGULATORY_SUBMISSION_ENABLED:-false}
+      UMOJA_REGULATORY_SUBMISSION_ENDPOINT: ${UMOJA_REGULATORY_SUBMISSION_ENDPOINT:-}
+      UMOJA_REGULATORY_SUBMISSION_CHANNEL_REFERENCE: ${UMOJA_REGULATORY_SUBMISSION_CHANNEL_REFERENCE:-}
+      UMOJA_REGULATORY_SUBMISSION_API_KEY_SECRET_REFERENCE: ${UMOJA_REGULATORY_SUBMISSION_API_KEY_SECRET_REFERENCE:-}
+      UMOJA_REGULATORY_SUBMISSION_MATERIAL_ROOT: /run/umoja-secrets
+    expose:
+      - "8083"
+    volumes:
+      - ${UMOJA_REGULATORY_SUBMISSION_MATERIAL_MOUNT_PATH:?mount regulatory-channel secret-manager material outside source control}:/run/umoja-secrets:ro
+    networks:
+      - protected
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8083/healthz\", timeout=2)' || exit 1"]
       interval: 15s
       timeout: 3s
       retries: 5
@@ -281,8 +357,12 @@ services:
       UMOJA_OBJECT_STORAGE_BUCKET: ${UMOJA_OBJECT_STORAGE_BUCKET:?set the approved evidence bucket}
       UMOJA_OBJECT_STORAGE_ACCESS_KEY_ID: ${UMOJA_OBJECT_STORAGE_ACCESS_KEY_ID:?supply through a managed secret injector}
       UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY: ${UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY:?supply through a managed secret injector}
+      UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE: ${UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE:-}
+      UMOJA_PROVIDER_MATERIAL_ROOT: /run/umoja-secrets
     expose:
       - "3000"
+    volumes:
+      - ${UMOJA_YELLOWCARD_MATERIAL_MOUNT_PATH:?mount internal-control secret-manager material outside source control}:/run/umoja-secrets:ro
     networks:
       - protected
     security_opt:

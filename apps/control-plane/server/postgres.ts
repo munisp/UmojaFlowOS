@@ -1511,3 +1511,76 @@ export async function listPostgresTreasuryBufferPolicies() {
     return rows;
   } finally { client.release(); }
 }
+
+
+export type InternalLedgerProjectionInput = {
+  transferId: string;
+  correlationId: string;
+  currency: "NGN" | "KES" | "ZAR" | "USD" | "USDC" | "USDT";
+  amountMinor: string;
+  debitAccountId: string;
+  creditAccountId: string;
+  postedAt: Date;
+  evidenceSha256: string;
+};
+
+/**
+ * Persist an accepted TigerBeetle fact. This function is intentionally limited
+ * to immutable accounting evidence: it neither updates payment_orders nor
+ * treats the fact as settlement finality. A separate reconciliation procedure
+ * must record a matching PostgreSQL projection before any lifecycle changes.
+ */
+export async function recordInternalLedgerProjection(input: InternalLedgerProjectionInput) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    if (input.debitAccountId === input.creditAccountId) throw new Error("ledger projection requires distinct accounts");
+    const accounts = await client.query<{ tigerbeetleAccountId: string; currency: string }>(
+      `SELECT tigerbeetle_account_id::text AS "tigerbeetleAccountId", currency
+         FROM ledger_account_bindings
+        WHERE tigerbeetle_account_id = ANY($1::bigint[]) FOR KEY SHARE`,
+      [[input.debitAccountId, input.creditAccountId]],
+    );
+    if (accounts.rows.length !== 2 || accounts.rows.some(row => row.currency !== input.currency)) {
+      throw new Error("ledger account bindings are missing or do not match the transfer currency");
+    }
+    const inserted = await client.query<{ id: string; reconciliationState: string }>(
+      `INSERT INTO tigerbeetle_transfer_facts
+        (tigerbeetle_transfer_id, correlation_id, currency, amount_minor, debit_account_id, credit_account_id, posted_at, evidence_sha256)
+       VALUES ($1::bigint, $2, $3, $4::numeric, $5::bigint, $6::bigint, $7, $8)
+       ON CONFLICT (tigerbeetle_transfer_id) DO NOTHING
+       RETURNING id, reconciliation_state AS "reconciliationState"`,
+      [input.transferId, input.correlationId, input.currency, input.amountMinor, input.debitAccountId, input.creditAccountId, input.postedAt, input.evidenceSha256],
+    );
+    if (!inserted.rows[0]) {
+      const existing = await client.query<{
+        correlationId: string; currency: string; amountMinor: string; debitAccountId: string; creditAccountId: string; evidenceSha256: string; reconciliationState: string;
+      }>(
+        `SELECT correlation_id AS "correlationId", currency, amount_minor::text AS "amountMinor",
+                debit_account_id::text AS "debitAccountId", credit_account_id::text AS "creditAccountId",
+                evidence_sha256 AS "evidenceSha256", reconciliation_state AS "reconciliationState"
+           FROM tigerbeetle_transfer_facts WHERE tigerbeetle_transfer_id=$1::bigint`,
+        [input.transferId],
+      );
+      const fact = existing.rows[0];
+      if (!fact || fact.correlationId !== input.correlationId || fact.currency !== input.currency || fact.amountMinor !== input.amountMinor || fact.debitAccountId !== input.debitAccountId || fact.creditAccountId !== input.creditAccountId || fact.evidenceSha256 !== input.evidenceSha256) {
+        throw new Error("existing TigerBeetle transfer evidence does not match the signed projection");
+      }
+      await client.query("COMMIT");
+      return { recorded: false, reconciliationState: fact.reconciliationState };
+    }
+    const fact = inserted.rows[0];
+    await client.query(
+      `INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata)
+       VALUES ($1, 'admin', 'ledger.tigerbeetle_fact_projected', 'tigerbeetle_transfer_fact', $2, $3::jsonb)`,
+      ["payment-engine-internal", fact.id, JSON.stringify({ transferId: input.transferId, correlationId: input.correlationId, currency: input.currency, amountMinor: input.amountMinor, evidenceSha256: input.evidenceSha256, source: "signed-payment-engine-projection" })],
+    );
+    await client.query("COMMIT");
+    return { recorded: true, reconciliationState: fact.reconciliationState };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}

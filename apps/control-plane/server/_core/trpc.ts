@@ -50,5 +50,9 @@ export const complianceProcedure = procedureForRoles(["admin", "compliance_offic
 export const complianceOnlyProcedure = procedureForRoles(["compliance_officer"]);
 export const treasuryProcedure = procedureForRoles(["admin", "treasury_operator"]);
 export const auditorProcedure = procedureForRoles(["admin", "compliance_officer", "treasury_operator", "auditor"]);
+/** Independent signoff on external readiness evidence is restricted to an
+ * administrator or auditor. The workflow itself additionally rejects a verifier
+ * who is the same subject that recorded the evidence. */
+export const assuranceVerifierProcedure = procedureForRoles(["admin", "auditor"]);
 export const providerContactProcedure = procedureForRoles(["provider_contact"]);
 export const cbnLiaisonProcedure = procedureForRoles(["cbn_liaison"]);
