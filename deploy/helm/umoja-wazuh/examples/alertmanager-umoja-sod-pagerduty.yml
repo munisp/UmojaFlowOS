@@ -1,0 +1,36 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default-blackhole
+  group_by: [alertname, service, compliance_domain]
+  group_wait: 0s
+  group_interval: 5m
+  repeat_interval: 1h
+  routes:
+    - receiver: umoja-sod-pagerduty
+      matchers:
+        - compliance_domain="segregation_of_duties"
+        - severity="critical"
+      continue: false
+
+receivers:
+  - name: default-blackhole
+
+  - name: umoja-sod-pagerduty
+    pagerduty_configs:
+      - routing_key_file: /etc/alertmanager/secrets/umoja-sod-pagerduty/routing-key
+        send_resolved: true
+        severity: '{{ .CommonLabels.severity }}'
+        class: '{{ .CommonLabels.alertname }}'
+        component: '{{ .CommonLabels.service }}'
+        group: '{{ .CommonLabels.compliance_domain }}'
+        client: prometheus
+        client_url: '{{ .ExternalURL }}'
+        description: '{{ .CommonAnnotations.summary }}'
+        details:
+          alertname: '{{ .CommonLabels.alertname }}'
+          service: '{{ .CommonLabels.service }}'
+          compliance_domain: '{{ .CommonLabels.compliance_domain }}'
+          description: '{{ .CommonAnnotations.description }}'
+          runbook_url: '{{ .CommonAnnotations.runbook_url }}'

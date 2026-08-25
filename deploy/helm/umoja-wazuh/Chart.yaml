@@ -1,0 +1,7 @@
+apiVersion: v2
+name: umoja-wazuh
+description: UmojaFlowOS Wazuh manager and SoD incident metrics integration
+type: application
+version: 0.1.0
+appVersion: "4.12.0"
+kubeVersion: ">=1.27.0-0"

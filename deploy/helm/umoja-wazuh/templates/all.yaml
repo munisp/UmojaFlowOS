@@ -1,0 +1,154 @@
+{{- $ns := include "umoja-wazuh.namespace" . -}}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: umoja-flowos
+---
+{{- if .Values.secret.create }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.secret.name }}
+  namespace: {{ $ns }}
+type: Opaque
+stringData:
+  endpoint: {{ .Values.secret.endpoint | quote }}
+  hmac-secret: {{ .Values.secret.hmacSecret | quote }}
+---
+{{- end }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.metrics.pvc.name }}
+  namespace: {{ $ns }}
+spec:
+  accessModes:
+{{ toYaml .Values.metrics.pvc.accessModes | indent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.metrics.pvc.size }}
+{{- if .Values.metrics.pvc.storageClassName }}
+  storageClassName: {{ .Values.metrics.pvc.storageClassName | quote }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wazuh-manager
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/name: wazuh-manager
+    app.kubernetes.io/component: security-monitoring
+spec:
+  replicas: {{ .Values.wazuh.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wazuh-manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wazuh-manager
+        app.kubernetes.io/component: security-monitoring
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+{{ toYaml .Values.podSecurityContext | indent 8 }}
+      containers:
+        - name: wazuh-manager
+          image: "{{ .Values.wazuh.image.repository }}:{{ .Values.wazuh.image.tag }}"
+          imagePullPolicy: {{ .Values.wazuh.image.pullPolicy }}
+          env:
+            - name: UMOJA_SOD_INCIDENT_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.wazuh.endpoint.existingSecret }}
+                  key: {{ .Values.wazuh.endpoint.key }}
+            - name: UMOJA_SOD_INCIDENT_HMAC_SECRET_FILE
+              value: /var/ossec/etc/umoja-sod-incident.secret
+            - name: UMOJA_SOD_METRICS_PATH
+              value: {{ .Values.wazuh.metricsPath | quote }}
+          ports: []
+          resources:
+{{ toYaml .Values.wazuh.resources | indent 12 }}
+          volumeMounts:
+            - name: sod-metrics
+              mountPath: /var/lib/node_exporter/textfile_collector
+            - name: sod-secret
+              mountPath: /var/ossec/etc/umoja-sod-incident.secret
+              subPath: hmac-secret
+              readOnly: true
+      volumes:
+        - name: sod-metrics
+          persistentVolumeClaim:
+            claimName: {{ .Values.metrics.pvc.name }}
+        - name: sod-secret
+          secret:
+            secretName: {{ .Values.wazuh.hmacSecret.existingSecret }}
+            defaultMode: 0640
+---
+{{- if .Values.nodeExporter.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wazuh-sod-node-exporter
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/name: node-exporter
+    app.kubernetes.io/component: metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: node-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: node-exporter
+        app.kubernetes.io/component: metrics
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: node-exporter
+          image: "{{ .Values.nodeExporter.image.repository }}:{{ .Values.nodeExporter.image.tag }}"
+          imagePullPolicy: {{ .Values.nodeExporter.image.pullPolicy }}
+          args:
+            - --collector.textfile.directory=/var/lib/node_exporter/textfile_collector
+          ports: []
+          resources:
+{{ toYaml .Values.nodeExporter.resources | indent 12 }}
+          volumeMounts:
+            - name: sod-metrics
+              mountPath: /var/lib/node_exporter/textfile_collector
+              readOnly: true
+      volumes:
+        - name: sod-metrics
+          persistentVolumeClaim:
+            claimName: {{ .Values.metrics.pvc.name }}
+{{- end }}
+---
+{{- if .Values.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: umoja-sod-incident-handler
+  namespace: {{ $ns }}
+  labels:
+    {{- toYaml .Values.serviceMonitor.labels | nindent 4 }}
+spec:
+  groups:
+    - name: umoja-sod-incident-handler
+      rules:
+        - alert: UmojaSodIncidentHandlerFailures
+          expr: increase(umoja_sod_incident_failures_total[5m]) > 0
+          for: 0m
+          labels:
+            severity: critical
+            compliance_domain: segregation_of_duties
+          annotations:
+            summary: UmojaFlowOS SoD incident delivery failure
+            description: A Wazuh SoD incident-handler invocation failed during the last five minutes.
+{{- end }}
