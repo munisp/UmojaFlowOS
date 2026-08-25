@@ -1,0 +1,40 @@
+{
+  "policy": {
+    "policy_id": "umoja-security-audit-v1-retention",
+    "description": "Retention policy for normalized Umoja security audit events",
+    "default_state": "hot",
+    "schema_version": 17,
+    "states": [
+      {
+        "name": "hot",
+        "actions": [
+          {"rollover": {"min_size": "25gb", "min_index_age": "1d"}}
+        ],
+        "transitions": [
+          {"state_name": "warm", "conditions": [{"min_index_age": "7d"}]}
+        ]
+      },
+      {
+        "name": "warm",
+        "actions": [
+          {"replica_count": {"number_of_replicas": 1}},
+          {"read_only": {}}
+        ],
+        "transitions": [
+          {"state_name": "delete", "conditions": [{"min_index_age": "365d"}]}
+        ]
+      },
+      {
+        "name": "delete",
+        "actions": [
+          {"notification": {"destination": {"custom_webhook": {"url": "https://audit-retention-gateway.internal/v1/opensearch/delete"}}}},
+          {"delete": {}}
+        ],
+        "transitions": []
+      }
+    ],
+    "ism_template": [
+      {"index_patterns": ["umoja-security-audit-v1-*"]}
+    ]
+  }
+}

@@ -125,6 +125,11 @@ func main() {
 	if result.Failures > 0 || result.Transfers == 0 {
 		result.Status = "failed"
 	}
+	if path := strings.TrimSpace(os.Getenv("TIGERBEETLE_LOADTEST_METRICS_PATH")); path != "" {
+		if err := writeMetrics(path, result); err != nil {
+			fatal(fmt.Errorf("write load-test metrics: %w", err))
+		}
+	}
 	encoded, _ := json.Marshal(result)
 	fmt.Println(string(encoded))
 	if result.Status != "passed" {
@@ -220,4 +225,20 @@ func sortFloats(values []float64) {
 		values[j+1] = value
 	}
 }
+func writeMetrics(path string, result report) error {
+	if !strings.HasPrefix(path, "/") {
+		return errors.New("TIGERBEETLE_LOADTEST_METRICS_PATH must be absolute")
+	}
+	content := fmt.Sprintf("# TYPE umoja_tigerbeetle_loadtest_requests_total counter\numoja_tigerbeetle_loadtest_requests_total %d\n# TYPE umoja_tigerbeetle_loadtest_failures_total counter\numoja_tigerbeetle_loadtest_failures_total %d\n# TYPE umoja_tigerbeetle_loadtest_transfers_total counter\numoja_tigerbeetle_loadtest_transfers_total %d\n# TYPE umoja_tigerbeetle_loadtest_latency_ms gauge\numoja_tigerbeetle_loadtest_latency_ms{quantile=\"0.50\"} %.3f\numoja_tigerbeetle_loadtest_latency_ms{quantile=\"0.95\"} %.3f\numoja_tigerbeetle_loadtest_latency_ms{quantile=\"0.99\"} %.3f\n# TYPE umoja_tigerbeetle_loadtest_transfers_per_second gauge\numoja_tigerbeetle_loadtest_transfers_per_second %.3f\n", result.Batches, result.Failures, result.Transfers, result.P50Millis, result.P95Millis, result.P99Millis, result.TransfersPerSec)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(content), 0640); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
 func fatal(err error) { fmt.Fprintf(os.Stderr, "loadtest_error=%v\n", err); os.Exit(2) }

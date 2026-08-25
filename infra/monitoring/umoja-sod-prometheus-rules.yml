@@ -111,3 +111,62 @@ groups:
           summary: UmojaFlowOS TigerBeetle failover remains indeterminate
           description: The failover state has remained unresolved for more than 15 minutes; maintain the transaction freeze and escalate.
           runbook_url: https://docs.example.invalid/runbooks/tigerbeetle-consensus-loss
+
+      - alert: UmojaTigerBeetleLoadTestErrorSpike
+        expr: |
+          increase(umoja_tigerbeetle_loadtest_failures_total[5m]) > 0
+          or (
+            increase(umoja_tigerbeetle_loadtest_failures_total[15m])
+            /
+            clamp_min(increase(umoja_tigerbeetle_loadtest_requests_total[15m]), 1)
+          ) > 0.01
+        for: 2m
+        labels:
+          severity: critical
+          urgency: page
+          service: tigerbeetle-loadtest
+          environment: staging
+          compliance_domain: ledger_integrity
+        annotations:
+          summary: TigerBeetle staging load test error spike
+          description: One or more batch failures or an error ratio above 1 percent was observed during the staging load test.
+          runbook_url: https://docs.example.invalid/runbooks/tigerbeetle-loadtest
+
+      - alert: UmojaTigerBeetleLoadTestP95LatencyHigh
+        expr: umoja_tigerbeetle_loadtest_latency_ms{quantile="0.95"} > 250
+        for: 5m
+        labels:
+          severity: warning
+          service: tigerbeetle-loadtest
+          environment: staging
+          compliance_domain: ledger_integrity
+        annotations:
+          summary: TigerBeetle staging load-test p95 latency is high
+          description: The p95 batch-transfer latency has exceeded 250 milliseconds for five minutes.
+
+      - alert: UmojaTigerBeetleLoadTestP99LatencyCritical
+        expr: umoja_tigerbeetle_loadtest_latency_ms{quantile="0.99"} > 1000
+        for: 2m
+        labels:
+          severity: critical
+          urgency: page
+          service: tigerbeetle-loadtest
+          environment: staging
+          compliance_domain: ledger_integrity
+        annotations:
+          summary: TigerBeetle staging load-test p99 latency is critical
+          description: The p99 batch-transfer latency has exceeded one second. Stop the test and investigate replica health and network latency.
+          runbook_url: https://docs.example.invalid/runbooks/tigerbeetle-loadtest
+
+      - alert: UmojaTigerBeetleLoadTestThroughputCollapse
+        expr: umoja_tigerbeetle_loadtest_transfers_per_second < 1
+        for: 5m
+        labels:
+          severity: critical
+          urgency: page
+          service: tigerbeetle-loadtest
+          environment: staging
+          compliance_domain: ledger_integrity
+        annotations:
+          summary: TigerBeetle staging load-test throughput collapsed
+          description: The load-test transfer throughput is below one transfer per second for five minutes.

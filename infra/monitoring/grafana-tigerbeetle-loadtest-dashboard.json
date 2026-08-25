@@ -1,0 +1,60 @@
+{
+  "id": null,
+  "uid": "umoja-tigerbeetle-loadtest",
+  "title": "UmojaFlowOS TigerBeetle Staging Load Test",
+  "tags": ["umoja", "tigerbeetle", "staging", "ledger-integrity"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Transfers per second",
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "umoja_tigerbeetle_loadtest_transfers_per_second", "legendFormat": "TPS"}],
+      "fieldConfig": {"defaults": {"unit": "ops", "thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "green", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Batch failures",
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "umoja_tigerbeetle_loadtest_failures_total", "legendFormat": "failures"}],
+      "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Batch latency percentiles",
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "umoja_tigerbeetle_loadtest_latency_ms{quantile=\"0.50\"}", "legendFormat": "p50"},
+        {"expr": "umoja_tigerbeetle_loadtest_latency_ms{quantile=\"0.95\"}", "legendFormat": "p95"},
+        {"expr": "umoja_tigerbeetle_loadtest_latency_ms{quantile=\"0.99\"}", "legendFormat": "p99"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "showPoints": "never"}}, "overrides": []}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Load-test counters",
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 14},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "umoja_tigerbeetle_loadtest_requests_total", "legendFormat": "batches"},
+        {"expr": "umoja_tigerbeetle_loadtest_transfers_total", "legendFormat": "transfers"},
+        {"expr": "umoja_tigerbeetle_loadtest_failures_total", "legendFormat": "failures"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    }
+  ],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "annotations": {"list": []}
+}

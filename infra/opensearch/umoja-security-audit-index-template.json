@@ -1,0 +1,35 @@
+{
+  "index_patterns": ["umoja-security-audit-v1-*"],
+  "priority": 200,
+  "template": {
+    "settings": {
+      "plugins.index_state_management.policy_id": "umoja-security-audit-v1-retention",
+      "plugins.index_state_management.rollover_alias": "umoja-security-audit-v1",
+      "number_of_shards": 3,
+      "number_of_replicas": 1,
+      "refresh_interval": "5s"
+    },
+    "mappings": {
+      "dynamic": "strict",
+      "properties": {
+        "audit_schema": {"type": "keyword"},
+        "event_source": {"type": "keyword"},
+        "event_category": {"type": "keyword"},
+        "timestamp": {"type": "date"},
+        "subject": {"type": "keyword", "index": false},
+        "client_id": {"type": "keyword"},
+        "result": {"type": "keyword"},
+        "transfer_id": {"type": "unsigned_long"},
+        "correlation_id": {"type": "keyword"},
+        "currency": {"type": "keyword"},
+        "amount_minor": {"type": "unsigned_long"},
+        "debit_account_id": {"type": "unsigned_long"},
+        "credit_account_id": {"type": "unsigned_long"},
+        "message_type": {"type": "keyword"}
+      }
+    },
+    "aliases": {
+      "umoja-security-audit-v1": {}
+    }
+  }
+}
