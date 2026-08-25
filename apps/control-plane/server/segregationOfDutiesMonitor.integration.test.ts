@@ -44,4 +44,27 @@ describe("segregation-of-duties monitor", () => {
     }));
     await rm(directory, { recursive: true, force: true });
   });
+
+  it("skips evaluation when another instance owns the advisory lock", async () => {
+    const pool = getPool();
+    const holder = await pool.connect();
+    try {
+      await holder.query("SELECT pg_advisory_lock($1)", [8_702_041_914]);
+      const result = await runSegregationOfDutiesMonitorRound({
+        UMOJA_SOD_MONITOR_SUBJECT: "system:contending-sod-monitor",
+      } as NodeJS.ProcessEnv);
+
+      expect(result).toEqual({ status: "leader_unavailable", exceptionCount: 0 });
+      const evaluations = await pool.query(
+        `SELECT count(*)::int AS count
+           FROM segregation_of_duties_evaluation_runs
+          WHERE evaluator_subject = $1`,
+        ["system:contending-sod-monitor"],
+      );
+      expect(evaluations.rows[0].count).toBe(0);
+    } finally {
+      await holder.query("SELECT pg_advisory_unlock($1)", [8_702_041_914]);
+      holder.release();
+    }
+  });
 });
