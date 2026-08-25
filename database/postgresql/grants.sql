@@ -45,7 +45,11 @@ GRANT INSERT ON TABLE
   vasp_travel_rule_route_assessments,
   vasp_offshore_counterparty_assessments,
   user_role_assignments,
-  external_stakeholder_evidence
+  external_stakeholder_evidence,
+  ledger_account_bindings,
+  tigerbeetle_transfer_facts,
+  aml_screening_checks,
+  regulatory_submission_attempts
 TO :"app_role_ident";
 
 -- Records with a governed, reviewable lifecycle require in-place transitions.
@@ -81,7 +85,9 @@ GRANT INSERT, UPDATE ON TABLE
   treasury_rebalancing_recommendations,
   compliance_alerts,
   operator_role_assignments,
-  external_stakeholder_assignments
+  external_stakeholder_assignments,
+  provider_send_requests,
+  vasp_readiness_assurance_items
 TO :"app_role_ident";
 
 -- `treasury_stress_test_runs` is intentionally omitted: no application write

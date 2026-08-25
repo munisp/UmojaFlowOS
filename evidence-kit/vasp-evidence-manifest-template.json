@@ -1,0 +1,77 @@
+{
+  "dossier": {
+    "id": "<CBN_SANDBOX_DOSSIER_UUID_AFTER_CREATION>",
+    "track": "vasp",
+    "environment": "staging",
+    "externalSubmissionClaimed": false,
+    "cbnAdmissionClaimed": false,
+    "licenceClaimed": false
+  },
+  "items": [
+    {
+      "area": "controlled_live_test",
+      "maxPoints": 7,
+      "submitterSubject": "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>",
+      "evidence": {
+        "path": "/approved/evidence/controlled-live-test.pdf",
+        "uri": "https://<EVIDENCE_HOST>/controlled-live-test.pdf",
+        "sha256": "<SHA256_OF_EXACT_FILE>"
+      },
+      "acceptance": {
+        "testPlan": true,
+        "boundedLimits": true,
+        "sandboxInteroperability": true,
+        "reconciliationExercise": true,
+        "windDownExercise": true
+      },
+      "attestation": {
+        "externalVerifier": "<INDEPENDENT_REVIEWER_NAME>",
+        "path": "/approved/evidence/controlled-live-test-attestation.pdf",
+        "uri": "https://<EVIDENCE_HOST>/controlled-live-test-attestation.pdf",
+        "sha256": "<SHA256_OF_EXACT_ATTESTATION_FILE>",
+        "platformVerifierSubject": "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>",
+        "rationale": "<MINIMUM_20_CHARACTER_INDEPENDENT_VERIFICATION_RATIONALE>"
+      }
+    },
+    {
+      "area": "governance_legal_ownership",
+      "maxPoints": 8,
+      "submitterSubject": "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>",
+      "evidence": { "path": "/approved/evidence/governance.pdf", "uri": "https://<EVIDENCE_HOST>/governance.pdf", "sha256": "<SHA256>" },
+      "acceptance": { "legalEntityAndUbo": true, "officerAppointments": true, "boardApprovals": true, "accessReview": true },
+      "attestation": { "externalVerifier": "<INDEPENDENT_REVIEWER_NAME>", "path": "/approved/evidence/governance-attestation.pdf", "uri": "https://<EVIDENCE_HOST>/governance-attestation.pdf", "sha256": "<SHA256>", "platformVerifierSubject": "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>", "rationale": "<MINIMUM_20_CHARACTER_INDEPENDENT_VERIFICATION_RATIONALE>" }
+    },
+    {
+      "area": "aml_cft_cpf_operations",
+      "maxPoints": 14,
+      "submitterSubject": "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>",
+      "evidence": { "path": "/approved/evidence/aml-cft.pdf", "uri": "https://<EVIDENCE_HOST>/aml-cft.pdf", "sha256": "<SHA256>" },
+      "acceptance": { "approvedProgramme": true, "lawfulScreeningSource": true, "caseExercises": true, "mlroAndTraining": true, "travelRuleTest": true, "reportingDecisionProcess": true },
+      "attestation": { "externalVerifier": "<INDEPENDENT_REVIEWER_NAME>", "path": "/approved/evidence/aml-attestation.pdf", "uri": "https://<EVIDENCE_HOST>/aml-attestation.pdf", "sha256": "<SHA256>", "platformVerifierSubject": "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>", "rationale": "<MINIMUM_20_CHARACTER_INDEPENDENT_VERIFICATION_RATIONALE>" }
+    },
+    {
+      "area": "customer_asset_safeguarding",
+      "maxPoints": 13,
+      "submitterSubject": "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>",
+      "evidence": { "path": "/approved/evidence/safeguarding.pdf", "uri": "https://<EVIDENCE_HOST>/safeguarding.pdf", "sha256": "<SHA256>" },
+      "acceptance": { "approvedScope": true, "keyManagement": true, "segregationAndReconciliation": true, "reserveOrNotApplicable": true, "windDown": true },
+      "attestation": { "externalVerifier": "<INDEPENDENT_REVIEWER_NAME>", "path": "/approved/evidence/safeguarding-attestation.pdf", "uri": "https://<EVIDENCE_HOST>/safeguarding-attestation.pdf", "sha256": "<SHA256>", "platformVerifierSubject": "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>", "rationale": "<MINIMUM_20_CHARACTER_INDEPENDENT_VERIFICATION_RATIONALE>" }
+    },
+    {
+      "area": "cybersecurity_resilience",
+      "maxPoints": 10,
+      "submitterSubject": "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>",
+      "evidence": { "path": "/approved/evidence/security-resilience.pdf", "uri": "https://<EVIDENCE_HOST>/security-resilience.pdf", "sha256": "<SHA256>" },
+      "acceptance": { "mfaAndAccessReview": true, "secretsAndCertificates": true, "independentSecurityTest": true, "monitoringAndOnCall": true, "backupAndDr": true, "measuredSlo": true },
+      "attestation": { "externalVerifier": "<INDEPENDENT_REVIEWER_NAME>", "path": "/approved/evidence/security-attestation.pdf", "uri": "https://<EVIDENCE_HOST>/security-attestation.pdf", "sha256": "<SHA256>", "platformVerifierSubject": "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>", "rationale": "<MINIMUM_20_CHARACTER_INDEPENDENT_VERIFICATION_RATIONALE>" }
+    },
+    {
+      "area": "consumer_incident_reporting",
+      "maxPoints": 6,
+      "submitterSubject": "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>",
+      "evidence": { "path": "/approved/evidence/consumer-reporting.pdf", "uri": "https://<EVIDENCE_HOST>/consumer-reporting.pdf", "sha256": "<SHA256>" },
+      "acceptance": { "consumerJourney": true, "complaintExercise": true, "incidentExercise": true, "authorisedChannelReceipt": true, "retentionAndSignatory": true },
+      "attestation": { "externalVerifier": "<INDEPENDENT_REVIEWER_NAME>", "path": "/approved/evidence/consumer-attestation.pdf", "uri": "https://<EVIDENCE_HOST>/consumer-attestation.pdf", "sha256": "<SHA256>", "platformVerifierSubject": "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>", "rationale": "<MINIMUM_20_CHARACTER_INDEPENDENT_VERIFICATION_RATIONALE>" }
+    }
+  ]
+}

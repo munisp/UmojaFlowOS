@@ -113,6 +113,7 @@ export default function Home() {
   const [trendWindow, setTrendWindow] = useState(60);
   const serviceTrendSamples = trpc.postgres.serviceHealthHistory.useQuery({ sinceMinutes: trendWindow });
   const serviceAvailability = trpc.postgres.serviceAvailabilitySummary.useQuery({ sinceMinutes: trendWindow });
+  const serviceHealthSlo = trpc.postgres.serviceHealthSlo.useQuery({ sinceMinutes: trendWindow });
   const credentialAuditTrail = trpc.postgres.integrationCredentialAuditTrail.useQuery(
     { integrationConnectionId: auditConnectionId },
     { enabled: canConfigureCredentials(user?.role) && auditConnectionId !== "" },
@@ -286,6 +287,9 @@ export default function Home() {
             windowMinutes={trendWindow}
             onWindowChange={setTrendWindow}
           />
+        </Panel>
+        <Panel eyebrow="Measured resilience" title="Availability SLO evidence">
+          {serviceHealthSlo.isLoading ? <p className="text-sm text-black/60">Calculating from persisted samples.</p> : serviceHealthSlo.error ? <p className="text-sm text-red-700">SLO evidence could not be read: {serviceHealthSlo.error.message}</p> : <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{(serviceHealthSlo.data ?? []).map(row => <div key={row.service} className="border border-black/15 bg-[#f7f6f2] p-4"><p className="uf-kicker">{row.service}</p><p className={`mt-2 text-sm font-black ${row.status === "within_target" ? "text-emerald-700" : row.status === "breach" ? "text-red-700" : "text-amber-700"}`}>{row.status.replaceAll("_", " ")}</p><p className="mt-2 text-xs leading-5 text-black/65">{row.observedAvailability === null ? "No observed availability" : `${(row.observedAvailability * 100).toFixed(3)}% observed`} · {row.samples}/{row.minimumSamples} samples</p><p className="mt-2 text-xs leading-5 text-black/55">{row.reason}</p></div>)}</div>}
         </Panel>
         {canConfigureCredentials(user?.role) ? <>
           <Panel eyebrow="Administrator action" title="Configure provider credential">

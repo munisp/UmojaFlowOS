@@ -139,3 +139,25 @@ func TestRejectedOrderReturnsAnErrorRatherThanAnEnvelope(t *testing.T) {
 		t.Fatal("a refused order must not produce a validated event")
 	}
 }
+
+func TestWebhookReceiverIsBoundOnlyToDedicatedProviderRoute(t *testing.T) {
+	called := false
+	webhook := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = r.Method == http.MethodPost && r.URL.Path == "/v1/providers/yellowcard/webhooks"
+		w.WriteHeader(http.StatusNoContent)
+	})
+	handler := newHandlerWithWebhook(func() time.Time { return time.Date(2026, 8, 17, 0, 0, 0, 0, time.UTC) }, webhook)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/providers/yellowcard/webhooks", nil))
+	if response.Code != http.StatusNoContent || !called {
+		t.Fatalf("expected dedicated webhook receiver invocation, code=%d called=%t", response.Code, called)
+	}
+}
+
+func TestWebhookRouteIsAbsentWhenRuntimeIsDisabled(t *testing.T) {
+	response := httptest.NewRecorder()
+	handlerAtFixedTime().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/providers/yellowcard/webhooks", nil))
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("expected disabled webhook route to be absent, got %d", response.Code)
+	}
+}

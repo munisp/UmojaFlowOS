@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://umoja.example/schemas/vasp-owner-assignments.schema.json",
+  "title": "UmojaFlowOS VASP Readiness Owner Assignments",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["dossierId", "track", "assignments"],
+  "properties": {
+    "dossierId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Existing staging CBN sandbox VASP dossier UUID."
+    },
+    "track": {
+      "const": "vasp"
+    },
+    "assignments": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/assignment" },
+      "allOf": [
+        { "contains": { "properties": { "area": { "const": "controlled_live_test" } }, "required": ["area"] } },
+        { "contains": { "properties": { "area": { "const": "governance_legal_ownership" } }, "required": ["area"] } },
+        { "contains": { "properties": { "area": { "const": "aml_cft_cpf_operations" } }, "required": ["area"] } },
+        { "contains": { "properties": { "area": { "const": "customer_asset_safeguarding" } }, "required": ["area"] } },
+        { "contains": { "properties": { "area": { "const": "cybersecurity_resilience" } }, "required": ["area"] } },
+        { "contains": { "properties": { "area": { "const": "consumer_incident_reporting" } }, "required": ["area"] } }
+      ]
+    }
+  },
+  "$defs": {
+    "assignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["area", "points", "accountableRole", "externalEvidenceOwner", "externalContact", "platformSubmitterSubject", "platformVerifierSubject"],
+      "properties": {
+        "area": {
+          "enum": ["controlled_live_test", "governance_legal_ownership", "aml_cft_cpf_operations", "customer_asset_safeguarding", "cybersecurity_resilience", "consumer_incident_reporting"]
+        },
+        "points": { "type": "integer", "enum": [6, 7, 8, 10, 13, 14] },
+        "accountableRole": {
+          "enum": ["product_and_risk_owner", "board_legal_company_secretary", "mlro_compliance_owner", "custody_treasury_owner", "ciso_platform_sre_owner", "consumer_protection_cbn_liaison"]
+        },
+        "externalEvidenceOwner": { "type": "string", "minLength": 3, "pattern": "^(?!.*[<>]).+$" },
+        "externalContact": { "type": "string", "format": "email", "pattern": "^(?!.*[<>]).+$" },
+        "platformSubmitterSubject": { "type": "string", "minLength": 3, "pattern": "^(?!.*[<>]).+$" },
+        "platformVerifierSubject": { "type": "string", "minLength": 3, "pattern": "^(?!.*[<>]).+$" }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "dossierId": "<CBN_SANDBOX_DOSSIER_UUID_AFTER_STAGING_CREATION>",
+  "track": "vasp",
+  "assignments": [
+    { "area": "controlled_live_test", "points": 7, "accountableRole": "product_and_risk_owner", "externalEvidenceOwner": "<NAME_AND_TITLE>", "externalContact": "<VERIFIED_WORK_EMAIL>", "platformSubmitterSubject": "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>", "platformVerifierSubject": "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>" },
+    { "area": "governance_legal_ownership", "points": 8, "accountableRole": "board_legal_company_secretary", "externalEvidenceOwner": "<NAME_AND_TITLE>", "externalContact": "<VERIFIED_WORK_EMAIL>", "platformSubmitterSubject": "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>", "platformVerifierSubject": "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>" },
+    { "area": "aml_cft_cpf_operations", "points": 14, "accountableRole": "mlro_compliance_owner", "externalEvidenceOwner": "<NAME_AND_TITLE>", "externalContact": "<VERIFIED_WORK_EMAIL>", "platformSubmitterSubject": "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>", "platformVerifierSubject": "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>" },
+    { "area": "customer_asset_safeguarding", "points": 13, "accountableRole": "custody_treasury_owner", "externalEvidenceOwner": "<NAME_AND_TITLE>", "externalContact": "<VERIFIED_WORK_EMAIL>", "platformSubmitterSubject": "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>", "platformVerifierSubject": "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>" },
+    { "area": "cybersecurity_resilience", "points": 10, "accountableRole": "ciso_platform_sre_owner", "externalEvidenceOwner": "<NAME_AND_TITLE>", "externalContact": "<VERIFIED_WORK_EMAIL>", "platformSubmitterSubject": "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>", "platformVerifierSubject": "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>" },
+    { "area": "consumer_incident_reporting", "points": 6, "accountableRole": "consumer_protection_cbn_liaison", "externalEvidenceOwner": "<NAME_AND_TITLE>", "externalContact": "<VERIFIED_WORK_EMAIL>", "platformSubmitterSubject": "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>", "platformVerifierSubject": "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>" }
+  ]
+}

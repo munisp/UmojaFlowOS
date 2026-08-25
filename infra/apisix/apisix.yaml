@@ -7,6 +7,7 @@ routes:
         bearer_only: true
         discovery: ${KEYCLOAK_OIDC_DISCOVERY_URL}
         client_id: umojaflowos-gateway
+        client_secret: $ENV://UMOJA_KEYCLOAK_CLIENT_SECRET
         realm: umojaflowos
         ssl_verify: true
         timeout: 3000
@@ -68,7 +69,10 @@ routes:
   - id: risk-compliance-api
     uri: /risk-compliance/*
     upstream: { type: roundrobin, nodes: { risk-compliance-core: 1 }, scheme: http }
-    plugins: *protected_api
+    plugins:
+      <<: *protected_api
+      proxy-rewrite:
+        regex_uri: ["^/risk-compliance/(.*)$", "/$1"]
   - id: ledger-gateway-api
     uri: /ledger-gateway/*
     upstream: { type: roundrobin, nodes: { ledger-gateway: 1 }, scheme: http }
@@ -91,4 +95,8 @@ routes:
   - id: reporting-api
     uri: /reporting/*
     upstream: { type: roundrobin, nodes: { reporting-analytics: 1 }, scheme: http }
-    plugins: *protected_api
+    plugins:
+      <<: *protected_api
+      proxy-rewrite:
+        regex_uri: ["^/reporting/(.*)$", "/$1"]
+#END

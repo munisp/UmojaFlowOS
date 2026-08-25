@@ -9,7 +9,11 @@ function validEnvironment() {
   return {
     UMOJA_DEPLOYMENT_APPROVAL_ID: "SEC-2026-UMOJA-001",
     UMOJA_PUBLIC_HOST: "control.umoja.internal",
+    UMOJA_TLS_CONTACT_EMAIL: "security@umoja.internal",
     UMOJA_CONTROL_PLANE_IMAGE: `registry.umoja.internal/umojaflowos/control-plane@${digest}`,
+    UMOJA_PAYMENT_ENGINE_IMAGE: `registry.umoja.internal/umojaflowos/payment-engine@${digest}`,
+    UMOJA_RISK_CORE_IMAGE: `registry.umoja.internal/umojaflowos/risk-core@${digest}`,
+    UMOJA_REPORTING_IMAGE: `registry.umoja.internal/umojaflowos/reporting@${digest}`,
     UMOJA_CONTROL_POSTGRES_DATABASE: "control",
     UMOJA_CONTROL_POSTGRES_OWNER: "control_owner",
     UMOJA_CONTROL_POSTGRES_OWNER_PASSWORD: secret,
@@ -20,15 +24,18 @@ function validEnvironment() {
     UMOJA_KEYCLOAK_POSTGRES_OWNER_PASSWORD: secret,
     UMOJA_KEYCLOAK_BOOTSTRAP_ADMIN: "security-admin",
     UMOJA_KEYCLOAK_BOOTSTRAP_PASSWORD: secret,
-    UMOJA_REDIS_PASSWORD: secret,
-    UMOJA_OIDC_ISSUER: "https://control.umoja.internal/realms/umojaflowos",
-    UMOJA_OIDC_CLIENT_ID: "umojaflowos-control-plane",
-    UMOJA_OIDC_CLIENT_SECRET: secret,
+    UMOJA_KEYCLOAK_CLIENT_ID: "umojaflowos-gateway",
+    UMOJA_KEYCLOAK_AUDIENCE: "umojaflowos-gateway",
+    UMOJA_KEYCLOAK_CLIENT_SECRET: secret,
     UMOJA_SESSION_SECRET: secret,
-    UMOJA_STORAGE_ENDPOINT: "https://minio.security.internal",
-    UMOJA_STORAGE_BUCKET: "kyc-evidence",
-    UMOJA_STORAGE_ACCESS_KEY: secret,
-    UMOJA_STORAGE_SECRET_KEY: secret,
+    UMOJA_REDIS_PASSWORD: secret,
+    UMOJA_OBJECT_STORAGE_ENDPOINT: "https://minio.security.internal",
+    UMOJA_OBJECT_STORAGE_BUCKET: "kyc-evidence",
+    UMOJA_OBJECT_STORAGE_ACCESS_KEY_ID: "object-storage-access-id-001",
+    UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY: secret,
+    UMOJA_APISIX_TRUST_BUNDLE_PATH: "/run/secret-injector/ca.pem",
+    UMOJA_REDIS_TLS_MATERIAL_PATH: "/run/secret-injector/redis",
+    UMOJA_OPA_TLS_MATERIAL_PATH: "/run/secret-injector/opa",
     UMOJA_OPA_BUNDLE_DIGEST: digest,
     UMOJA_KEYCLOAK_REALM_SHA256: digest,
     UMOJA_CADDY_TLS_MODE: "external",
@@ -37,19 +44,35 @@ function validEnvironment() {
     UMOJA_MODEL_RUNTIME_CAPACITY_EVIDENCE_URI: "https://evidence.umoja.internal/model-runtime",
     UMOJA_EMAIL_DELIVERY_EVIDENCE_URI: "https://evidence.umoja.internal/email-delivery",
     UMOJA_CONTROLLED_TEST_EVIDENCE_URI: "https://evidence.umoja.internal/controlled-test",
+    UMOJA_YELLOWCARD_WEBHOOK_ALLOWED_CIDRS: "203.0.113.0/24",
+    UMOJA_YELLOWCARD_WEBHOOK_SECRET_REFERENCE: "file:///run/secret-injector/yellowcard/webhook-current",
+    UMOJA_YELLOWCARD_REPLAY_REDIS_PASSWORD_SECRET_REFERENCE: "file:///run/secret-injector/yellowcard/replay-redis-password",
+    UMOJA_YELLOWCARD_MATERIAL_MOUNT_PATH: "/run/secret-injector/yellowcard",
+    UMOJA_SCREENING_MATERIAL_MOUNT_PATH: "/run/secret-injector/screening",
+    UMOJA_REGULATORY_SUBMISSION_MATERIAL_MOUNT_PATH: "/run/secret-injector/regulatory",
+    UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE: "file:///run/secret-injector/yellowcard/ledger-projection-hmac",
   };
 }
 
-test("accepts a fully pinned, private, security-approved environment", () => {
+test("accepts the canonical runtime and protected-transport environment", () => {
   assert.deepEqual(validateSecurityStackEnvironment(validEnvironment()), { ready: true, blockers: [] });
 });
 
 test("rejects unsafe endpoints and never returns secret material", () => {
   const environment = validEnvironment();
-  environment.UMOJA_STORAGE_ENDPOINT = "https://storage.public.example";
+  environment.UMOJA_OBJECT_STORAGE_ENDPOINT = "https://storage.public.example";
   environment.UMOJA_SESSION_SECRET = "change-me";
   const result = validateSecurityStackEnvironment(environment);
   assert.equal(result.ready, false);
-  assert.deepEqual(result.blockers.map(blocker => blocker.key).sort(), ["UMOJA_SESSION_SECRET", "UMOJA_STORAGE_ENDPOINT"]);
+  assert.deepEqual(result.blockers.map(blocker => blocker.key).sort(), ["UMOJA_OBJECT_STORAGE_ENDPOINT", "UMOJA_SESSION_SECRET"]);
   assert.equal(JSON.stringify(result).includes(environment.UMOJA_SESSION_SECRET), false);
+});
+
+test("rejects non-absolute TLS material mount paths", () => {
+  const environment = validEnvironment();
+  environment.UMOJA_OPA_TLS_MATERIAL_PATH = "relative/opa";
+  assert.deepEqual(validateSecurityStackEnvironment(environment), {
+    ready: false,
+    blockers: [{ key: "UMOJA_OPA_TLS_MATERIAL_PATH", reason: "absolute_secret_mount_path_required" }],
+  });
 });

@@ -2,6 +2,10 @@ apisix:
   node_listen: 9080
   enable_admin: false
   enable_admin_cors: false
+  ssl:
+    # Trusts the required public roots plus the private CA used by Redis and OPA.
+    # The complete trust bundle is mounted read-only by Compose.
+    ssl_trusted_certificate: /etc/ssl/certs/umoja-internal-ca.pem
 deployment:
   role: data_plane
   role_data_plane:

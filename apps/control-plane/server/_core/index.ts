@@ -5,11 +5,13 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOidcRoutes } from "./oidc";
 import { registerStorageProxy } from "./storageProxy";
+import { registerInternalLedgerProjection } from "../internalLedgerProjection";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { regulatoryDeadlineReminders } from "../scheduled/regulatoryDeadlineReminders";
 import { counterpartyRiskReviews } from "../scheduled/counterpartyRiskReviews";
 import { serviceHealthCollector } from "../scheduled/serviceHealthCollector";
+import { startServiceHealthMonitor } from "../serviceHealthMonitor";
 import { lakehouseControlEvidenceDrain } from "../scheduled/lakehouseControlEvidenceDrain";
 import { serveStatic, setupVite } from "./vite";
 
@@ -35,7 +37,12 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
+  // The payment engine signs the raw ledger-evidence body. Register this
+  // private route before the general JSON parser so its HMAC covers exactly the
+  // bytes received from the protected network.
+  app.use("/internal/ledger/projections", express.raw({ type: "application/json", limit: "64kb" }));
+  registerInternalLedgerProjection(app);
+  // Configure body parser with larger size limit for file uploads.
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
@@ -68,6 +75,8 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    const healthMonitor = startServiceHealthMonitor();
+    if (healthMonitor) server.once("close", healthMonitor.stop);
   });
 }
 

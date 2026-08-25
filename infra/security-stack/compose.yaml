@@ -9,6 +9,8 @@ services:
         condition: service_healthy
       control-plane:
         condition: service_healthy
+      payment-engine:
+        condition: service_healthy
     environment:
       UMOJA_PUBLIC_HOST: ${UMOJA_PUBLIC_HOST:?set a real public hostname}
       UMOJA_TLS_CONTACT_EMAIL: ${UMOJA_TLS_CONTACT_EMAIL:?set the certificate contact email}
@@ -21,8 +23,10 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     networks:
-      - edge
-      - protected
+      edge:
+      protected:
+        aliases:
+          - ${UMOJA_PUBLIC_HOST:?set a real public hostname}
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -46,13 +50,15 @@ services:
     environment:
       UMOJA_REDIS_HOST: redis
       UMOJA_REDIS_PASSWORD: ${UMOJA_REDIS_PASSWORD:?supply through a managed secret injector}
-      KEYCLOAK_OIDC_DISCOVERY_URL: ${KEYCLOAK_OIDC_DISCOVERY_URL:?set the external HTTPS discovery URL}
+      KEYCLOAK_OIDC_DISCOVERY_URL: https://${UMOJA_PUBLIC_HOST}/realms/umojaflowos/.well-known/openid-configuration
+      UMOJA_KEYCLOAK_CLIENT_SECRET: ${UMOJA_KEYCLOAK_CLIENT_SECRET:?supply through a managed secret injector}
       UMOJA_OPA_URL: https://opa:8181
     expose:
       - "9080"
     volumes:
       - ../apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro
       - ../apisix/apisix.yaml:/usr/local/apisix/conf/apisix.yaml:ro
+      - ${UMOJA_APISIX_TRUST_BUNDLE_PATH:?supply the private CA certificate through a managed secret injector}:/etc/ssl/certs/umoja-internal-ca.pem:ro
     networks:
       - protected
     security_opt:
@@ -69,14 +75,145 @@ services:
       timeout: 3s
       retries: 5
 
+  payment-engine:
+    image: ${UMOJA_PAYMENT_ENGINE_IMAGE:?provide an immutable payment-engine image reference}
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: "8081"
+      UMOJA_YELLOWCARD_ENABLED: ${UMOJA_YELLOWCARD_ENABLED:-false}
+      UMOJA_YELLOWCARD_ENVIRONMENT: ${UMOJA_YELLOWCARD_ENVIRONMENT:-sandbox}
+      UMOJA_YELLOWCARD_TLS_REQUIRED: "true"
+      UMOJA_YELLOWCARD_ALLOW_INSECURE_LOOPBACK: "false"
+      UMOJA_YELLOWCARD_FAIL_CLOSED: "true"
+      UMOJA_YELLOWCARD_WEBHOOK_ENABLED: ${UMOJA_YELLOWCARD_WEBHOOK_ENABLED:-false}
+      UMOJA_YELLOWCARD_WEBHOOK_PUBLIC_URL: https://${UMOJA_PUBLIC_HOST}/webhooks/yellowcard
+      UMOJA_YELLOWCARD_WEBHOOK_TLS_REQUIRED: "true"
+      UMOJA_YELLOWCARD_WEBHOOK_FAIL_CLOSED: "true"
+      UMOJA_YELLOWCARD_WEBHOOK_CAN_SETTLE: "false"
+      UMOJA_YELLOWCARD_WEBHOOK_SIGNATURE_HEADER: X-YC-Signature
+      UMOJA_YELLOWCARD_WEBHOOK_TIMESTAMP_HEADER: X-YC-Timestamp
+      UMOJA_YELLOWCARD_WEBHOOK_MAX_AGE_SECONDS: "300"
+      UMOJA_YELLOWCARD_WEBHOOK_BODY_MAX_BYTES: "262144"
+      UMOJA_YELLOWCARD_WEBHOOK_ALLOWED_CIDRS: ${UMOJA_YELLOWCARD_WEBHOOK_ALLOWED_CIDRS:?supply the approved provider source CIDRs}
+      UMOJA_YELLOWCARD_WEBHOOK_SECRET_REFERENCE: ${UMOJA_YELLOWCARD_WEBHOOK_SECRET_REFERENCE:?supply a managed file reference}
+      UMOJA_YELLOWCARD_WEBHOOK_PREVIOUS_SECRET_REFERENCE: ${UMOJA_YELLOWCARD_WEBHOOK_PREVIOUS_SECRET_REFERENCE:-}
+      UMOJA_PROVIDER_MATERIAL_ROOT: /run/umoja-secrets
+      UMOJA_YELLOWCARD_REPLAY_REDIS_ADDRESS: redis:6379
+      UMOJA_YELLOWCARD_REPLAY_REDIS_PASSWORD_SECRET_REFERENCE: ${UMOJA_YELLOWCARD_REPLAY_REDIS_PASSWORD_SECRET_REFERENCE:?supply a managed file reference}
+      UMOJA_YELLOWCARD_REPLAY_REDIS_CA_BUNDLE_PATH: /run/umoja-tls/redis/ca.crt
+      UMOJA_YELLOWCARD_REPLAY_KEY_PREFIX: "yellowcard:webhook:"
+      UMOJA_YELLOWCARD_WEBHOOK_EVIDENCE_DIRECTORY: /var/lib/umojaflowos/webhook-evidence
+      UMOJA_YELLOWCARD_WEBHOOK_RECONCILIATION_QUEUE_DIRECTORY: /var/lib/umojaflowos/webhook-reconciliation
+      UMOJA_YELLOWCARD_EXECUTION_ENABLED: ${UMOJA_YELLOWCARD_EXECUTION_ENABLED:-false}
+      UMOJA_YELLOWCARD_EXECUTION_BASE_URL: ${UMOJA_YELLOWCARD_EXECUTION_BASE_URL:-}
+      UMOJA_YELLOWCARD_ALLOW_FORCE_ACCEPT: "false"
+      UMOJA_YELLOWCARD_API_KEY_SECRET_REFERENCE: ${UMOJA_YELLOWCARD_API_KEY_SECRET_REFERENCE:-}
+      UMOJA_YELLOWCARD_HMAC_SECRET_REFERENCE: ${UMOJA_YELLOWCARD_HMAC_SECRET_REFERENCE:-}
+      UMOJA_YELLOWCARD_EXECUTION_APPROVAL_HMAC_SECRET_REFERENCE: ${UMOJA_YELLOWCARD_EXECUTION_APPROVAL_HMAC_SECRET_REFERENCE:-}
+      UMOJA_TIGERBEETLE_ENABLED: ${UMOJA_TIGERBEETLE_ENABLED:-false}
+      UMOJA_TIGERBEETLE_CLUSTER_ID: ${UMOJA_TIGERBEETLE_CLUSTER_ID:-}
+      UMOJA_TIGERBEETLE_ADDRESSES: ${UMOJA_TIGERBEETLE_ADDRESSES:-}
+      UMOJA_TIGERBEETLE_NGN_LEDGER: ${UMOJA_TIGERBEETLE_NGN_LEDGER:-}
+      UMOJA_TIGERBEETLE_KES_LEDGER: ${UMOJA_TIGERBEETLE_KES_LEDGER:-}
+      UMOJA_TIGERBEETLE_ZAR_LEDGER: ${UMOJA_TIGERBEETLE_ZAR_LEDGER:-}
+      UMOJA_TIGERBEETLE_ACCOUNT_CODE: ${UMOJA_TIGERBEETLE_ACCOUNT_CODE:-}
+      UMOJA_TIGERBEETLE_TRANSFER_CODE: ${UMOJA_TIGERBEETLE_TRANSFER_CODE:-}
+      UMOJA_TIGERBEETLE_TLS_REQUIRED: "true"
+      UMOJA_TIGERBEETLE_ALLOW_INSECURE_LOOPBACK: "false"
+      UMOJA_LEDGER_PROJECTION_ENDPOINT: https://${UMOJA_PUBLIC_HOST}/internal/ledger/projections
+      UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE: ${UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE:-}
+      UMOJA_LEDGER_PROJECTION_ALLOW_INSECURE_LOOPBACK: "false"
+    expose:
+      - "8081"
+    volumes:
+      - ${UMOJA_YELLOWCARD_MATERIAL_MOUNT_PATH:?mount secret-manager material outside source control}:/run/umoja-secrets:ro
+      - ${UMOJA_REDIS_TLS_MATERIAL_PATH:?supply Redis TLS material through a managed secret injector}:/run/umoja-tls/redis:ro
+      - webhook-evidence:/var/lib/umojaflowos/webhook-evidence
+      - webhook-reconciliation:/var/lib/umojaflowos/webhook-reconciliation
+    networks:
+      - protected
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8081/healthz || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  risk-compliance-core:
+    image: ${UMOJA_RISK_CORE_IMAGE:?provide an immutable risk-compliance image reference}
+    restart: unless-stopped
+    environment:
+      PORT: "8082"
+      UMOJA_SCREENING_ENABLED: ${UMOJA_SCREENING_ENABLED:-false}
+      UMOJA_SCREENING_ENDPOINT: ${UMOJA_SCREENING_ENDPOINT:-}
+      UMOJA_SCREENING_API_KEY_SECRET_REFERENCE: ${UMOJA_SCREENING_API_KEY_SECRET_REFERENCE:-}
+      UMOJA_SCREENING_MATERIAL_ROOT: /run/umoja-secrets
+      UMOJA_SCREENING_ALLOW_INSECURE_LOOPBACK: "false"
+    expose:
+      - "8082"
+    volumes:
+      - ${UMOJA_SCREENING_MATERIAL_MOUNT_PATH:?mount screening secret-manager material outside source control}:/run/umoja-secrets:ro
+    networks:
+      - protected
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8082/healthz || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  reporting-analytics:
+    image: ${UMOJA_REPORTING_IMAGE:?provide an immutable reporting image reference}
+    restart: unless-stopped
+    environment:
+      UMOJA_REGULATORY_SUBMISSION_ENABLED: ${UMOJA_REGULATORY_SUBMISSION_ENABLED:-false}
+      UMOJA_REGULATORY_SUBMISSION_ENDPOINT: ${UMOJA_REGULATORY_SUBMISSION_ENDPOINT:-}
+      UMOJA_REGULATORY_SUBMISSION_CHANNEL_REFERENCE: ${UMOJA_REGULATORY_SUBMISSION_CHANNEL_REFERENCE:-}
+      UMOJA_REGULATORY_SUBMISSION_API_KEY_SECRET_REFERENCE: ${UMOJA_REGULATORY_SUBMISSION_API_KEY_SECRET_REFERENCE:-}
+      UMOJA_REGULATORY_SUBMISSION_MATERIAL_ROOT: /run/umoja-secrets
+    expose:
+      - "8083"
+    volumes:
+      - ${UMOJA_REGULATORY_SUBMISSION_MATERIAL_MOUNT_PATH:?mount regulatory-channel secret-manager material outside source control}:/run/umoja-secrets:ro
+    networks:
+      - protected
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8083/healthz\", timeout=2)' || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
   opa:
     image: openpolicyagent/opa:0.70.0-static
     restart: unless-stopped
-    command: ["run", "--server", "--addr=0.0.0.0:8181", "/policies"]
+    command: ["run", "--server", "--addr=0.0.0.0:8181", "--tls-cert-file=/run/umoja-tls/opa/tls.crt", "--tls-private-key-file=/run/umoja-tls/opa/tls.key", "/policies"]
     expose:
       - "8181"
     volumes:
       - ../opa:/policies:ro
+      - ${UMOJA_OPA_TLS_MATERIAL_PATH:?supply OPA TLS material through a managed secret injector}:/run/umoja-tls/opa:ro
     networks:
       - protected
     security_opt:
@@ -93,11 +230,12 @@ services:
   redis:
     image: redis:7.4.2-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--protected-mode", "yes", "--requirepass", "${UMOJA_REDIS_PASSWORD:?supply through a managed secret injector}"]
+    command: ["redis-server", "--appendonly", "yes", "--protected-mode", "yes", "--port", "0", "--tls-port", "6379", "--tls-cert-file", "/run/umoja-tls/redis/tls.crt", "--tls-key-file", "/run/umoja-tls/redis/tls.key", "--tls-ca-cert-file", "/run/umoja-tls/redis/ca.crt", "--tls-auth-clients", "no", "--requirepass", "${UMOJA_REDIS_PASSWORD:?supply through a managed secret injector}"]
     expose:
       - "6379"
     volumes:
       - redis-data:/data
+      - ${UMOJA_REDIS_TLS_MATERIAL_PATH:?supply Redis TLS material through a managed secret injector}:/run/umoja-tls/redis:ro
     networks:
       - protected
     security_opt:
@@ -208,17 +346,23 @@ services:
       keycloak:
         condition: service_healthy
     environment:
-      UMOJA_POSTGRES_URL: postgresql://${UMOJA_APP_DB_USER:?supply through a managed secret injector}:${UMOJA_APP_DB_PASSWORD:?supply through a managed secret injector}@postgres:5432/${UMOJA_CONTROL_POSTGRES_DATABASE:?set the control-plane PostgreSQL database name}
-      UMOJA_OIDC_ISSUER: ${UMOJA_OIDC_ISSUER:?set the external HTTPS issuer}
-      UMOJA_OIDC_CLIENT_ID: ${UMOJA_OIDC_CLIENT_ID:?set the Keycloak client identifier}
-      UMOJA_OIDC_CLIENT_SECRET: ${UMOJA_OIDC_CLIENT_SECRET:?supply through a managed secret injector}
+      POSTGRES_DATABASE_URL: postgresql://${UMOJA_APP_DB_USER:?supply through a managed secret injector}:${UMOJA_APP_DB_PASSWORD:?supply through a managed secret injector}@postgres:5432/${UMOJA_CONTROL_POSTGRES_DATABASE:?set the control-plane PostgreSQL database name}
+      UMOJA_KEYCLOAK_ISSUER: https://${UMOJA_PUBLIC_HOST}/realms/umojaflowos
+      UMOJA_KEYCLOAK_CLIENT_ID: ${UMOJA_KEYCLOAK_CLIENT_ID:?set the Keycloak client identifier}
+      UMOJA_KEYCLOAK_AUDIENCE: ${UMOJA_KEYCLOAK_AUDIENCE:?set the Keycloak audience}
+      UMOJA_KEYCLOAK_CLIENT_SECRET: ${UMOJA_KEYCLOAK_CLIENT_SECRET:?supply through a managed secret injector}
+      UMOJA_PUBLIC_BASE_URL: https://${UMOJA_PUBLIC_HOST}
       UMOJA_SESSION_SECRET: ${UMOJA_SESSION_SECRET:?supply through a managed secret injector}
-      UMOJA_STORAGE_ENDPOINT: ${UMOJA_STORAGE_ENDPOINT:?set the private S3-compatible endpoint}
-      UMOJA_STORAGE_BUCKET: ${UMOJA_STORAGE_BUCKET:?set the approved evidence bucket}
-      UMOJA_STORAGE_ACCESS_KEY: ${UMOJA_STORAGE_ACCESS_KEY:?supply through a managed secret injector}
-      UMOJA_STORAGE_SECRET_KEY: ${UMOJA_STORAGE_SECRET_KEY:?supply through a managed secret injector}
+      UMOJA_OBJECT_STORAGE_ENDPOINT: ${UMOJA_OBJECT_STORAGE_ENDPOINT:?set the private S3-compatible endpoint}
+      UMOJA_OBJECT_STORAGE_BUCKET: ${UMOJA_OBJECT_STORAGE_BUCKET:?set the approved evidence bucket}
+      UMOJA_OBJECT_STORAGE_ACCESS_KEY_ID: ${UMOJA_OBJECT_STORAGE_ACCESS_KEY_ID:?supply through a managed secret injector}
+      UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY: ${UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY:?supply through a managed secret injector}
+      UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE: ${UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE:-}
+      UMOJA_PROVIDER_MATERIAL_ROOT: /run/umoja-secrets
     expose:
       - "3000"
+    volumes:
+      - ${UMOJA_YELLOWCARD_MATERIAL_MOUNT_PATH:?mount internal-control secret-manager material outside source control}:/run/umoja-secrets:ro
     networks:
       - protected
     security_opt:
@@ -247,3 +391,5 @@ volumes:
   postgres-data:
   keycloak-postgres-data:
   redis-data:
+  webhook-evidence:
+  webhook-reconciliation:

@@ -9,11 +9,13 @@ import (
 // PostedTransferFact is emitted only after TigerBeetle has accepted a balanced transfer.
 // It is a projection command, never authority to create a monetary transfer in PostgreSQL.
 type PostedTransferFact struct {
-	TransferID    uint64
-	CorrelationID string
-	Currency      string
-	Amount        uint64
-	PostedAt      time.Time
+	TransferID      uint64
+	CorrelationID   string
+	Currency        string
+	Amount          uint64
+	DebitAccountID  uint64
+	CreditAccountID uint64
+	PostedAt        time.Time
 }
 
 type ProjectionSink interface {

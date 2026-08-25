@@ -9,6 +9,7 @@
 
 use axum::{
     extract::State,
+    http::StatusCode,
     routing::{get, post},
     Json, Router,
 };
@@ -16,7 +17,8 @@ use risk_compliance_core::{
     counterparty_risk::{assess_counterparty_risk, CounterpartyRiskInput},
     evaluate,
     monitoring::{evaluate_monitoring, MonitoringInput, MonitoringResult, RuleFinding},
-    Decision, PolicyInput, PolicyResult,
+    screening::{ScreeningGateway, ScreeningRequest, ScreeningResult},
+    Decision, PolicyInput, PolicyResult, ScreeningState,
 };
 use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -42,10 +44,13 @@ struct ServiceState {
     monitoring_review_required: AtomicU64,
     counterparty_assessments: AtomicU64,
     counterparty_review_required: AtomicU64,
+    screening_evaluations: AtomicU64,
+    screening_unavailable: AtomicU64,
+    screening_gateway: Option<ScreeningGateway>,
 }
 
 impl ServiceState {
-    fn new() -> Self {
+    fn new(screening_gateway: Option<ScreeningGateway>) -> Self {
         Self {
             started_at: Instant::now(),
             policy_evaluations: AtomicU64::new(0),
@@ -53,6 +58,17 @@ impl ServiceState {
             monitoring_review_required: AtomicU64::new(0),
             counterparty_assessments: AtomicU64::new(0),
             counterparty_review_required: AtomicU64::new(0),
+            screening_evaluations: AtomicU64::new(0),
+            screening_unavailable: AtomicU64::new(0),
+            screening_gateway,
+        }
+    }
+
+    fn screening_provider(&self) -> &'static str {
+        if self.screening_gateway.is_some() {
+            "configured_screening_gateway"
+        } else {
+            "disabled_without_verified_provider"
         }
     }
 }
@@ -67,6 +83,8 @@ struct MetricsSnapshot {
     monitoring_review_required: u64,
     counterparty_assessments: u64,
     counterparty_review_required: u64,
+    screening_evaluations: u64,
+    screening_unavailable: u64,
     observed_at: String,
     screening_provider: &'static str,
 }
@@ -104,9 +122,9 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
     (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
-async fn health() -> Json<serde_json::Value> {
+async fn health(State(state): State<Arc<ServiceState>>) -> Json<serde_json::Value> {
     Json(
-        serde_json::json!({"service":"risk-compliance-core","status":"healthy","screening_provider":"disabled_without_verified_provider"}),
+        serde_json::json!({"service":"risk-compliance-core","status":"healthy","screening_provider":state.screening_provider()}),
     )
 }
 
@@ -120,8 +138,10 @@ async fn metrics(State(state): State<Arc<ServiceState>>) -> Json<MetricsSnapshot
         monitoring_review_required: state.monitoring_review_required.load(Ordering::Relaxed),
         counterparty_assessments: state.counterparty_assessments.load(Ordering::Relaxed),
         counterparty_review_required: state.counterparty_review_required.load(Ordering::Relaxed),
+        screening_evaluations: state.screening_evaluations.load(Ordering::Relaxed),
+        screening_unavailable: state.screening_unavailable.load(Ordering::Relaxed),
         observed_at: observed_at_now(),
-        screening_provider: "disabled_without_verified_provider",
+        screening_provider: state.screening_provider(),
     })
 }
 
@@ -220,23 +240,85 @@ async fn assess_counterparty_route(
     })
 }
 
-fn router() -> Router {
+#[derive(Debug, Serialize)]
+struct ScreeningEnvelope {
+    service: &'static str,
+    contract_version: &'static str,
+    envelope_type: &'static str,
+    state: ScreeningState,
+    provider_reference: String,
+    source_version: String,
+    evidence_sha256: String,
+    screened_at: String,
+}
+
+impl ScreeningEnvelope {
+    fn from_result(result: ScreeningResult) -> Self {
+        Self {
+            service: SERVICE_NAME,
+            contract_version: CONTRACT_VERSION,
+            envelope_type: "umojaflowos.risk.screening_result.v1",
+            state: result.state,
+            provider_reference: result.provider_reference,
+            source_version: result.source_version,
+            evidence_sha256: result.evidence_sha256,
+            screened_at: result.screened_at,
+        }
+    }
+}
+
+async fn screen_subject(
+    State(state): State<Arc<ServiceState>>,
+    Json(input): Json<ScreeningRequest>,
+) -> Result<Json<ScreeningEnvelope>, (StatusCode, String)> {
+    state.screening_evaluations.fetch_add(1, Ordering::Relaxed);
+    let gateway = match state.screening_gateway.as_ref() {
+        Some(gateway) => gateway,
+        None => {
+            state.screening_unavailable.fetch_add(1, Ordering::Relaxed);
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "screening provider is not configured".to_string(),
+            ));
+        }
+    };
+    match gateway.screen(input).await {
+        Ok(result) => Ok(Json(ScreeningEnvelope::from_result(result))),
+        Err(error) => {
+            state.screening_unavailable.fetch_add(1, Ordering::Relaxed);
+            Err((StatusCode::SERVICE_UNAVAILABLE, error))
+        }
+    }
+}
+
+fn router_with_screening(screening_gateway: Option<ScreeningGateway>) -> Router {
     Router::new()
         .route("/healthz", get(health))
         .route("/v1/metrics", get(metrics))
         .route("/v1/policy/evaluate", post(evaluate_policy))
         .route("/v1/monitoring/evaluate", post(evaluate_monitoring_route))
         .route("/v1/counterparty/assess", post(assess_counterparty_route))
-        .with_state(Arc::new(ServiceState::new()))
+        .route("/v1/screening/check", post(screen_subject))
+        .with_state(Arc::new(ServiceState::new(screening_gateway)))
+}
+
+fn router() -> Router {
+    router_with_screening(None)
 }
 
 #[tokio::main]
 async fn main() {
+    let screening_gateway = ScreeningGateway::from_environment()
+        .expect("construct fail-closed screening gateway from deployment environment");
     let port = std::env::var("PORT").unwrap_or_else(|_| "8082".to_string());
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
         .await
         .expect("bind risk-compliance-core listener");
-    axum::serve(listener, router())
+    let app = match screening_gateway {
+        Some(gateway) => router_with_screening(Some(gateway)),
+        None => router(),
+    };
+    axum::serve(listener, app)
         .await
         .expect("serve risk-compliance-core");
 }
