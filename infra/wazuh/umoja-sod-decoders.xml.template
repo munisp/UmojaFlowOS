@@ -1,0 +1,5 @@
+<!-- Install through the approved Wazuh manager configuration channel. -->
+<decoder name="umoja-sod-json">
+  <prematch>^\{"event":"sod_</prematch>
+  <plugin_decoder>JSON_Decoder</plugin_decoder>
+</decoder>

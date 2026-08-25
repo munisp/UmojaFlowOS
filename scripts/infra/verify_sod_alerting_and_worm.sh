@@ -25,10 +25,12 @@ VALIDATOR="$ROOT/database/postgresql/validate_schema.sql"
 MONITOR="$ROOT/apps/control-plane/server/segregationOfDutiesMonitor.ts"
 AUDIT_LOG="$ROOT/apps/control-plane/server/segregationOfDutiesAuditLog.ts"
 WAZUH_AGENT="$ROOT/infra/wazuh/umoja-sod-agent-ossec.conf.template"
+WAZUH_DECODERS="$ROOT/infra/wazuh/umoja-sod-decoders.xml.template"
 WAZUH_RULES="$ROOT/infra/wazuh/umoja-sod-rules.xml.template"
 WAZUH_OVERLAY="$ROOT/infra/security-stack/compose.wazuh-sod.yaml.template"
+REFERENCE_WORM_VERIFIER="$ROOT/scripts/infra/verify_worm_retention_aws_openssl.sh"
 
-for file in "$MIGRATION" "$VALIDATOR" "$MONITOR" "$AUDIT_LOG" "$WAZUH_AGENT" "$WAZUH_RULES" "$WAZUH_OVERLAY"; do require_file "$file"; done
+for file in "$MIGRATION" "$VALIDATOR" "$MONITOR" "$AUDIT_LOG" "$WAZUH_AGENT" "$WAZUH_DECODERS" "$WAZUH_RULES" "$WAZUH_OVERLAY" "$REFERENCE_WORM_VERIFIER"; do require_file "$file"; done
 require_contains "$MIGRATION" "segregation_of_duties"
 require_contains "$MIGRATION" "segregation_of_duties_evaluation_runs"
 require_contains "$VALIDATOR" "segregation_of_duties_evaluation_runs"
@@ -37,6 +39,7 @@ require_contains "$MONITOR" "pg_try_advisory_lock"
 require_contains "$MONITOR" "indeterminate"
 require_contains "$AUDIT_LOG" "UMOJA_SOD_AUDIT_LOG_PATH"
 require_contains "$WAZUH_AGENT" "sod-audit.jsonl"
+require_contains "$WAZUH_DECODERS" "JSON_Decoder"
 require_contains "$WAZUH_RULES" "sod_monitor_indeterminate"
 require_contains "$WAZUH_OVERLAY" "sod-audit:/var/log/umoja:ro"
 

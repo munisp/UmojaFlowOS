@@ -11,11 +11,31 @@ const localDevelopmentConfig = {
 
 let pool: Pool | undefined;
 
+function positiveInteger(value: string | undefined, fallback: number, name: string): number {
+  if (value === undefined || value === "") return fallback;
+  if (!/^[0-9]+$/.test(value)) throw new Error(`${name} must be an integer`);
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) throw new Error(`${name} must be positive`);
+  return parsed;
+}
+
 export function getPool() {
   if (!pool) {
+    const commonOptions = {
+      max: positiveInteger(process.env.POSTGRES_POOL_MAX, 10, "POSTGRES_POOL_MAX"),
+      connectionTimeoutMillis: positiveInteger(process.env.POSTGRES_CONNECTION_TIMEOUT_MS, 5_000, "POSTGRES_CONNECTION_TIMEOUT_MS"),
+      idleTimeoutMillis: positiveInteger(process.env.POSTGRES_IDLE_TIMEOUT_MS, 30_000, "POSTGRES_IDLE_TIMEOUT_MS"),
+      statement_timeout: positiveInteger(process.env.POSTGRES_STATEMENT_TIMEOUT_MS, 30_000, "POSTGRES_STATEMENT_TIMEOUT_MS"),
+      lock_timeout: positiveInteger(process.env.POSTGRES_LOCK_TIMEOUT_MS, 5_000, "POSTGRES_LOCK_TIMEOUT_MS"),
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10_000,
+    };
     pool = process.env.POSTGRES_DATABASE_URL
-      ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL })
-      : new Pool(localDevelopmentConfig);
+      ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL, ...commonOptions })
+      : new Pool({ ...localDevelopmentConfig, ...commonOptions });
+    pool.on("error", error => {
+      console.error("postgres pool client error", error);
+    });
   }
   return pool;
 }

@@ -5,6 +5,7 @@
     <field name="evaluationState">exceptions_detected</field>
     <field name="exceptionDigest">^[a-f0-9]{64}$</field>
     <description>UmojaFlowOS segregation-of-duties exception detected</description>
+    <options>alert_by_email</options>
     <group>compliance,sod_exception,</group>
   </rule>
 
@@ -12,6 +13,7 @@
     <decoded_as>json</decoded_as>
     <field name="event">sod_monitor_indeterminate</field>
     <description>UmojaFlowOS segregation-of-duties monitor is indeterminate</description>
+    <options>alert_by_email</options>
     <group>compliance,sod_monitor_failure,</group>
   </rule>
 
