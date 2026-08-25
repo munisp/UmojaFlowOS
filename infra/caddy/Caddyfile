@@ -23,7 +23,21 @@
     Cross-Origin-Resource-Policy "same-origin"
     Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; connect-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'"
   }
-  @api path /api/* /auth/* /payment-engine/* /risk-compliance/* /ledger-gateway/* /reporting/*
+  @keycloak_realm path /realms/* /resources/*
+  handle @keycloak_realm {
+    reverse_proxy keycloak:8080 {
+      header_up X-Forwarded-Proto https
+      header_up X-Request-ID {http.request.uuid}
+    }
+  }
+  @control_plane_auth path /auth/*
+  handle @control_plane_auth {
+    reverse_proxy {$UMOJA_CONTROL_PLANE_UPSTREAM:http://control-plane:3000} {
+      header_up X-Forwarded-Proto https
+      header_up X-Request-ID {http.request.uuid}
+    }
+  }
+  @api path /api/* /payment-engine/* /risk-compliance/* /ledger-gateway/* /reporting/*
   handle @api {
     reverse_proxy {$UMOJA_APISIX_UPSTREAM:https://apisix:9080} {
       header_up X-Forwarded-Proto https

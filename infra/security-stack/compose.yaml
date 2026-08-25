@@ -21,8 +21,10 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     networks:
-      - edge
-      - protected
+      edge:
+      protected:
+        aliases:
+          - ${UMOJA_PUBLIC_HOST:?set a real public hostname}
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -46,13 +48,15 @@ services:
     environment:
       UMOJA_REDIS_HOST: redis
       UMOJA_REDIS_PASSWORD: ${UMOJA_REDIS_PASSWORD:?supply through a managed secret injector}
-      KEYCLOAK_OIDC_DISCOVERY_URL: ${KEYCLOAK_OIDC_DISCOVERY_URL:?set the external HTTPS discovery URL}
+      KEYCLOAK_OIDC_DISCOVERY_URL: https://${UMOJA_PUBLIC_HOST}/realms/umojaflowos/.well-known/openid-configuration
+      UMOJA_KEYCLOAK_CLIENT_SECRET: ${UMOJA_KEYCLOAK_CLIENT_SECRET:?supply through a managed secret injector}
       UMOJA_OPA_URL: https://opa:8181
     expose:
       - "9080"
     volumes:
       - ../apisix/config.yaml:/usr/local/apisix/conf/config.yaml:ro
       - ../apisix/apisix.yaml:/usr/local/apisix/conf/apisix.yaml:ro
+      - ${UMOJA_APISIX_TRUST_BUNDLE_PATH:?supply the private CA certificate through a managed secret injector}:/etc/ssl/certs/umoja-internal-ca.pem:ro
     networks:
       - protected
     security_opt:
@@ -72,11 +76,12 @@ services:
   opa:
     image: openpolicyagent/opa:0.70.0-static
     restart: unless-stopped
-    command: ["run", "--server", "--addr=0.0.0.0:8181", "/policies"]
+    command: ["run", "--server", "--addr=0.0.0.0:8181", "--tls-cert-file=/run/umoja-tls/opa/tls.crt", "--tls-private-key-file=/run/umoja-tls/opa/tls.key", "/policies"]
     expose:
       - "8181"
     volumes:
       - ../opa:/policies:ro
+      - ${UMOJA_OPA_TLS_MATERIAL_PATH:?supply OPA TLS material through a managed secret injector}:/run/umoja-tls/opa:ro
     networks:
       - protected
     security_opt:
@@ -93,11 +98,12 @@ services:
   redis:
     image: redis:7.4.2-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--protected-mode", "yes", "--requirepass", "${UMOJA_REDIS_PASSWORD:?supply through a managed secret injector}"]
+    command: ["redis-server", "--appendonly", "yes", "--protected-mode", "yes", "--port", "0", "--tls-port", "6379", "--tls-cert-file", "/run/umoja-tls/redis/tls.crt", "--tls-key-file", "/run/umoja-tls/redis/tls.key", "--tls-ca-cert-file", "/run/umoja-tls/redis/ca.crt", "--tls-auth-clients", "no", "--requirepass", "${UMOJA_REDIS_PASSWORD:?supply through a managed secret injector}"]
     expose:
       - "6379"
     volumes:
       - redis-data:/data
+      - ${UMOJA_REDIS_TLS_MATERIAL_PATH:?supply Redis TLS material through a managed secret injector}:/run/umoja-tls/redis:ro
     networks:
       - protected
     security_opt:
@@ -208,15 +214,17 @@ services:
       keycloak:
         condition: service_healthy
     environment:
-      UMOJA_POSTGRES_URL: postgresql://${UMOJA_APP_DB_USER:?supply through a managed secret injector}:${UMOJA_APP_DB_PASSWORD:?supply through a managed secret injector}@postgres:5432/${UMOJA_CONTROL_POSTGRES_DATABASE:?set the control-plane PostgreSQL database name}
-      UMOJA_OIDC_ISSUER: ${UMOJA_OIDC_ISSUER:?set the external HTTPS issuer}
-      UMOJA_OIDC_CLIENT_ID: ${UMOJA_OIDC_CLIENT_ID:?set the Keycloak client identifier}
-      UMOJA_OIDC_CLIENT_SECRET: ${UMOJA_OIDC_CLIENT_SECRET:?supply through a managed secret injector}
+      POSTGRES_DATABASE_URL: postgresql://${UMOJA_APP_DB_USER:?supply through a managed secret injector}:${UMOJA_APP_DB_PASSWORD:?supply through a managed secret injector}@postgres:5432/${UMOJA_CONTROL_POSTGRES_DATABASE:?set the control-plane PostgreSQL database name}
+      UMOJA_KEYCLOAK_ISSUER: https://${UMOJA_PUBLIC_HOST}/realms/umojaflowos
+      UMOJA_KEYCLOAK_CLIENT_ID: ${UMOJA_KEYCLOAK_CLIENT_ID:?set the Keycloak client identifier}
+      UMOJA_KEYCLOAK_AUDIENCE: ${UMOJA_KEYCLOAK_AUDIENCE:?set the Keycloak audience}
+      UMOJA_KEYCLOAK_CLIENT_SECRET: ${UMOJA_KEYCLOAK_CLIENT_SECRET:?supply through a managed secret injector}
+      UMOJA_PUBLIC_BASE_URL: https://${UMOJA_PUBLIC_HOST}
       UMOJA_SESSION_SECRET: ${UMOJA_SESSION_SECRET:?supply through a managed secret injector}
-      UMOJA_STORAGE_ENDPOINT: ${UMOJA_STORAGE_ENDPOINT:?set the private S3-compatible endpoint}
-      UMOJA_STORAGE_BUCKET: ${UMOJA_STORAGE_BUCKET:?set the approved evidence bucket}
-      UMOJA_STORAGE_ACCESS_KEY: ${UMOJA_STORAGE_ACCESS_KEY:?supply through a managed secret injector}
-      UMOJA_STORAGE_SECRET_KEY: ${UMOJA_STORAGE_SECRET_KEY:?supply through a managed secret injector}
+      UMOJA_OBJECT_STORAGE_ENDPOINT: ${UMOJA_OBJECT_STORAGE_ENDPOINT:?set the private S3-compatible endpoint}
+      UMOJA_OBJECT_STORAGE_BUCKET: ${UMOJA_OBJECT_STORAGE_BUCKET:?set the approved evidence bucket}
+      UMOJA_OBJECT_STORAGE_ACCESS_KEY_ID: ${UMOJA_OBJECT_STORAGE_ACCESS_KEY_ID:?supply through a managed secret injector}
+      UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY: ${UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY:?supply through a managed secret injector}
     expose:
       - "3000"
     networks:
