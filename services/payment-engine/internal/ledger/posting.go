@@ -28,6 +28,7 @@ type PostingRequest struct {
 type PostingService struct {
 	client Client
 	sink   ProjectionSink
+	audit  AuditLogger
 	now    func() time.Time
 }
 
@@ -35,6 +36,10 @@ type PostingService struct {
 // enabled deployment from silently accepting a posting request without a durable
 // projection path.
 func NewPostingService(client Client, sink ProjectionSink, now func() time.Time) (*PostingService, error) {
+	return NewPostingServiceWithAuditLogger(client, sink, nil, now)
+}
+
+func NewPostingServiceWithAuditLogger(client Client, sink ProjectionSink, audit AuditLogger, now func() time.Time) (*PostingService, error) {
 	if client == nil {
 		return nil, errors.New("TigerBeetle client is required for posting")
 	}
@@ -50,7 +55,7 @@ func NewPostingService(client Client, sink ProjectionSink, now func() time.Time)
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
 	}
-	return &PostingService{client: client, sink: sink, now: now}, nil
+	return &PostingService{client: client, sink: sink, audit: audit, now: now}, nil
 }
 
 func (s *PostingService) validateRequest(request PostingRequest) error {
@@ -103,6 +108,21 @@ func (s *PostingService) PostConfirmedTransfer(ctx context.Context, request Post
 	}
 	if err := ProjectConfirmedTransfer(ctx, s.sink, fact); err != nil {
 		return fact, fmt.Errorf("TigerBeetle transfer is confirmed but PostgreSQL projection is pending: %w", err)
+	}
+	if s.audit != nil {
+		if err := s.audit.WriteLedgerEvent(LedgerAuditEvent{
+			Event:           "tigerbeetle.transfer_confirmed",
+			OccurredAt:      fact.PostedAt,
+			TransferID:      fact.TransferID,
+			CorrelationID:   fact.CorrelationID,
+			Currency:        fact.Currency,
+			AmountMinor:     fact.Amount,
+			DebitAccountID:  fact.DebitAccountID,
+			CreditAccountID: fact.CreditAccountID,
+			Result:          "confirmed_and_projected",
+		}); err != nil {
+			return fact, fmt.Errorf("TigerBeetle transfer is confirmed and projected but audit logging is pending: %w", err)
+		}
 	}
 	return fact, nil
 }

@@ -1,0 +1,88 @@
+data_dir = "/var/lib/vector"
+
+[sources.keycloak_json]
+type = "file"
+include = ["/var/log/keycloak/events/*.json"]
+read_from = "beginning"
+ignore_checkpoints = false
+
+[sources.ledger_json]
+type = "file"
+include = ["/var/log/umoja/ledger/*.jsonl"]
+read_from = "beginning"
+ignore_checkpoints = false
+
+[transforms.keycloak_normalize]
+type = "remap"
+inputs = ["keycloak_json"]
+source = '''
+. = parse_json!(.message)
+.event_source = "keycloak"
+.event_category = "authentication"
+.audit_schema = "umoja.security.audit.v1"
+.timestamp = .time ?? now()
+.subject = .userId ?? .user_id ?? null
+.client_id = .clientId ?? .client_id ?? null
+.result = .type ?? "unknown"
+del(.credentials)
+del(.access_token)
+del(.refresh_token)
+del(.authorization)
+del(.raw_request)
+'''
+
+[transforms.ledger_normalize]
+type = "remap"
+inputs = ["ledger_json"]
+source = '''
+. = parse_json!(.message)
+.event_source = "tigerbeetle"
+.event_category = "ledger_operation"
+.audit_schema = "umoja.security.audit.v1"
+.timestamp = .posted_at ?? .occurred_at ?? now()
+.transfer_id = .transfer_id ?? null
+.correlation_id = .correlation_id ?? null
+.currency = .currency ?? null
+.amount_minor = .amount_minor ?? null
+.debit_account_id = .debit_account_id ?? null
+.credit_account_id = .credit_account_id ?? null
+.result = .result ?? .status ?? "unknown"
+del(.private_key)
+del(.secret)
+del(.authorization)
+'''
+
+[transforms.audit_envelope]
+type = "remap"
+inputs = ["keycloak_normalize", "ledger_normalize"]
+source = '''
+.required = ["audit_schema", "event_source", "event_category", "timestamp", "result"]
+for_each(.required) -> |field| {
+  if !exists(.[field]) { abort("missing audit field: " + field) }
+}
+.message_type = "umoja.audit"
+'''
+
+[sinks.wazuh_jsonl]
+type = "file"
+inputs = ["audit_envelope"]
+path = "/var/log/umoja/aggregated/security-audit.jsonl"
+encoding.codec = "json"
+
+[sinks.opensearch]
+type = "elasticsearch"
+inputs = ["audit_envelope"]
+endpoints = ["https://opensearch.security.svc:9200"]
+mode = "bulk"
+compression = "gzip"
+index = "umoja-security-audit-%Y.%m.%d"
+request.timeout_secs = 10
+[sinks.opensearch.auth]
+strategy = "basic"
+user = "${OPENSEARCH_AUDIT_USER}"
+password = "${OPENSEARCH_AUDIT_PASSWORD}"
+
+[sinks.opensearch.buffer]
+type = "disk"
+max_size = 1073741824
+when_full = "block"

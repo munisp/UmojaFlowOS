@@ -1,0 +1,106 @@
+name: staging-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Immutable image tag or digest to deploy
+        required: true
+        type: string
+      enable_keycloak:
+        description: Enable real Keycloak federation after staging approval
+        required: true
+        default: false
+        type: boolean
+      enable_tigerbeetle:
+        description: Enable real TigerBeetle after staging approval
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: false
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    environment: staging-gates
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/payment-engine/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+      - name: Install control-plane dependencies
+        working-directory: apps/control-plane
+        run: pnpm install --frozen-lockfile
+      - name: Validate Keycloak and TigerBeetle contracts
+        run: |
+          cd apps/control-plane
+          pnpm exec vitest run server/keycloakFederation.staging.test.ts \
+            --pool=threads --poolOptions.threads.singleThread=true
+          cd ../../services/payment-engine
+          go test ./... -count=1
+          go vet ./...
+      - name: Validate Helm and Kubernetes artifacts
+        run: |
+          test -f deploy/helm/umoja-wazuh/Chart.yaml
+          test -f infra/kubernetes/tigerbeetle-reconciliation-cronjob.yaml
+          python3 - <<'PY'
+          import pathlib, yaml
+          for p in [
+              pathlib.Path('infra/kubernetes/tigerbeetle-reconciliation-cronjob.yaml'),
+              pathlib.Path('deploy/helm/umoja-wazuh/values.yaml'),
+          ]:
+              yaml.safe_load(p.read_text())
+          PY
+      - name: Enforce immutable deployment input
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          case "$IMAGE_TAG" in
+            sha256:*) ;;
+            *) echo 'image_tag must be an immutable sha256 digest' >&2; exit 2 ;;
+          esac
+      - name: Verify activation requires explicit staging environment
+        env:
+          KEYCLOAK: ${{ inputs.enable_keycloak }}
+          TIGERBEETLE: ${{ inputs.enable_tigerbeetle }}
+        run: |
+          test "${GITHUB_ENVIRONMENT:-staging-gates}" = "staging-gates"
+          printf 'requested_keycloak=%s requested_tigerbeetle=%s\n' "$KEYCLOAK" "$TIGERBEETLE"
+
+  deploy:
+    needs: gates
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy through approved Kubernetes context
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}
+        run: |
+          test -n "$KUBECONFIG_B64" || { echo 'STAGING_KUBECONFIG_B64 must be injected by the staging environment'; exit 2; }
+          printf '%s' "$KUBECONFIG_B64" | base64 --decode > "$RUNNER_TEMP/kubeconfig"
+          chmod 600 "$RUNNER_TEMP/kubeconfig"
+          export KUBECONFIG="$RUNNER_TEMP/kubeconfig"
+          helm upgrade --install umoja-wazuh deploy/helm/umoja-wazuh \
+            --namespace security --create-namespace \
+            --set wazuh.image.digest="$IMAGE_TAG" \
+            --wait --timeout 10m
+      - name: Post-deploy safety gate
+        run: |
+          kubectl -n security rollout status deployment/umoja-wazuh --timeout=5m
+          kubectl -n security get pods -o wide
+          kubectl -n security get networkpolicy

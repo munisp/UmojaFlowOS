@@ -1,0 +1,81 @@
+name: staging-tigerbeetle-loadtest
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: Immutable payment-engine image digest under test
+        required: true
+        type: string
+      duration_seconds:
+        description: Approved load duration, maximum 300 seconds
+        required: true
+        default: "60"
+        type: string
+      workers:
+        description: Approved concurrent workers, maximum 64
+        required: true
+        default: "4"
+        type: string
+      batch_size:
+        description: Approved transfers per batch, maximum 8192
+        required: true
+        default: "256"
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: staging-tigerbeetle-loadtest
+  cancel-in-progress: false
+
+jobs:
+  loadtest:
+    runs-on: ubuntu-latest
+    environment: staging-tigerbeetle-loadtest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/payment-engine/go.mod
+      - name: Validate approved immutable test input
+        env:
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+          DURATION: ${{ inputs.duration_seconds }}
+          WORKERS: ${{ inputs.workers }}
+          BATCH_SIZE: ${{ inputs.batch_size }}
+        run: |
+          case "$IMAGE_DIGEST" in sha256:*) ;; *) exit 2 ;; esac
+          [[ "$DURATION" =~ ^[1-9][0-9]{0,2}$ && "$DURATION" -le 300 ]]
+          [[ "$WORKERS" =~ ^[1-9][0-9]{0,2}$ && "$WORKERS" -le 64 ]]
+          [[ "$BATCH_SIZE" =~ ^[1-9][0-9]{0,4}$ && "$BATCH_SIZE" -le 8192 ]]
+      - name: Compile load-test command
+        working-directory: services/payment-engine
+        run: go build ./cmd/tigerbeetle-loadtest
+      - name: Run approved staging load test
+        env:
+          TIGERBEETLE_LOADTEST_APPROVED: STAGING_ONLY_APPROVED
+          TIGERBEETLE_LOADTEST_TARGET: staging
+          TIGERBEETLE_LOADTEST_ADDRESS: ${{ secrets.TIGERBEETLE_STAGING_ADDRESS }}
+          TIGERBEETLE_LOADTEST_CLUSTER_ID: ${{ secrets.TIGERBEETLE_STAGING_CLUSTER_ID }}
+          TIGERBEETLE_LOADTEST_NGN_LEDGER: ${{ secrets.TIGERBEETLE_STAGING_NGN_LEDGER }}
+          TIGERBEETLE_LOADTEST_ACCOUNT_CODE: ${{ secrets.TIGERBEETLE_STAGING_ACCOUNT_CODE }}
+          TIGERBEETLE_LOADTEST_TRANSFER_CODE: ${{ secrets.TIGERBEETLE_STAGING_TRANSFER_CODE }}
+          TIGERBEETLE_LOADTEST_DEBIT_ACCOUNT_ID: ${{ secrets.TIGERBEETLE_LOADTEST_DEBIT_ACCOUNT_ID }}
+          TIGERBEETLE_LOADTEST_CREDIT_ACCOUNT_ID: ${{ secrets.TIGERBEETLE_LOADTEST_CREDIT_ACCOUNT_ID }}
+          TIGERBEETLE_LOADTEST_TLS_REQUIRED: "true"
+          TIGERBEETLE_LOADTEST_ALLOW_INSECURE_LOOPBACK: "false"
+          TIGERBEETLE_LOADTEST_DURATION_SECONDS: ${{ inputs.duration_seconds }}
+          TIGERBEETLE_LOADTEST_WORKERS: ${{ inputs.workers }}
+          TIGERBEETLE_LOADTEST_BATCH_SIZE: ${{ inputs.batch_size }}
+        working-directory: services/payment-engine
+        run: go run ./cmd/tigerbeetle-loadtest | tee "$RUNNER_TEMP/tigerbeetle-loadtest.json"
+      - name: Upload load-test report
+        uses: actions/upload-artifact@v4
+        with:
+          name: tigerbeetle-staging-loadtest-${{ github.run_id }}
+          path: ${{ runner.temp }}/tigerbeetle-loadtest.json
+          retention-days: 14

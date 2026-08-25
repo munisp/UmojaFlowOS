@@ -59,7 +59,7 @@ spec:
 {{ toYaml .Values.podSecurityContext | indent 8 }}
       containers:
         - name: wazuh-manager
-          image: "{{ .Values.wazuh.image.repository }}:{{ .Values.wazuh.image.tag }}"
+          image: "{{ .Values.wazuh.image.repository }}{{ if .Values.wazuh.image.digest }}@{{ .Values.wazuh.image.digest }}{{ else }}:{{ .Values.wazuh.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.wazuh.image.pullPolicy }}
           env:
             - name: UMOJA_SOD_INCIDENT_ENDPOINT

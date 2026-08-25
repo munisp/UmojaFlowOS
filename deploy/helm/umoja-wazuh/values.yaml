@@ -4,6 +4,7 @@ wazuh:
   image:
     repository: wazuh/wazuh-manager
     tag: 4.12.0
+    digest: ""
     pullPolicy: IfNotPresent
   replicas: 1
   endpoint:
