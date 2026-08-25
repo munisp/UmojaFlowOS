@@ -36,7 +36,7 @@ jobs:
       EVIDENCE_MANIFEST_JSON: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_manifest_path || 'compliance/vasp/evidence-manifest.json' }}
     steps:
       - name: Check out reviewed source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -85,7 +85,7 @@ jobs:
       READ_ONLY_AUDITOR_TOKEN: ${{ secrets.UMOJA_READONLY_AUDITOR_TOKEN }}
     steps:
       - name: Check out reviewed source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
           fetch-depth: 1
