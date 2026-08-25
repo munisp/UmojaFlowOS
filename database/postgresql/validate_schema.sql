@@ -11,7 +11,7 @@ DECLARE
     'external_stakeholder_assignments', 'external_stakeholder_evidence',
     'vasp_regulatory_profiles', 'vasp_regulatory_evidence_items', 'vasp_travel_rule_evidence_items', 'vasp_travel_rule_route_assessments',
     'vasp_offshore_counterparty_profiles', 'vasp_offshore_counterparty_evidence_items', 'vasp_offshore_counterparty_assessments',
-    'ledger_account_bindings', 'tigerbeetle_transfer_facts', 'aml_screening_checks', 'provider_send_requests', 'regulatory_submission_attempts', 'vasp_readiness_assurance_items', 'segregation_of_duties_evaluation_runs'
+    'ledger_account_bindings', 'tigerbeetle_transfer_facts', 'aml_screening_checks', 'provider_send_requests', 'regulatory_submission_attempts', 'vasp_readiness_assurance_items', 'segregation_of_duties_evaluation_runs', 'ledger_posting_intents', 'ledger_reconciliation_runs', 'ledger_reconciliation_discrepancies'
   ];
 BEGIN
   IF EXISTS (SELECT 1 FROM unnest(expected_tables) AS expected(tablename) WHERE to_regclass('public.' || expected.tablename) IS NULL) THEN
@@ -50,6 +50,10 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='vasp_readiness_assurance_items' AND column_name='external_attestation_sha256')
      OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='vasp_readiness_assurance_items' AND column_name='verified_by') THEN
     RAISE EXCEPTION 'readiness assurance items must retain external-attestation and independent-verifier evidence';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='ledger_reconciliation_runs' AND column_name='status')
+     OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='ledger_reconciliation_discrepancies' AND column_name='discrepancy_code') THEN
+    RAISE EXCEPTION 'ledger reconciliation evidence tables must retain run status and discrepancy codes';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='segregation_of_duties_evaluation_runs' AND column_name='evaluation_state')
      OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='segregation_of_duties_evaluation_runs' AND column_name='exception_digest') THEN
