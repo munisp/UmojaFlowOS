@@ -66,6 +66,10 @@ jobs:
         run: python3 scripts/entity_resolution/test_splink_duckdb_fixture.py
       - name: Run Wazuh-to-PagerDuty mock receiver tests
         run: pytest -q tests/test_wazuh_pagerduty_integration.py
+      - name: Install simulator dependencies
+        run: python3 -m pip install --disable-pip-version-check -r simulators/production_dependencies/requirements.txt
+      - name: Run simulated P0-P2 external dependency contracts
+        run: pytest -q tests/simulators/test_production_dependencies.py
       - name: Validate Wazuh XML and verifier scripts
         run: |
           bash -n scripts/infra/verify_sod_alerting_and_worm.sh
