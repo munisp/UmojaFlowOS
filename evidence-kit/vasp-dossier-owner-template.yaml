@@ -1,0 +1,104 @@
+# Copy to vasp-dossier-owner-staging.yaml and replace every <PLACEHOLDER>.
+# This is an evidence-planning template. It is not submitted to CBN and does not
+# create a licence, sandbox admission, provider activation, or custody authority.
+
+dossier:
+  legal_entity_id: "<CANONICAL_NIGERIA_LEGAL_ENTITY_UUID>"
+  legal_entity_name: "<REGISTERED_NIGERIA_LEGAL_ENTITY_NAME>"
+  track: "vasp"
+  product_name: "<PRODUCT_NAME>"
+  product_summary: "<50_TO_4000_CHARACTER_SCOPE_BOUND_PRODUCT_SUMMARY>"
+  control_environment: "staging"
+  evidence_repository_base_uri: "https://<APPROVED_EVIDENCE_REPOSITORY>/umoja/vasp/<DOSSIER_REFERENCE>/"
+  external_submission_claimed: false
+  cbn_admission_claimed: false
+  licence_claimed: false
+
+owners:
+  controlled_live_test:
+    points: 7
+    accountable_role: product_and_risk_owner
+    platform_submitter_subject: "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>"
+    external_evidence_owner: "<NAME_AND_TITLE>"
+    external_contact: "<VERIFIED_WORK_EMAIL>"
+    independent_platform_verifier_subject: "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>"
+    independent_external_verifier: "<INDEPENDENT_ASSURANCE_OR_APPROVED_REVIEWER>"
+    required_artifacts:
+      - controlled-test-plan.pdf
+      - staging-release-and-immutable-image-digest.txt
+      - transaction-and-exposure-limit-export.json
+      - reconciliation-exercise-report.pdf
+      - wind-down-exercise-report.pdf
+
+  governance_legal_ownership:
+    points: 8
+    accountable_role: board_legal_company_secretary
+    platform_submitter_subject: "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>"
+    external_evidence_owner: "<NAME_AND_TITLE>"
+    external_contact: "<VERIFIED_WORK_EMAIL>"
+    independent_platform_verifier_subject: "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>"
+    independent_external_verifier: "<LEGAL_OR_GOVERNANCE_REVIEWER>"
+    required_artifacts:
+      - incorporation-and-ubo-evidence.pdf
+      - officer-and-committee-appointments.pdf
+      - board-policy-approvals.pdf
+      - privileged-access-review.pdf
+
+  aml_cft_cpf_operations:
+    points: 14
+    accountable_role: mlro_compliance_owner
+    platform_submitter_subject: "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>"
+    external_evidence_owner: "<MLRO_NAME_AND_TITLE>"
+    external_contact: "<VERIFIED_WORK_EMAIL>"
+    independent_platform_verifier_subject: "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>"
+    independent_external_verifier: "<INDEPENDENT_AML_CFT_REVIEWER>"
+    required_artifacts:
+      - aml-cft-cpf-programme-and-risk-assessment.pdf
+      - screening-provider-entitlement-and-data-basis.pdf
+      - deidentified-screening-and-case-exercise.zip
+      - reviewer-training-and-escalation-evidence.pdf
+      - travel-rule-counterparty-test-evidence.pdf
+
+  customer_asset_safeguarding:
+    points: 13
+    accountable_role: custody_treasury_owner
+    platform_submitter_subject: "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>"
+    external_evidence_owner: "<CUSTODY_OR_TREASURY_OWNER>"
+    external_contact: "<VERIFIED_WORK_EMAIL>"
+    independent_platform_verifier_subject: "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>"
+    independent_external_verifier: "<INDEPENDENT_CUSTODY_OR_FINANCIAL_ASSURANCE_REVIEWER>"
+    required_artifacts:
+      - approved-asset-and-custody-scope.pdf
+      - wallet-key-management-and-recovery-evidence.pdf
+      - segregation-and-reconciliation-exercise.pdf
+      - reserve-redemption-or-not-applicable-attestation.pdf
+      - custody-provider-and-wind-down-evidence.pdf
+
+  cybersecurity_resilience:
+    points: 10
+    accountable_role: ciso_platform_sre_owner
+    platform_submitter_subject: "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>"
+    external_evidence_owner: "<CISO_OR_PLATFORM_OWNER>"
+    external_contact: "<VERIFIED_WORK_EMAIL>"
+    independent_platform_verifier_subject: "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>"
+    independent_external_verifier: "<INDEPENDENT_SECURITY_OR_RESILIENCE_REVIEWER>"
+    required_artifacts:
+      - staging-mfa-and-privileged-access-review.pdf
+      - secret-certificate-and-vulnerability-remediation-evidence.pdf
+      - authorised-penetration-test-and-retest.pdf
+      - monitoring-backup-restore-and-dr-exercise.pdf
+      - measured-slo-and-capacity-history.csv
+
+  consumer_incident_reporting:
+    points: 6
+    accountable_role: consumer_protection_cbn_liaison
+    platform_submitter_subject: "<COMPLIANCE_OR_ADMIN_OIDC_SUBJECT>"
+    external_evidence_owner: "<CONSUMER_PROTECTION_OR_CBN_LIAISON_OWNER>"
+    external_contact: "<VERIFIED_WORK_EMAIL>"
+    independent_platform_verifier_subject: "<DIFFERENT_ADMIN_OR_AUDITOR_OIDC_SUBJECT>"
+    independent_external_verifier: "<INDEPENDENT_CONSUMER_OR_REPORTING_REVIEWER>"
+    required_artifacts:
+      - consumer-disclosure-and-complaint-exercise.pdf
+      - incident-clock-and-escalation-exercise.pdf
+      - authorised-reporting-channel-dry-run-receipt.pdf
+      - retention-and-authorised-signatory-evidence.pdf

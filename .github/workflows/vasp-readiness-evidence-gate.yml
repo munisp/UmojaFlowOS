@@ -1,0 +1,119 @@
+name: VASP readiness evidence gate
+
+on:
+  pull_request:
+    paths:
+      - 'compliance/vasp/**'
+      - 'evidence-kit/**'
+  workflow_dispatch:
+    inputs:
+      owner_assignments_path:
+        description: 'Repository path to the reviewed six-owner assignment JSON file'
+        required: true
+        default: 'compliance/vasp/owner-assignments.json'
+        type: string
+      evidence_manifest_path:
+        description: 'Repository path to the reviewed six-item evidence manifest JSON file'
+        required: true
+        default: 'compliance/vasp/evidence-manifest.json'
+        type: string
+      read_only_staging:
+        description: 'Run the protected, read-only staging status check'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  local-evidence-gate:
+    name: Validate owner assignments and evidence locally
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      OWNER_ASSIGNMENTS_JSON: ${{ github.event_name == 'workflow_dispatch' && inputs.owner_assignments_path || 'compliance/vasp/owner-assignments.json' }}
+      EVIDENCE_MANIFEST_JSON: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_manifest_path || 'compliance/vasp/evidence-manifest.json' }}
+    steps:
+      - name: Check out reviewed source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate the committed evidence-kit is executable
+        run: |
+          test -f evidence-kit/verify_vasp_owner_assignments.py
+          test -f evidence-kit/verify_vasp_evidence_manifest.py
+          test -f evidence-kit/ci_validate_vasp_readiness.sh
+          chmod 750 evidence-kit/ci_validate_vasp_readiness.sh
+      - name: Validate the declared evidence package without external access
+        run: |
+          test -f "$OWNER_ASSIGNMENTS_JSON"
+          test -f "$EVIDENCE_MANIFEST_JSON"
+          OWNER_ASSIGNMENTS_JSON="$OWNER_ASSIGNMENTS_JSON" \
+          EVIDENCE_MANIFEST_JSON="$EVIDENCE_MANIFEST_JSON" \
+          evidence-kit/ci_validate_vasp_readiness.sh
+      - name: Upload local validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vasp-readiness-local-validation
+          path: ci-readonly-output/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  read-only-staging-status:
+    name: Read-only staging readiness status
+    needs: local-evidence-gate
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.read_only_staging == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: staging-readonly
+    permissions:
+      contents: read
+    env:
+      OWNER_ASSIGNMENTS_JSON: ${{ inputs.owner_assignments_path }}
+      EVIDENCE_MANIFEST_JSON: ${{ inputs.evidence_manifest_path }}
+      READ_ONLY_STAGING_BASE_URL: ${{ vars.UMOJA_STAGING_BASE_URL }}
+      READ_ONLY_DOSSIER_ID: ${{ vars.UMOJA_VASP_DOSSIER_ID }}
+      READ_ONLY_AUDITOR_TOKEN: ${{ secrets.UMOJA_READONLY_AUDITOR_TOKEN }}
+    steps:
+      - name: Check out reviewed source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate the committed evidence-kit is executable
+        run: |
+          test -f evidence-kit/verify_vasp_owner_assignments.py
+          test -f evidence-kit/verify_vasp_evidence_manifest.py
+          test -f evidence-kit/ci_validate_vasp_readiness.sh
+          chmod 750 evidence-kit/ci_validate_vasp_readiness.sh
+      - name: Validate and read staging status only
+        run: |
+          test -n "$READ_ONLY_STAGING_BASE_URL"
+          test -n "$READ_ONLY_DOSSIER_ID"
+          test -n "$READ_ONLY_AUDITOR_TOKEN"
+          OWNER_ASSIGNMENTS_JSON="$OWNER_ASSIGNMENTS_JSON" \
+          EVIDENCE_MANIFEST_JSON="$EVIDENCE_MANIFEST_JSON" \
+          READ_ONLY_STAGING_BASE_URL="$READ_ONLY_STAGING_BASE_URL" \
+          READ_ONLY_DOSSIER_ID="$READ_ONLY_DOSSIER_ID" \
+          READ_ONLY_AUDITOR_TOKEN="$READ_ONLY_AUDITOR_TOKEN" \
+          evidence-kit/ci_validate_vasp_readiness.sh
+      - name: Upload read-only status output
+        uses: actions/upload-artifact@v4
+        with:
+          name: vasp-readiness-staging-status
+          path: ci-readonly-output/
+          if-no-files-found: error
+          retention-days: 14
