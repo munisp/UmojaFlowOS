@@ -10,3 +10,6 @@ python-multipart==0.0.20
 pillow==11.2.1
 paddleocr>=3.0
 docling>=2.0
+splink==4.0.16
+duckdb==1.5.5
+pandas==3.0.5

@@ -25,4 +25,12 @@
     <description>UmojaFlowOS segregation-of-duties notification delivery unavailable</description>
     <group>compliance,sod_alert_delivery_failure,</group>
   </rule>
+
+  <rule id="100820" level="12">
+    <if_group>syscheck</if_group>
+    <field name="syscheck.path">^/var/log/umoja/sod-audit\.jsonl$</field>
+    <description>UmojaFlowOS SoD JSONL audit log changed or tampered</description>
+    <options>alert_by_email</options>
+    <group>compliance,sod_audit_tamper,</group>
+  </rule>
 </group>

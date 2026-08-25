@@ -15,4 +15,8 @@
     <location>/var/log/umoja/sod-audit.jsonl</location>
     <log_format>json</log_format>
   </localfile>
+  <syscheck>
+    <disabled>no</disabled>
+    <directories check_all="yes" realtime="yes" report_changes="yes">/var/log/umoja/sod-audit.jsonl</directories>
+  </syscheck>
 </ossec_config>
