@@ -37,6 +37,16 @@
       header_up X-Request-ID {http.request.uuid}
     }
   }
+  @yellowcard_webhook path /webhooks/yellowcard
+  handle @yellowcard_webhook {
+    reverse_proxy payment-engine:8081 {
+      # The receiver authorizes this value against the approved provider CIDRs.
+      # Assigning it here prevents a client from supplying its own trusted source.
+      header_up X-Umoja-Provider-Source {http.request.remote.host}
+      header_up X-Forwarded-Proto https
+      header_up X-Request-ID {http.request.uuid}
+    }
+  }
   @api path /api/* /payment-engine/* /risk-compliance/* /ledger-gateway/* /reporting/*
   handle @api {
     reverse_proxy {$UMOJA_APISIX_UPSTREAM:https://apisix:9080} {

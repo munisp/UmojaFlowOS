@@ -9,6 +9,8 @@ services:
         condition: service_healthy
       control-plane:
         condition: service_healthy
+      payment-engine:
+        condition: service_healthy
     environment:
       UMOJA_PUBLIC_HOST: ${UMOJA_PUBLIC_HOST:?set a real public hostname}
       UMOJA_TLS_CONTACT_EMAIL: ${UMOJA_TLS_CONTACT_EMAIL:?set the certificate contact email}
@@ -69,6 +71,60 @@ services:
       - /tmp
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9080/healthz || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  payment-engine:
+    image: ${UMOJA_PAYMENT_ENGINE_IMAGE:?provide an immutable payment-engine image reference}
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: "8081"
+      UMOJA_YELLOWCARD_ENABLED: ${UMOJA_YELLOWCARD_ENABLED:-false}
+      UMOJA_YELLOWCARD_ENVIRONMENT: ${UMOJA_YELLOWCARD_ENVIRONMENT:-sandbox}
+      UMOJA_YELLOWCARD_TLS_REQUIRED: "true"
+      UMOJA_YELLOWCARD_ALLOW_INSECURE_LOOPBACK: "false"
+      UMOJA_YELLOWCARD_FAIL_CLOSED: "true"
+      UMOJA_YELLOWCARD_WEBHOOK_ENABLED: ${UMOJA_YELLOWCARD_WEBHOOK_ENABLED:-false}
+      UMOJA_YELLOWCARD_WEBHOOK_PUBLIC_URL: https://${UMOJA_PUBLIC_HOST}/webhooks/yellowcard
+      UMOJA_YELLOWCARD_WEBHOOK_TLS_REQUIRED: "true"
+      UMOJA_YELLOWCARD_WEBHOOK_FAIL_CLOSED: "true"
+      UMOJA_YELLOWCARD_WEBHOOK_CAN_SETTLE: "false"
+      UMOJA_YELLOWCARD_WEBHOOK_SIGNATURE_HEADER: X-YC-Signature
+      UMOJA_YELLOWCARD_WEBHOOK_TIMESTAMP_HEADER: X-YC-Timestamp
+      UMOJA_YELLOWCARD_WEBHOOK_MAX_AGE_SECONDS: "300"
+      UMOJA_YELLOWCARD_WEBHOOK_BODY_MAX_BYTES: "262144"
+      UMOJA_YELLOWCARD_WEBHOOK_ALLOWED_CIDRS: ${UMOJA_YELLOWCARD_WEBHOOK_ALLOWED_CIDRS:?supply the approved provider source CIDRs}
+      UMOJA_YELLOWCARD_WEBHOOK_SECRET_REFERENCE: ${UMOJA_YELLOWCARD_WEBHOOK_SECRET_REFERENCE:?supply a managed file reference}
+      UMOJA_YELLOWCARD_WEBHOOK_PREVIOUS_SECRET_REFERENCE: ${UMOJA_YELLOWCARD_WEBHOOK_PREVIOUS_SECRET_REFERENCE:-}
+      UMOJA_PROVIDER_MATERIAL_ROOT: /run/umoja-secrets
+      UMOJA_YELLOWCARD_REPLAY_REDIS_ADDRESS: redis:6379
+      UMOJA_YELLOWCARD_REPLAY_REDIS_PASSWORD_SECRET_REFERENCE: ${UMOJA_YELLOWCARD_REPLAY_REDIS_PASSWORD_SECRET_REFERENCE:?supply a managed file reference}
+      UMOJA_YELLOWCARD_REPLAY_REDIS_CA_BUNDLE_PATH: /run/umoja-tls/redis/ca.crt
+      UMOJA_YELLOWCARD_REPLAY_KEY_PREFIX: "yellowcard:webhook:"
+      UMOJA_YELLOWCARD_WEBHOOK_EVIDENCE_DIRECTORY: /var/lib/umojaflowos/webhook-evidence
+      UMOJA_YELLOWCARD_WEBHOOK_RECONCILIATION_QUEUE_DIRECTORY: /var/lib/umojaflowos/webhook-reconciliation
+    expose:
+      - "8081"
+    volumes:
+      - ${UMOJA_YELLOWCARD_MATERIAL_MOUNT_PATH:?mount secret-manager material outside source control}:/run/umoja-secrets:ro
+      - ${UMOJA_REDIS_TLS_MATERIAL_PATH:?supply Redis TLS material through a managed secret injector}:/run/umoja-tls/redis:ro
+      - webhook-evidence:/var/lib/umojaflowos/webhook-evidence
+      - webhook-reconciliation:/var/lib/umojaflowos/webhook-reconciliation
+    networks:
+      - protected
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8081/healthz || exit 1"]
       interval: 15s
       timeout: 3s
       retries: 5
@@ -255,3 +311,5 @@ volumes:
   postgres-data:
   keycloak-postgres-data:
   redis-data:
+  webhook-evidence:
+  webhook-reconciliation:

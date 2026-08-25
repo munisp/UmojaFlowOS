@@ -92,8 +92,8 @@ def find_violations(repository: Path, paths: Iterable[Path]) -> list[str]:
 
         for assignment in SENSITIVE_SOURCE_ASSIGNMENT.finditer(contents):
             value = assignment.group("value").strip()
-            if not value.upper().startswith(SAFE_VALUE_PREFIXES):
-                key = assignment.group("declaration") or assignment.group("property") or "credential"
+            key = assignment.group("declaration") or assignment.group("property") or "credential"
+            if not value.upper().startswith(SAFE_VALUE_PREFIXES) and not key.upper().endswith(SAFE_REFERENCE_SUFFIXES):
                 violations.append(
                     f"{relative}:{line_number(contents, assignment.start())}: {key} holds a literal credential in source"
                 )

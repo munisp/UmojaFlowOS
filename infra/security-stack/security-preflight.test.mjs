@@ -11,6 +11,7 @@ function validEnvironment() {
     UMOJA_PUBLIC_HOST: "control.umoja.internal",
     UMOJA_TLS_CONTACT_EMAIL: "security@umoja.internal",
     UMOJA_CONTROL_PLANE_IMAGE: `registry.umoja.internal/umojaflowos/control-plane@${digest}`,
+    UMOJA_PAYMENT_ENGINE_IMAGE: `registry.umoja.internal/umojaflowos/payment-engine@${digest}`,
     UMOJA_CONTROL_POSTGRES_DATABASE: "control",
     UMOJA_CONTROL_POSTGRES_OWNER: "control_owner",
     UMOJA_CONTROL_POSTGRES_OWNER_PASSWORD: secret,
@@ -41,6 +42,10 @@ function validEnvironment() {
     UMOJA_MODEL_RUNTIME_CAPACITY_EVIDENCE_URI: "https://evidence.umoja.internal/model-runtime",
     UMOJA_EMAIL_DELIVERY_EVIDENCE_URI: "https://evidence.umoja.internal/email-delivery",
     UMOJA_CONTROLLED_TEST_EVIDENCE_URI: "https://evidence.umoja.internal/controlled-test",
+    UMOJA_YELLOWCARD_WEBHOOK_ALLOWED_CIDRS: "203.0.113.0/24",
+    UMOJA_YELLOWCARD_WEBHOOK_SECRET_REFERENCE: "file:///run/secret-injector/yellowcard/webhook-current",
+    UMOJA_YELLOWCARD_REPLAY_REDIS_PASSWORD_SECRET_REFERENCE: "file:///run/secret-injector/yellowcard/replay-redis-password",
+    UMOJA_YELLOWCARD_MATERIAL_MOUNT_PATH: "/run/secret-injector/yellowcard",
   };
 }
 

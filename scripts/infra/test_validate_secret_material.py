@@ -64,6 +64,13 @@ class SecretMaterialGuardTests(unittest.TestCase):
         violations = self.scan({"src/safe.ts": "const providerToken = process.env.PROVIDER_TOKEN;\n"})
         self.assertEqual([], violations)
 
+    def test_allows_named_reference_in_source_without_allowing_literal_secret(self) -> None:
+        safe = self.scan({"src/safe.ts": 'const UMOJA_WEBHOOK_SECRET_REFERENCE = "file:///run/secret-injector/current";\n'})
+        literal = "abcdefghijklmnopqrstuvwxyz012345"
+        unsafe = self.scan({"src/unsafe.ts": f'const webhookSecret = "{literal}";\n'})
+        self.assertEqual([], safe)
+        self.assertEqual(1, len(unsafe))
+
 
 if __name__ == "__main__":
     unittest.main()

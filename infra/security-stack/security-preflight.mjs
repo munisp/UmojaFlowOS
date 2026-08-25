@@ -3,6 +3,7 @@ const REQUIRED = [
   "UMOJA_PUBLIC_HOST",
   "UMOJA_TLS_CONTACT_EMAIL",
   "UMOJA_CONTROL_PLANE_IMAGE",
+  "UMOJA_PAYMENT_ENGINE_IMAGE",
   "UMOJA_CONTROL_POSTGRES_DATABASE",
   "UMOJA_CONTROL_POSTGRES_OWNER",
   "UMOJA_CONTROL_POSTGRES_OWNER_PASSWORD",
@@ -33,6 +34,10 @@ const REQUIRED = [
   "UMOJA_MODEL_RUNTIME_CAPACITY_EVIDENCE_URI",
   "UMOJA_EMAIL_DELIVERY_EVIDENCE_URI",
   "UMOJA_CONTROLLED_TEST_EVIDENCE_URI",
+  "UMOJA_YELLOWCARD_WEBHOOK_ALLOWED_CIDRS",
+  "UMOJA_YELLOWCARD_WEBHOOK_SECRET_REFERENCE",
+  "UMOJA_YELLOWCARD_REPLAY_REDIS_PASSWORD_SECRET_REFERENCE",
+  "UMOJA_YELLOWCARD_MATERIAL_MOUNT_PATH",
 ];
 
 const SECRET_KEYS = new Set([
@@ -44,6 +49,13 @@ const SECRET_KEYS = new Set([
   "UMOJA_SESSION_SECRET",
   "UMOJA_REDIS_PASSWORD",
   "UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY",
+]);
+const FILE_REFERENCE_KEYS = new Set([
+  "UMOJA_YELLOWCARD_WEBHOOK_SECRET_REFERENCE",
+  "UMOJA_YELLOWCARD_REPLAY_REDIS_PASSWORD_SECRET_REFERENCE",
+]);
+const MOUNT_PATH_KEYS = new Set([
+  "UMOJA_YELLOWCARD_MATERIAL_MOUNT_PATH",
 ]);
 const TLS_PATH_KEYS = new Set([
   "UMOJA_APISIX_TRUST_BUNDLE_PATH",
@@ -89,8 +101,8 @@ export function validateSecurityStackEnvironment(env) {
   if (typeof env.UMOJA_DEPLOYMENT_APPROVAL_ID === "string" && !/^SEC-[A-Z0-9][A-Z0-9-]{5,}$/i.test(env.UMOJA_DEPLOYMENT_APPROVAL_ID)) {
     block("UMOJA_DEPLOYMENT_APPROVAL_ID", "invalid_security_approval_reference");
   }
-  if (typeof env.UMOJA_CONTROL_PLANE_IMAGE === "string" && !/@sha256:[a-f0-9]{64}$/i.test(env.UMOJA_CONTROL_PLANE_IMAGE)) {
-    block("UMOJA_CONTROL_PLANE_IMAGE", "immutable_image_digest_required");
+  for (const key of ["UMOJA_CONTROL_PLANE_IMAGE", "UMOJA_PAYMENT_ENGINE_IMAGE"]) {
+    if (typeof env[key] === "string" && !/@sha256:[a-f0-9]{64}$/i.test(env[key])) block(key, "immutable_image_digest_required");
   }
   for (const key of ["UMOJA_OPA_BUNDLE_DIGEST", "UMOJA_KEYCLOAK_REALM_SHA256"]) {
     if (typeof env[key] === "string" && !/^sha256:[a-f0-9]{64}$/i.test(env[key])) block(key, "sha256_digest_required");
@@ -111,6 +123,14 @@ export function validateSecurityStackEnvironment(env) {
   for (const key of TLS_PATH_KEYS) {
     const value = env[key];
     if (typeof value === "string" && value.trim().length > 0 && !value.startsWith("/")) block(key, "absolute_secret_mount_path_required");
+  }
+  for (const key of MOUNT_PATH_KEYS) {
+    const value = env[key];
+    if (typeof value === "string" && value.trim().length > 0 && !value.startsWith("/")) block(key, "absolute_secret_mount_path_required");
+  }
+  for (const key of FILE_REFERENCE_KEYS) {
+    const value = env[key];
+    if (typeof value === "string" && value.trim().length > 0 && !/^file:\/\/\/[^?#]+$/.test(value)) block(key, "managed_file_secret_reference_required");
   }
 
   const result = [...blockers.entries()].map(([key, reason]) => ({ key, reason }));

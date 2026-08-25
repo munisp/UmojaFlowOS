@@ -12,6 +12,7 @@ import (
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/domain"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/eventing"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/ledger"
+	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/provider"
 )
 
 // serviceMetrics holds counters the service actually observes while running.
@@ -76,6 +77,10 @@ func randomID() (string, error) {
 }
 
 func newHandler(now func() time.Time, configuredLedgerBackend ...string) http.Handler {
+	return newHandlerWithWebhook(now, nil, configuredLedgerBackend...)
+}
+
+func newHandlerWithWebhook(now func() time.Time, webhook http.Handler, configuredLedgerBackend ...string) http.Handler {
 	ledgerBackend := "disabled_without_deployed_tigerbeetle"
 	if len(configuredLedgerBackend) > 0 && configuredLedgerBackend[0] != "" {
 		ledgerBackend = configuredLedgerBackend[0]
@@ -104,6 +109,9 @@ func newHandler(now func() time.Time, configuredLedgerBackend ...string) http.Ha
 			LedgerBackend:      ledgerBackend,
 		})
 	})
+	if webhook != nil {
+		mux.Handle("POST /v1/providers/yellowcard/webhooks", webhook)
+	}
 	mux.HandleFunc("POST /v1/orders/validate", func(w http.ResponseWriter, r *http.Request) {
 		defer r.Body.Close()
 		metrics.validationsTotal.Add(1)
@@ -170,11 +178,15 @@ func main() {
 		panic(err)
 	}
 	defer ledgerRuntime.Close()
+	webhookRuntime, err := provider.WebhookRuntimeFromEnvironment(os.Getenv)
+	if err != nil {
+		panic(err)
+	}
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8081"
 	}
-	if err := http.ListenAndServe(":"+port, newHandler(time.Now, ledgerRuntime.Backend)); err != nil {
+	if err := http.ListenAndServe(":"+port, newHandlerWithWebhook(time.Now, webhookRuntime, ledgerRuntime.Backend)); err != nil {
 		panic(err)
 	}
 }
