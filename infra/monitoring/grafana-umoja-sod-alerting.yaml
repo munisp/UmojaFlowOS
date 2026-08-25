@@ -1,0 +1,25 @@
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: umoja-sod-oncall
+    receivers:
+      - uid: umoja-sod-alertmanager
+        type: prometheus-alertmanager
+        settings:
+          url: http://alertmanager.monitoring.svc:9093
+        disableResolveMessage: false
+policies:
+  - orgId: 1
+    receiver: umoja-sod-oncall
+    group_by:
+      - alertname
+      - service
+      - compliance_domain
+    routes:
+      - receiver: umoja-sod-oncall
+        object_matchers:
+          - [compliance_domain, =, segregation_of_duties]
+        continue: false
+        group_wait: 0s
+        group_interval: 5m
+        repeat_interval: 1h

@@ -1,0 +1,41 @@
+groups:
+  - name: umoja-sod-incident-handler
+    rules:
+      - alert: UmojaSodIncidentHandlerFailures
+        expr: increase(umoja_sod_incident_failures_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: umoja-wazuh-integration
+          compliance_domain: segregation_of_duties
+        annotations:
+          summary: UmojaFlowOS SoD incident delivery failure
+          description: A Wazuh SoD incident-handler invocation failed in the last 5 minutes.
+          runbook_url: https://docs.example.invalid/runbooks/umoja-sod-incident-handler
+
+      - alert: UmojaSodIncidentFailureRateHigh
+        expr: |
+          (
+            increase(umoja_sod_incident_failures_total[15m])
+            /
+            clamp_min(increase(umoja_sod_incident_requests_total[15m]), 1)
+          ) > 0.10
+          and increase(umoja_sod_incident_requests_total[15m]) >= 5
+        for: 5m
+        labels:
+          severity: critical
+          service: umoja-wazuh-integration
+          compliance_domain: segregation_of_duties
+        annotations:
+          summary: UmojaFlowOS SoD incident-handler failure rate is high
+          description: More than 10 percent of at least five handler invocations failed during the last 15 minutes.
+
+      - alert: UmojaSodIncidentHandlerSilent
+        expr: absent(umoja_sod_incident_requests_total)
+        for: 15m
+        labels:
+          severity: warning
+          service: umoja-wazuh-integration
+        annotations:
+          summary: UmojaFlowOS SoD incident-handler metrics are absent
+          description: Prometheus cannot find the handler textfile metrics. Check the Wazuh manager mount and node-exporter collector.

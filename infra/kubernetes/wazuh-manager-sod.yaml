@@ -1,0 +1,134 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: security
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: umoja-sod-incident
+  namespace: security
+type: Opaque
+stringData:
+  endpoint: https://incident-gateway.internal.example/v1/wazuh
+  hmac-secret: replace-with-external-secret-controller
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: umoja-sod-wazuh-manager-config
+  namespace: security
+data:
+  ossec.conf.fragment: |
+    <integration>
+      <name>custom-umoja-sod-incident</name>
+      <level>12</level>
+      <rule_id>100810,100811,100820</rule_id>
+      <alert_format>json</alert_format>
+    </integration>
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: umoja-sod-metrics
+  namespace: security
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wazuh-manager
+  namespace: security
+  labels:
+    app.kubernetes.io/name: wazuh-manager
+    app.kubernetes.io/component: security-monitoring
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wazuh-manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wazuh-manager
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: wazuh-manager
+          image: wazuh/wazuh-manager:4.12.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: UMOJA_SOD_INCIDENT_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: umoja-sod-incident
+                  key: endpoint
+            - name: UMOJA_SOD_INCIDENT_HMAC_SECRET_FILE
+              value: /var/ossec/etc/umoja-sod-incident.secret
+            - name: UMOJA_SOD_METRICS_PATH
+              value: /var/lib/node_exporter/textfile_collector/umoja_sod_incident.prom
+          ports: []
+          volumeMounts:
+            - name: sod-metrics
+              mountPath: /var/lib/node_exporter/textfile_collector
+            - name: sod-secret
+              mountPath: /var/ossec/etc/umoja-sod-incident.secret
+              subPath: hmac-secret
+              readOnly: true
+            - name: manager-config
+              mountPath: /var/ossec/etc/ossec.conf.fragment
+              subPath: ossec.conf.fragment
+              readOnly: true
+      volumes:
+        - name: sod-metrics
+          persistentVolumeClaim:
+            claimName: umoja-sod-metrics
+        - name: sod-secret
+          secret:
+            secretName: umoja-sod-incident
+            defaultMode: 0640
+        - name: manager-config
+          configMap:
+            name: umoja-sod-wazuh-manager-config
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-exporter
+  namespace: security
+  labels:
+    app.kubernetes.io/name: node-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: node-exporter
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: node-exporter
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: node-exporter
+          image: prom/node-exporter:v1.9.1
+          args:
+            - --collector.textfile.directory=/var/lib/node_exporter/textfile_collector
+          volumeMounts:
+            - name: sod-metrics
+              mountPath: /var/lib/node_exporter/textfile_collector
+              readOnly: true
+      volumes:
+        - name: sod-metrics
+          persistentVolumeClaim:
+            claimName: umoja-sod-metrics
