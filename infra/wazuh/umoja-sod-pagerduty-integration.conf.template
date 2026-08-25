@@ -1,0 +1,8 @@
+<!-- Install on the Wazuh manager through the approved secret/configuration channel. -->
+<!-- The routing key is a PagerDuty Events API v2 integration key; never commit its value. -->
+<integration>
+  <name>pagerduty</name>
+  <api_key>${PAGERDUTY_SOD_ROUTING_KEY}</api_key>
+  <level>12</level>
+  <alert_format>json</alert_format>
+</integration>

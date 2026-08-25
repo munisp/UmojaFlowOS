@@ -18,7 +18,7 @@ import sys
 import urllib.error
 import urllib.request
 
-ALLOWED_RULE_IDS = {"100810", "100811", "100812"}
+ALLOWED_RULE_IDS = {"100810", "100811", "100812", "100820"}
 MAX_ALERT_BYTES = 262_144
 TIMEOUT_SECONDS = 5
 
@@ -59,6 +59,10 @@ def main() -> int:
     if event in {"sod_monitor_evaluation", "sod_alert_delivery"}:
         if not isinstance(digest, str) or len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
             return fail("invalid_exception_digest")
+    if rule_id == "100820":
+        syscheck = data.get("syscheck", {})
+        if syscheck.get("path") != "/var/log/umoja/sod-audit.jsonl":
+            return fail("invalid_sod_audit_tamper_path")
     payload = {
         "source": "umoja-flowos",
         "category": "segregation_of_duties",
