@@ -1,0 +1,18 @@
+<!--
+  Deploy this fragment through the approved Wazuh agent-management channel.
+  The source is the protected control-plane sidecar mount, not a public endpoint.
+  Replace WAZUH_MANAGER_HOST and enrollment settings outside source control.
+-->
+<ossec_config>
+  <client>
+    <server>
+      <address>${WAZUH_MANAGER_HOST}</address>
+      <port>1514</port>
+      <protocol>tcp</protocol>
+    </server>
+  </client>
+  <localfile>
+    <location>/var/log/umoja/sod-audit.jsonl</location>
+    <log_format>json</log_format>
+  </localfile>
+</ossec_config>

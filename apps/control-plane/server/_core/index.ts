@@ -12,6 +12,7 @@ import { regulatoryDeadlineReminders } from "../scheduled/regulatoryDeadlineRemi
 import { counterpartyRiskReviews } from "../scheduled/counterpartyRiskReviews";
 import { serviceHealthCollector } from "../scheduled/serviceHealthCollector";
 import { startServiceHealthMonitor } from "../serviceHealthMonitor";
+import { startSegregationOfDutiesMonitor } from "../segregationOfDutiesMonitor";
 import { lakehouseControlEvidenceDrain } from "../scheduled/lakehouseControlEvidenceDrain";
 import { serveStatic, setupVite } from "./vite";
 
@@ -77,6 +78,8 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
     const healthMonitor = startServiceHealthMonitor();
     if (healthMonitor) server.once("close", healthMonitor.stop);
+    const segregationOfDutiesMonitor = startSegregationOfDutiesMonitor();
+    if (segregationOfDutiesMonitor) server.once("close", segregationOfDutiesMonitor.stop);
   });
 }
 

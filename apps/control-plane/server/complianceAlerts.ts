@@ -17,7 +17,8 @@ export type ComplianceAlertType =
   | "liquidity_threshold"
   | "payment_failure"
   | "compliance_flag"
-  | "regulatory_deadline";
+  | "regulatory_deadline"
+  | "segregation_of_duties";
 
 export type ComplianceAlertSeverity = "low" | "medium" | "high" | "critical";
 

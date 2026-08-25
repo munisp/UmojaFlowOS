@@ -1,0 +1,26 @@
+# Apply only after the Wazuh manager and enrollment policy are approved.
+# This is an overlay for `compose.yaml`; it does not publish a port or enable the SoD monitor.
+services:
+  wazuh-agent-sod:
+    image: wazuh/wazuh-agent:4.9.2
+    restart: unless-stopped
+    environment:
+      WAZUH_MANAGER: ${WAZUH_MANAGER_HOST:?supply separately administered Wazuh manager host}
+      WAZUH_AGENT_NAME: ${WAZUH_AGENT_NAME:?set a unique staging/production agent name}
+      WAZUH_AGENT_GROUP: umoja-control-plane
+    volumes:
+      - sod-audit:/var/log/umoja:ro
+      - ${UMOJA_WAZUH_AGENT_CONFIG_PATH:?mount approved agent ossec.conf outside source control}:/var/ossec/etc/ossec.conf:ro
+    networks:
+      - protected
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  sod-audit:
+    external: true

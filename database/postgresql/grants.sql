@@ -49,7 +49,8 @@ GRANT INSERT ON TABLE
   ledger_account_bindings,
   tigerbeetle_transfer_facts,
   aml_screening_checks,
-  regulatory_submission_attempts
+  regulatory_submission_attempts,
+  segregation_of_duties_evaluation_runs
 TO :"app_role_ident";
 
 -- Records with a governed, reviewable lifecycle require in-place transitions.

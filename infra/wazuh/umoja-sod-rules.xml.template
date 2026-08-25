@@ -1,0 +1,24 @@
+<group name="umoja,sod,">
+  <rule id="100810" level="12">
+    <decoded_as>json</decoded_as>
+    <field name="event">sod_monitor_evaluation</field>
+    <field name="evaluationState">exceptions_detected</field>
+    <description>UmojaFlowOS segregation-of-duties exception detected</description>
+    <group>compliance,sod_exception,</group>
+  </rule>
+
+  <rule id="100811" level="12">
+    <decoded_as>json</decoded_as>
+    <field name="event">sod_monitor_indeterminate</field>
+    <description>UmojaFlowOS segregation-of-duties monitor is indeterminate</description>
+    <group>compliance,sod_monitor_failure,</group>
+  </rule>
+
+  <rule id="100812" level="10">
+    <decoded_as>json</decoded_as>
+    <field name="event">sod_alert_delivery</field>
+    <field name="deliveryState">unavailable</field>
+    <description>UmojaFlowOS segregation-of-duties notification delivery unavailable</description>
+    <group>compliance,sod_alert_delivery_failure,</group>
+  </rule>
+</group>

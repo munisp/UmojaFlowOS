@@ -359,10 +359,15 @@ services:
       UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY: ${UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY:?supply through a managed secret injector}
       UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE: ${UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE:-}
       UMOJA_PROVIDER_MATERIAL_ROOT: /run/umoja-secrets
+      UMOJA_SOD_MONITOR_ENABLED: ${UMOJA_SOD_MONITOR_ENABLED:-false}
+      UMOJA_SOD_MONITOR_INTERVAL_SECONDS: ${UMOJA_SOD_MONITOR_INTERVAL_SECONDS:-300}
+      UMOJA_SOD_MONITOR_SUBJECT: ${UMOJA_SOD_MONITOR_SUBJECT:-system:sod-monitor}
+      UMOJA_SOD_AUDIT_LOG_PATH: ${UMOJA_SOD_AUDIT_LOG_PATH:-/var/log/umoja/sod-audit.jsonl}
     expose:
       - "3000"
     volumes:
       - ${UMOJA_YELLOWCARD_MATERIAL_MOUNT_PATH:?mount internal-control secret-manager material outside source control}:/run/umoja-secrets:ro
+      - sod-audit:/var/log/umoja
     networks:
       - protected
     security_opt:
@@ -393,3 +398,4 @@ volumes:
   redis-data:
   webhook-evidence:
   webhook-reconciliation:
+  sod-audit:
