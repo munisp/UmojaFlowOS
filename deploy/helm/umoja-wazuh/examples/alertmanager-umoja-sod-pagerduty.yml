@@ -13,6 +13,15 @@ route:
         - compliance_domain="segregation_of_duties"
         - severity="critical"
       continue: false
+    - receiver: umoja-sod-pagerduty
+      matchers:
+        - compliance_domain="ledger_integrity"
+        - urgency="page"
+        - severity="critical"
+      continue: false
+      group_wait: 0s
+      group_interval: 1m
+      repeat_interval: 15m
 
 receivers:
   - name: default-blackhole

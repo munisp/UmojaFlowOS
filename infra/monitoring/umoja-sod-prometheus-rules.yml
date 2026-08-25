@@ -85,3 +85,29 @@ groups:
         annotations:
           summary: UmojaFlowOS ledger reconciliation is stale
           description: No successful reconciliation metric update has been observed within the expected hourly schedule plus grace period.
+
+      - alert: UmojaTigerBeetleConsensusLoss
+        expr: umoja_tigerbeetle_failover_state{state="indeterminate"} == 1
+        for: 0m
+        labels:
+          severity: critical
+          urgency: page
+          service: tigerbeetle-failover
+          compliance_domain: ledger_integrity
+        annotations:
+          summary: UmojaFlowOS TigerBeetle failover is indeterminate
+          description: Consensus, fencing, quorum, promotion, or reconciliation has not been proven. Freeze live transaction processing.
+          runbook_url: https://docs.example.invalid/runbooks/tigerbeetle-consensus-loss
+
+      - alert: UmojaTigerBeetleFailoverIndeterminate
+        expr: time() - umoja_tigerbeetle_failover_last_event_timestamp_seconds > 900 and umoja_tigerbeetle_failover_state{state="indeterminate"} == 1
+        for: 0m
+        labels:
+          severity: critical
+          urgency: page
+          service: tigerbeetle-failover
+          compliance_domain: ledger_integrity
+        annotations:
+          summary: UmojaFlowOS TigerBeetle failover remains indeterminate
+          description: The failover state has remained unresolved for more than 15 minutes; maintain the transaction freeze and escalate.
+          runbook_url: https://docs.example.invalid/runbooks/tigerbeetle-consensus-loss

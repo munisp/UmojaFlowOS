@@ -69,3 +69,34 @@ def test_no_resume_after_reconciliation_failure() -> None:
     assert controller.run() == DRState.INDETERMINATE
     assert cluster.events == ["freeze", "fence", "verify", "promote", "reconcile"]
     assert cluster.resumed is False
+
+
+def test_split_brain_is_rejected_when_two_writable_primaries_are_detected() -> None:
+    class SplitBrainCluster(FakeCluster):
+        writable_primaries = 2
+
+        def verify(self) -> bool:
+            self.events.append("verify")
+            return self.fenced and self.writable_primaries == 1 and self.quorum
+
+    cluster = SplitBrainCluster(quorum=True)
+    controller = FailoverController(cluster)
+
+    assert controller.run() == DRState.INDETERMINATE
+    assert cluster.events == ["freeze", "fence", "verify"]
+    assert cluster.resumed is False
+
+
+def test_network_partition_does_not_resume_on_stale_primary_visibility() -> None:
+    class PartitionedCluster(FakeCluster):
+        def verify(self) -> bool:
+            self.events.append("verify")
+            # The replica can see a local node but cannot prove authoritative quorum.
+            return False
+
+    cluster = PartitionedCluster(quorum=True)
+    controller = FailoverController(cluster)
+
+    assert controller.run() == DRState.INDETERMINATE
+    assert "promote" not in cluster.events
+    assert "resume" not in cluster.events

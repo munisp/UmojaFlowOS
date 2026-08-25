@@ -72,6 +72,8 @@ jobs:
         run: pytest -q tests/simulators/test_production_dependencies.py
       - name: Run AML timeout and failover integration tests
         run: pytest -q tests/simulators/test_aml_failover.py
+      - name: Run TigerBeetle DR chaos tests
+        run: pytest -q tests/test_tigerbeetle_dr_failover.py
       - name: Validate Wazuh XML and verifier scripts
         run: |
           bash -n scripts/infra/verify_sod_alerting_and_worm.sh
