@@ -1,0 +1,43 @@
+{
+  "realm": "umoja",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "umoja-evidence-publisher",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "local-only-evidence-secret",
+      "serviceAccountsEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": false,
+      "protocolMappers": [
+        {
+          "name": "evidence-gateway-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "umoja-evidence-publisher",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "lightweight.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "roles": {
+    "realm": [
+      {"name": "evidence.publish", "description": "Local-only evidence upload role"}
+    ]
+  },
+  "users": [
+    {
+      "username": "evidence-test-owner",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{"type": "password", "value": "local-only-owner-password", "temporary": false}],
+      "realmRoles": ["evidence.publish"]
+    }
+  ]
+}

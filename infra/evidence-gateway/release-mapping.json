@@ -1,0 +1,9 @@
+{
+  "releases": {
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+      "status": "active",
+      "run_id": "local-contract-test",
+      "prefix": "umoja/releases"
+    }
+  }
+}
