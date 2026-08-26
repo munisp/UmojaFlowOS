@@ -1,7 +1,7 @@
 # UmojaFlowOS Latest Release Closure-Evidence Matrix
 
 **Author:** Manus AI
-**Release SHA:** `71b14909ec2cc9e373158120aab2c03953bb89fa`
+**Release SHA:** `31b5cb2d83520029f315cf1f3b6ea5e59896013e`
 **Reference branch:** `origin/main` verified 26 August 2026
 **Decision rule:** A finding is closed only when the required artifact is generated from this exact immutable SHA, has a SHA-256 digest in `release.json`, and is independently reviewed. A local test, simulator result, or structurally valid manifest does not replace controlled staging evidence.
 
@@ -9,7 +9,7 @@
 
 | Finding | Current state at latest SHA | Source remediation | Exact closure evidence | Required E-item(s) | Acceptance condition |
 |---|---|---|---|---|---|
-| AUR-001 — immutable provenance | **Open** | Release-evidence schema, verifier, and protected workflow exist. | Signed/annotated tag, clean worktree output, protected review export, CI provenance, SBOM, immutable image digests. | E-01, E-09 | Tag, source SHA, provenance, SBOM, and deployed image digests all resolve to `71b1490…` or a newer reviewed release SHA. |
+| AUR-001 — immutable provenance | **Open** | Release-evidence schema, verifier, and protected workflow exist. | Signed/annotated tag, clean worktree output, protected review export, CI provenance, SBOM, immutable image digests. | E-01, E-09 | Tag, source SHA, provenance, SBOM, and deployed image digests all resolve to `31b5cb2…` or a newer reviewed release SHA. |
 | AUR-002 — skipped integration/live suites | **Open** | Staging evidence pack and release gate define the required suite evidence. | JUnit/console reports for every applicable gated suite, timestamps, environment ID, test correlation IDs, non-applicability records if any. | E-03, E-04, E-05, E-08 | No required suite remains skipped; each passes or has independent approved non-applicability. |
 | AUR-003 — TigerBeetle ledger evidence | **Open** | Staging load, reconciliation, DR, and chaos scripts are versioned. | Cluster/version/quorum output, account binding, idempotency/transfer report, reconciliation report, consensus-loss fence/recovery report. | E-04, E-08 | No unexplained ledger discrepancy; indeterminate failover is fenced; post-recovery reconciliation is clean. |
 | AUR-004 — external identity/compliance/provider evidence | **Open** | Contract simulators, OIDC/webhook controls, WORM gateway, and staging tests are versioned. | Keycloak discovery/JWKS/audience success and refusal logs; AML receipts; HMAC/replay/CIDR webhook outcomes; regulatory recipient receipt; WORM/Object Lock metadata; notification receipt. | E-05 | Success and fail-closed paths have recipient/system correlation IDs and immutable evidence references. |
@@ -35,25 +35,25 @@ The approval objects below are the exact fields accepted by `release_evidence_ma
   {
     "role": "release_manager",
     "subject": "REPLACE_WITH_DISTINCT_RELEASE_MANAGER_IDENTITY",
-    "release_sha": "71b14909ec2cc9e373158120aab2c03953bb89fa",
+    "release_sha": "31b5cb2d83520029f315cf1f3b6ea5e59896013e",
     "approved_at": "2026-08-26T00:00:00Z"
   },
   {
     "role": "security_owner",
     "subject": "REPLACE_WITH_DISTINCT_SECURITY_OWNER_IDENTITY",
-    "release_sha": "71b14909ec2cc9e373158120aab2c03953bb89fa",
+    "release_sha": "31b5cb2d83520029f315cf1f3b6ea5e59896013e",
     "approved_at": "2026-08-26T00:00:00Z"
   },
   {
     "role": "compliance_owner",
     "subject": "REPLACE_WITH_DISTINCT_COMPLIANCE_OWNER_IDENTITY",
-    "release_sha": "71b14909ec2cc9e373158120aab2c03953bb89fa",
+    "release_sha": "31b5cb2d83520029f315cf1f3b6ea5e59896013e",
     "approved_at": "2026-08-26T00:00:00Z"
   },
   {
     "role": "operations_owner",
     "subject": "REPLACE_WITH_DISTINCT_OPERATIONS_OWNER_IDENTITY",
-    "release_sha": "71b14909ec2cc9e373158120aab2c03953bb89fa",
+    "release_sha": "31b5cb2d83520029f315cf1f3b6ea5e59896013e",
     "approved_at": "2026-08-26T00:00:00Z"
   }
 ]

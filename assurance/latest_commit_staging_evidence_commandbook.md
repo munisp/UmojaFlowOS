@@ -1,7 +1,7 @@
 # UmojaFlowOS Staging Evidence Commandbook
 
 **Author:** Manus AI
-**Target immutable release SHA:** `71b14909ec2cc9e373158120aab2c03953bb89fa`
+**Target immutable release SHA:** `31b5cb2d83520029f315cf1f3b6ea5e59896013e`
 **Scope:** Controlled staging only. Do not point any command at production data, customer accounts, production TigerBeetle, live regulatory recipients, or production PagerDuty.
 
 > Commands that need credentials reference environment variables populated by the approved secret manager or CI environment. Do not echo the values, redirect secret-bearing environment output to logs, or place secrets in the evidence bundle.
@@ -11,7 +11,7 @@
 Run from a clean detached checkout of the exact release:
 
 ```bash
-export RELEASE_SHA=71b14909ec2cc9e373158120aab2c03953bb89fa
+export RELEASE_SHA=31b5cb2d83520029f315cf1f3b6ea5e59896013e
 export RELEASE_TAG="REPLACE_WITH_SIGNED_TAG_FOR_${RELEASE_SHA}"
 export RUN_ID="staging-assurance-$(date -u +%Y%m%dT%H%M%SZ)"
 export BUNDLE_DIR="/secure-release-evidence/${RELEASE_SHA}/${RUN_ID}"
