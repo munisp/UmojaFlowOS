@@ -1,0 +1,69 @@
+groups:
+  - name: umoja-keycloak-evidence-publishing
+    interval: 30s
+    rules:
+      - alert: UmojaKeycloakTokenComplianceMonitorDown
+        expr: umoja_keycloak_token_monitor_up{client_id="umoja-evidence-publisher"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: evidence-gateway
+          control: keycloak-token-compliance
+        annotations:
+          summary: "Keycloak evidence-publisher token compliance monitor is down"
+          description: "Token issuance, issuer/audience, TTL, or introspection compliance failed for the evidence publisher client. Promotion is NO-GO until reviewed."
+
+      - alert: UmojaKeycloakTokenRotationFailure
+        expr: increase(umoja_keycloak_token_monitor_failures_total{client_id="umoja-evidence-publisher"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: evidence-gateway
+          control: secret-rotation
+        annotations:
+          summary: "Keycloak evidence-publisher rotation or compliance check failed"
+          description: "A Keycloak token compliance failure occurred during the last ten minutes. Inspect the rotation run and Vault version metadata."
+
+      - alert: UmojaKeycloakTokenTTLTooShort
+        expr: umoja_keycloak_token_ttl_seconds{client_id="umoja-evidence-publisher"} < 60
+        for: 2m
+        labels:
+          severity: critical
+          service: evidence-gateway
+          control: token-lifetime
+        annotations:
+          summary: "Keycloak evidence-publisher token TTL is too short"
+          description: "The observed token TTL is below the 60-second safety floor. Stop automated evidence publishing and review realm/client policy."
+
+      - alert: UmojaKeycloakTokenTTLTooLong
+        expr: umoja_keycloak_token_ttl_seconds{client_id="umoja-evidence-publisher"} > 300
+        for: 2m
+        labels:
+          severity: critical
+          service: evidence-gateway
+          control: token-lifetime
+        annotations:
+          summary: "Keycloak evidence-publisher token TTL exceeds policy"
+          description: "The observed token TTL exceeds the configured five-minute maximum. Stop promotion and correct Keycloak client policy."
+
+      - alert: UmojaKeycloakRevocationCanaryNotEnabled
+        expr: umoja_keycloak_token_revocation_check{client_id="umoja-evidence-publisher"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: evidence-gateway
+          control: token-revocation
+        annotations:
+          summary: "Keycloak revocation canary is not enabled"
+          description: "The monitor is running without the dedicated canary revocation check. Production requires a separate canary client and scheduled revocation validation."
+
+      - alert: UmojaKeycloakRotationRollbackEscalation
+        expr: increase(umoja_keycloak_rotation_rollback_failures_total[10m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: evidence-gateway
+          control: secret-rotation
+        annotations:
+          summary: "Keycloak secret rotation rollback failed"
+          description: "The compensating rotation or recovery canary failed. Freeze release promotion, preserve Vault versions, and invoke the rotation incident runbook."

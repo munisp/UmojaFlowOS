@@ -1,0 +1,93 @@
+name: Staging Keycloak Rotation Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      revoke_canary:
+        description: Run the dedicated token revocation canary after rotation
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: umoja-staging-keycloak-rotation-validation
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    environment: staging-keycloak-rotation
+    timeout-minutes: 20
+    steps:
+      - name: Check out pinned validation code
+        uses: actions/checkout@v7
+
+      - name: Install required utilities
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends jq
+
+      - name: Authenticate to Vault with GitHub OIDC
+        id: vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: ${{ vars.VAULT_ADDR }}
+          method: jwt
+          path: jwt
+          role: umoja-keycloak-evidence-rotation-staging
+          jwtGithubAudience: ${{ vars.VAULT_JWT_AUDIENCE }}
+          exportToken: true
+          secrets: |
+            secret/data/umoja/staging/keycloak/admin admin_client_id | KEYCLOAK_ADMIN_CLIENT_ID ;
+            secret/data/umoja/staging/keycloak/admin admin_client_secret | KEYCLOAK_ADMIN_CLIENT_SECRET ;
+            secret/data/umoja/staging/keycloak/evidence-publisher client_id | KEYCLOAK_CLIENT_ID ;
+            secret/data/umoja/staging/keycloak/evidence-publisher current_version | KEYCLOAK_SECRET_VERSION ;
+            secret/data/umoja/staging/keycloak/evidence-publisher client_secret | KEYCLOAK_CLIENT_SECRET
+
+      - name: Rotate, canary, and exercise recovery logic
+        id: rotate
+        env:
+          VAULT_ADDR: ${{ vars.VAULT_ADDR }}
+          KEYCLOAK_BASE_URL: ${{ vars.KEYCLOAK_BASE_URL }}
+          KEYCLOAK_REALM: ${{ vars.KEYCLOAK_REALM }}
+          KEYCLOAK_ADMIN_CLIENT_ID: ${{ steps.vault.outputs.KEYCLOAK_ADMIN_CLIENT_ID }}
+          KEYCLOAK_ADMIN_CLIENT_SECRET: ${{ steps.vault.outputs.KEYCLOAK_ADMIN_CLIENT_SECRET }}
+          KEYCLOAK_CLIENT_ID: ${{ steps.vault.outputs.KEYCLOAK_CLIENT_ID }}
+          KEYCLOAK_SECRET_VERSION: ${{ steps.vault.outputs.KEYCLOAK_SECRET_VERSION }}
+          CANARY_URL: ${{ vars.KEYCLOAK_CANARY_URL }}
+          CANARY_RELEASE_SHA: ${{ vars.KEYCLOAK_CANARY_RELEASE_SHA }}
+          CANARY_RUN_ID: keycloak-staging-rotation-${{ github.run_id }}
+          CANARY_PATH: rotation/E-01-staging-canary.json
+        run: scripts/infra/rotate_keycloak_evidence_secret.sh
+
+      - name: Run token TTL and revocation compliance canary
+        env:
+          KEYCLOAK_BASE_URL: ${{ vars.KEYCLOAK_BASE_URL }}
+          KEYCLOAK_REALM: ${{ vars.KEYCLOAK_REALM }}
+          KEYCLOAK_CLIENT_ID: ${{ steps.vault.outputs.KEYCLOAK_CLIENT_ID }}
+          KEYCLOAK_CLIENT_SECRET: ${{ steps.vault.outputs.KEYCLOAK_CLIENT_SECRET }}
+          KEYCLOAK_EXPECTED_AUDIENCE: ${{ vars.KEYCLOAK_EXPECTED_AUDIENCE }}
+          KEYCLOAK_EXPECTED_ISSUER: ${{ vars.KEYCLOAK_EXPECTED_ISSUER }}
+          KEYCLOAK_MIN_TOKEN_TTL_SECONDS: ${{ vars.KEYCLOAK_MIN_TOKEN_TTL_SECONDS }}
+          KEYCLOAK_MAX_TOKEN_TTL_SECONDS: ${{ vars.KEYCLOAK_MAX_TOKEN_TTL_SECONDS }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "${{ inputs.revoke_canary }}" = "true" ]; then args+=(--revoke-canary); fi
+          python3 scripts/infra/monitor_keycloak_token_compliance.py \
+            "${args[@]}" \
+            --metrics-file /tmp/umoja-keycloak-token-compliance.prom
+
+      - name: Upload non-secret validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keycloak-staging-rotation-${{ github.run_id }}
+          path: /tmp/umoja-keycloak-token-compliance.prom
+          if-no-files-found: ignore
+          retention-days: 14
