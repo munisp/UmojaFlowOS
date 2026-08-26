@@ -32,7 +32,7 @@ Financial reconciliation must run only after the staging schema has been migrate
 ### 1. Prepare an approved staging release
 
 ```bash
-export RELEASE_SHA=768579f891867319e4553723500fcde79f66f3bd
+export RELEASE_SHA=a7b06e15b722b5448936ea1739bb05ea1f34a812
 export RUN_ID="staging-reconciliation-$(date -u +%Y%m%dT%H%M%SZ)"
 export EVIDENCE_DIR="/secure-release-evidence/${RELEASE_SHA}/${RUN_ID}"
 
