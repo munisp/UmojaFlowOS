@@ -79,6 +79,15 @@ def test_hash_tampering_fails_closed(tmp_path: Path) -> None:
         module.verify_manifest(manifest, RELEASE_SHA)
 
 
+def test_approval_roles_must_be_unique(tmp_path: Path) -> None:
+    manifest = write_complete_bundle(tmp_path)
+    document = json.loads(manifest.read_text())
+    document["approvals"][1]["role"] = document["approvals"][0]["role"]
+    manifest.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(module.EvidenceValidationError, match="duplicate approval role"):
+        module.verify_manifest(manifest, RELEASE_SHA)
+
+
 def test_approval_subjects_must_be_independent(tmp_path: Path) -> None:
     manifest = write_complete_bundle(tmp_path)
     document = json.loads(manifest.read_text())

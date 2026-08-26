@@ -1,0 +1,27 @@
+{
+  "authorization_status": "PENDING_OWNER_AUTHORIZATION",
+  "release_sha": "0710d73eba23d41b74b70df28ac2eceb13d80f77",
+  "authorized_at": "<SET_ONLY_AFTER_RELEASE_GOVERNANCE_AUTHORIZATION>",
+  "owners": [
+    {
+      "role": "release_manager",
+      "subject": "<DISTINCT_RELEASE_MANAGER_DIRECTORY_OR_CERTIFICATE_SUBJECT>",
+      "approved_at": "<SET_AFTER_INDEPENDENT_REVIEW>"
+    },
+    {
+      "role": "security_owner",
+      "subject": "<DISTINCT_SECURITY_OWNER_DIRECTORY_OR_CERTIFICATE_SUBJECT>",
+      "approved_at": "<SET_AFTER_INDEPENDENT_REVIEW>"
+    },
+    {
+      "role": "compliance_owner",
+      "subject": "<DISTINCT_COMPLIANCE_OWNER_DIRECTORY_OR_CERTIFICATE_SUBJECT>",
+      "approved_at": "<SET_AFTER_INDEPENDENT_REVIEW>"
+    },
+    {
+      "role": "operations_owner",
+      "subject": "<DISTINCT_OPERATIONS_OWNER_DIRECTORY_OR_CERTIFICATE_SUBJECT>",
+      "approved_at": "<SET_AFTER_INDEPENDENT_REVIEW>"
+    }
+  ]
+}

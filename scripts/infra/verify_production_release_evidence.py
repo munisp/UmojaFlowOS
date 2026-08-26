@@ -154,6 +154,8 @@ def verify_manifest(manifest_path: Path, expected_sha: str | None = None) -> lis
         approval_sha = approval.get("release_sha")
         if role not in REQUIRED_APPROVAL_ROLES:
             raise EvidenceValidationError(f"invalid approval role: {role}")
+        if role in approved_roles:
+            raise EvidenceValidationError(f"duplicate approval role: {role}")
         if not isinstance(subject, str) or not subject.strip():
             raise EvidenceValidationError(f"{role} approval requires a subject")
         if subject in approval_subjects:
