@@ -36,12 +36,12 @@ jobs:
       EVIDENCE_MANIFEST_JSON: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_manifest_path || 'compliance/vasp/evidence-manifest.json' }}
     steps:
       - name: Check out reviewed source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
           fetch-depth: 1
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - name: Validate the committed evidence-kit is executable
@@ -85,12 +85,12 @@ jobs:
       READ_ONLY_AUDITOR_TOKEN: ${{ secrets.UMOJA_READONLY_AUDITOR_TOKEN }}
     steps:
       - name: Check out reviewed source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
           fetch-depth: 1
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - name: Validate the committed evidence-kit is executable
