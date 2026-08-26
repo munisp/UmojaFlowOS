@@ -7,7 +7,7 @@ This runbook targets the repository revision currently under review. It separate
 Create the release candidate from a clean checkout and record the exact commit before building anything:
 
 ```bash
-export RELEASE_SHA=768579f891867319e4553723500fcde79f66f3bd
+export RELEASE_SHA=2aaf85810a12dd85646d006c27415fb82cd3e4d1
 export RELEASE_TAG=umoja-staging-${RELEASE_SHA:0:12}
 
 git fetch origin --tags --prune
