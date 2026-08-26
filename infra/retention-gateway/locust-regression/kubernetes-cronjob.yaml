@@ -1,0 +1,227 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: umoja-retention-loadtest-results
+  namespace: security
+  labels:
+    app.kubernetes.io/name: umoja-retention-loadtest
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: locust-retention-loadtest
+  namespace: security
+  labels:
+    app.kubernetes.io/name: umoja-retention-loadtest
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: umoja-retention-loadtest
+  ports:
+    - name: metrics
+      port: 9646
+      targetPort: metrics
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: umoja-retention-lock-unique
+  namespace: security
+  labels:
+    app.kubernetes.io/name: umoja-retention-loadtest
+    umoja.io/profile: unique
+spec:
+  schedule: "0 2 * * 1"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 1200
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: umoja-retention-loadtest
+            umoja.io/profile: unique
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: locust
+              image: ghcr.io/munisp/umojaflowos-retention-loadtest:sha256-replace
+              imagePullPolicy: IfNotPresent
+              ports:
+                - name: metrics
+                  containerPort: 9646
+              env:
+                - name: LOADTEST_PROFILE
+                  value: unique
+                - name: LOCUST_HOST
+                  value: https://umoja-retention-worker.security.svc.cluster.local:8443
+                - name: LOCUST_USERS
+                  value: "100"
+                - name: LOCUST_SPAWN_RATE
+                  value: "20"
+                - name: LOCUST_RUN_TIME
+                  value: 5m
+                - name: LOCUST_FIXTURE_COUNT
+                  value: "10000"
+                - name: LOCUST_PROMETHEUS_PORT
+                  value: "9646"
+                - name: REQUESTS_CA_BUNDLE
+                  value: /var/run/secrets/worker-ca/ca.crt
+                - name: RETENTION_GATEWAY_DATABASE_URL
+                  valueFrom: {secretKeyRef: {name: umoja-retention-loadtest-secrets, key: RETENTION_GATEWAY_DATABASE_URL}}
+                - name: RETENTION_WORKER_BEARER_TOKEN
+                  valueFrom: {secretKeyRef: {name: umoja-retention-loadtest-secrets, key: RETENTION_WORKER_BEARER_TOKEN}}
+                - name: RETENTION_GATEWAY_HMAC_SECRET_FILE
+                  value: /var/run/secrets/retention-gateway/hmac
+              volumeMounts:
+                - {name: retention-gateway-hmac, mountPath: /var/run/secrets/retention-gateway, readOnly: true}
+                - {name: worker-ca, mountPath: /var/run/secrets/worker-ca, readOnly: true}
+                - {name: results, mountPath: /work}
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 10001
+                runAsGroup: 10001
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+              resources:
+                requests: {cpu: 250m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+          volumes:
+            - name: retention-gateway-hmac
+              secret:
+                secretName: umoja-retention-gateway-hmac
+                items: [{key: hmac, path: hmac}]
+            - name: worker-ca
+              secret:
+                secretName: umoja-retention-worker-ca
+                items: [{key: ca.crt, path: ca.crt}]
+            - name: results
+              persistentVolumeClaim: {claimName: umoja-retention-loadtest-results}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: umoja-retention-lock-contention
+  namespace: security
+  labels:
+    app.kubernetes.io/name: umoja-retention-loadtest
+    umoja.io/profile: contention
+spec:
+  schedule: "30 2 * * 1"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 1200
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: umoja-retention-loadtest
+            umoja.io/profile: contention
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: locust
+              image: ghcr.io/munisp/umojaflowos-retention-loadtest:sha256-replace
+              imagePullPolicy: IfNotPresent
+              ports:
+                - name: metrics
+                  containerPort: 9646
+              env:
+                - name: LOADTEST_PROFILE
+                  value: contention
+                - name: LOCUST_HOST
+                  value: https://umoja-retention-worker.security.svc.cluster.local:8443
+                - name: LOCUST_USERS
+                  value: "100"
+                - name: LOCUST_SPAWN_RATE
+                  value: "50"
+                - name: LOCUST_RUN_TIME
+                  value: 2m
+                - name: LOCUST_FIXTURE_COUNT
+                  value: "100"
+                - name: LOCUST_PROMETHEUS_PORT
+                  value: "9646"
+                - name: REQUESTS_CA_BUNDLE
+                  value: /var/run/secrets/worker-ca/ca.crt
+                - name: RETENTION_GATEWAY_DATABASE_URL
+                  valueFrom: {secretKeyRef: {name: umoja-retention-loadtest-secrets, key: RETENTION_GATEWAY_DATABASE_URL}}
+                - name: RETENTION_WORKER_BEARER_TOKEN
+                  valueFrom: {secretKeyRef: {name: umoja-retention-loadtest-secrets, key: RETENTION_WORKER_BEARER_TOKEN}}
+                - name: RETENTION_GATEWAY_HMAC_SECRET_FILE
+                  value: /var/run/secrets/retention-gateway/hmac
+              volumeMounts:
+                - {name: retention-gateway-hmac, mountPath: /var/run/secrets/retention-gateway, readOnly: true}
+                - {name: worker-ca, mountPath: /var/run/secrets/worker-ca, readOnly: true}
+                - {name: results, mountPath: /work}
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 10001
+                runAsGroup: 10001
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities: {drop: [ALL]}
+              resources:
+                requests: {cpu: 250m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+          volumes:
+            - name: retention-gateway-hmac
+              secret:
+                secretName: umoja-retention-gateway-hmac
+                items: [{key: hmac, path: hmac}]
+            - name: worker-ca
+              secret:
+                secretName: umoja-retention-worker-ca
+                items: [{key: ca.crt, path: ca.crt}]
+            - name: results
+              persistentVolumeClaim: {claimName: umoja-retention-loadtest-results}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: umoja-retention-loadtest
+  namespace: security
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: umoja-retention-loadtest
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: monitoring}
+      ports: [{protocol: TCP, port: 9646}]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: postgres}
+      ports: [{protocol: TCP, port: 5432}]
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: umoja-retention-worker}
+      ports: [{protocol: TCP, port: 8443}]
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]

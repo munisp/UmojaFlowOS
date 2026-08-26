@@ -1,0 +1,3910 @@
+# SERVICE AREA: reporting-analytics
+# TRACKED PATH: services/reporting-analytics
+
+
+
+===== FILE: services/reporting-analytics/jobs/sedona_jurisdiction_aggregate.py =====
+"""Apache Sedona aggregate-only jurisdiction job.
+
+Run this job through the configured Livy client, never on the control-plane
+web process. Input is an already redacted bronze lakehouse dataset. The job
+refuses raw latitude/longitude, customer identifiers, account numbers, and
+document references before it reads data. Its only geographic artefact is an
+aggregate cell geometry paired with a cohort count of at least ten.
+"""
+
+from __future__ import annotations
+
+import sys
+
+
+FORBIDDEN_COLUMNS = {
+    "latitude",
+    "longitude",
+    "geometry_raw",
+    "customer_name",
+    "customer_id",
+    "account_number",
+    "document_uri",
+    "wallet_address",
+}
+REQUIRED_COLUMNS = {"jurisdiction", "h3_cell", "aggregate_geometry_wkt", "metric_name", "cohort_count"}
+
+
+def main(input_uri: str, output_uri: str, metric_name: str, h3_resolution: str) -> None:
+    from pyspark.sql import functions as F
+    from sedona.spark import SedonaContext
+
+    resolution = int(h3_resolution)
+    if not 5 <= resolution <= 9:
+        raise ValueError("H3 resolution must be between 5 and 9")
+    if not input_uri.startswith("s3://") or not output_uri.startswith("s3://"):
+        raise ValueError("input and output must be S3-compatible lakehouse URIs")
+
+    spark = SedonaContext.create(SedonaContext.builder().appName("umojaflowos-jurisdiction-aggregate").getOrCreate())
+    source = spark.read.json(input_uri)
+    unexpected = FORBIDDEN_COLUMNS.intersection(source.columns)
+    if unexpected:
+        raise ValueError(f"raw or identifying columns are prohibited: {sorted(unexpected)}")
+    missing = REQUIRED_COLUMNS - set(source.columns)
+    if missing:
+        raise ValueError(f"aggregate source is incomplete: {sorted(missing)}")
+
+    aggregate = (
+        source.filter(F.col("metric_name") == metric_name)
+        .groupBy("jurisdiction", "h3_cell", "aggregate_geometry_wkt", "metric_name")
+        .agg(F.sum(F.col("cohort_count")).alias("cohort_count"))
+        .filter(F.col("cohort_count") >= 10)
+        .withColumn("geometry", F.expr("ST_GeomFromWKT(aggregate_geometry_wkt)"))
+        .drop("aggregate_geometry_wkt")
+        .withColumn("h3_resolution", F.lit(resolution))
+    )
+    # The GeoJSON contains aggregate cell geometry and cohort-level measures
+    # only. Apache Sedona performs both the geometry construction and output.
+    aggregate.write.mode("errorifexists").format("geojson").save(output_uri)
+
+
+if __name__ == "__main__":
+    if len(sys.argv) != 5:
+        raise SystemExit("usage: sedona_jurisdiction_aggregate.py <input-uri> <output-uri> <metric-name> <h3-resolution>")
+    main(*sys.argv[1:])
+
+
+===== FILE: services/reporting-analytics/pyproject.toml =====
+[project]
+name = "umojaflowos-reporting-analytics"
+version = "0.1.0"
+requires-python = ">=3.11"
+description = "Validated regulatory reporting primitives for UmojaFlowOS"
+dependencies = ["fastapi>=0.110", "uvicorn>=0.27", "redis>=5.0", "boto3>=1.34"]
+
+
+===== FILE: services/reporting-analytics/src/enterprise_governance.py =====
+"""Non-authoritative enterprise-governance reporting contract.
+
+The module summarizes immutable records supplied by the control plane. It cannot
+quote liquidity, make credit decisions, instruct a bank, issue a card, transfer
+stablecoins, fund a receivable, or assert settlement.
+"""
+from collections import Counter
+
+
+def summarize_enterprise_governance(records: list[dict]) -> dict:
+    module_counts = Counter(str(record.get("module_kind", "unavailable")) for record in records)
+    review_counts = Counter(str(record.get("review_status", "unreviewed")) for record in records)
+    return {
+        "record_count": len(records),
+        "module_counts": dict(sorted(module_counts.items())),
+        "review_counts": dict(sorted(review_counts.items())),
+        "bank_instruction_created": False,
+        "stablecoin_transfer_initiated": False,
+        "credit_decision_made": False,
+        "funding_initiated": False,
+        "card_issued": False,
+        "card_authorisation_initiated": False,
+        "settlement_asserted": False,
+        "authoritative_for_execution": False,
+    }
+
+
+def summarize_control_assurance(records: list[dict]) -> dict:
+    """Summarize supplied assurance evidence without producing operational authority."""
+    finding_counts = Counter(str(record.get("finding_code", "unavailable")) for record in records)
+    status_counts = Counter(str(record.get("status", "unavailable")) for record in records)
+    missing = sorted(code for code in finding_counts if code not in {"", "none", "resolved"})
+    return {
+        "assessment_count": len(records),
+        "finding_counts": dict(sorted(finding_counts.items())),
+        "status_counts": dict(sorted(status_counts.items())),
+        "missing_control_coverage": missing,
+        "provider_activation_initiated": False,
+        "external_execution_initiated": False,
+        "audit_packet_generated": False,
+        "authoritative_for_execution": False,
+    }
+
+
+def summarize_vasp_readiness(records: list[dict]) -> dict:
+    """Summarize supplied VASP readiness records without regulatory or execution authority."""
+    category_counts = Counter(str(record.get("category", "unavailable")) for record in records)
+    route_counts = Counter(str(record.get("route_state", "unavailable")) for record in records)
+    missing = sorted(str(record["missing_category"]) for record in records if record.get("missing_category"))
+    return {
+        "record_count": len(records),
+        "evidence_category_counts": dict(sorted(category_counts.items())),
+        "route_state_counts": dict(sorted(route_counts.items())),
+        "missing_categories": missing,
+        "external_submission_initiated": False,
+        "travel_rule_transmission": False,
+        "provider_activation_initiated": False,
+        "custody_initiated": False,
+        "value_movement_initiated": False,
+        "authoritative_for_execution": False,
+    }
+
+
+===== FILE: services/reporting-analytics/src/trade_payment_control.py =====
+"""Non-authoritative Trade-Payment Control OS reporting contract.
+
+It reports only supplied immutable control records. It cannot determine liquidity,
+price, execution, payment, settlement, or regulatory submission outcomes.
+"""
+from collections import Counter
+
+
+def summarize_trade_cases(cases: list[dict]) -> dict:
+    status_counts = Counter(str(case.get("status", "unavailable")) for case in cases)
+    blocked = [case.get("case_reference") for case in cases if case.get("status") == "blocked"]
+    return {
+        "case_count": len(cases),
+        "status_counts": dict(sorted(status_counts.items())),
+        "blocked_case_references": [value for value in blocked if value],
+        "provider_execution_initiated": False,
+        "settlement_asserted": False,
+        "authoritative_for_execution": False,
+    }
+
+
+===== FILE: services/reporting-analytics/src/umojaflowos_reporting/__init__.py =====
+from .reporting import ReportValidationError, build_evidence_manifest, validate_report_pack
+
+__all__ = ["ReportValidationError", "build_evidence_manifest", "validate_report_pack"]
+
+
+===== FILE: services/reporting-analytics/src/umojaflowos_reporting/assembly.py =====
+"""Regulatory report assembly for CBN, CBK, and SARB.
+
+This module constructs a submission-ready report artifact from canonical
+transaction records. It is deliberately not a template renderer: every total is
+recomputed from the supplied rows, and any row that fails the regulator's field
+requirements aborts assembly rather than being silently dropped or defaulted.
+
+The artifact carries its own integrity digest and a per-row inclusion ledger so
+a reviewer can reconcile the assembled totals against the source records. The
+module performs no submission and asserts no regulator connectivity: the
+returned artifact is explicitly marked as requiring an authorised channel
+reference before any submission may be recorded.
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import asdict, dataclass
+from datetime import date, datetime, timezone
+from decimal import Decimal, InvalidOperation
+from hashlib import sha256
+from typing import Mapping, Sequence
+
+from .reporting import REQUIRED_BY_REGULATOR, ReportValidationError
+
+CORRIDOR_BY_REGULATOR = {
+    "CBN": ("Nigeria", "NGN"),
+    "CBK": ("Kenya", "KES"),
+    "SARB": ("South Africa", "ZAR"),
+}
+
+REQUIRED_TRANSACTION_FIELDS = (
+    "transaction_reference",
+    "value_date",
+    "currency",
+    "amount",
+    "counterparty_reference",
+    "direction",
+)
+
+VALID_DIRECTIONS = ("INBOUND", "OUTBOUND")
+
+
+class ReportAssemblyError(ValueError):
+    """Raised when a report cannot be assembled from the supplied records."""
+
+
+@dataclass(frozen=True)
+class AssembledRow:
+    transaction_reference: str
+    value_date: str
+    currency: str
+    amount: str
+    direction: str
+    counterparty_reference: str
+
+
+@dataclass(frozen=True)
+class ReportTotals:
+    record_count: int
+    inbound_total: str
+    outbound_total: str
+    net_total: str
+
+
+@dataclass(frozen=True)
+class AssembledReport:
+    regulator: str
+    corridor: str
+    settlement_currency: str
+    report_type: str
+    period_start: str
+    period_end: str
+    regulated_entity_id: str
+    generated_at: str
+    totals: ReportTotals
+    rows: tuple[AssembledRow, ...]
+    artifact_digest: str
+    submission_state: str
+
+
+def _parse_date(value: object, label: str) -> date:
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError as error:
+        raise ReportAssemblyError(f"{label} must be an ISO-8601 date") from error
+
+
+def _parse_amount(value: object, reference: str) -> Decimal:
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, TypeError) as error:
+        raise ReportAssemblyError(f"transaction {reference} has a non-decimal amount") from error
+    if amount.is_nan() or amount.is_infinite():
+        raise ReportAssemblyError(f"transaction {reference} amount must be finite")
+    if amount <= 0:
+        raise ReportAssemblyError(f"transaction {reference} amount must be greater than zero")
+    return amount
+
+
+def assemble_regulatory_report(
+    *,
+    regulator: str,
+    report_type: str,
+    period_start: object,
+    period_end: object,
+    regulated_entity_id: str,
+    transactions: Sequence[Mapping[str, object]],
+    generated_at: datetime | None = None,
+) -> AssembledReport:
+    """Assemble a CBN, CBK, or SARB report artifact from canonical records."""
+    normalised = regulator.upper()
+    if normalised not in REQUIRED_BY_REGULATOR:
+        raise ReportAssemblyError("regulator must be CBN, CBK, or SARB")
+    corridor, settlement_currency = CORRIDOR_BY_REGULATOR[normalised]
+
+    if not report_type or len(report_type.strip()) < 4:
+        raise ReportAssemblyError("report_type is required")
+    if not regulated_entity_id.strip():
+        raise ReportAssemblyError("regulated_entity_id is required")
+
+    start = _parse_date(period_start, "period_start")
+    end = _parse_date(period_end, "period_end")
+    if end < start:
+        raise ReportAssemblyError("period_end cannot precede period_start")
+
+    if not transactions:
+        raise ReportAssemblyError("no canonical transaction records were supplied")
+
+    rows: list[AssembledRow] = []
+    seen: set[str] = set()
+    inbound = Decimal("0")
+    outbound = Decimal("0")
+
+    for index, record in enumerate(transactions):
+        missing = [field for field in REQUIRED_TRANSACTION_FIELDS if field not in record]
+        if missing:
+            raise ReportAssemblyError(
+                f"transaction at index {index} is missing required fields: {', '.join(sorted(missing))}"
+            )
+        reference = str(record["transaction_reference"]).strip()
+        if not reference:
+            raise ReportAssemblyError(f"transaction at index {index} has an empty reference")
+        if reference in seen:
+            raise ReportAssemblyError(f"duplicate transaction reference: {reference}")
+        seen.add(reference)
+
+        currency = str(record["currency"]).upper()
+        if currency != settlement_currency:
+            raise ReportAssemblyError(
+                f"transaction {reference} currency {currency} does not match the {normalised} settlement currency {settlement_currency}"
+            )
+
+        direction = str(record["direction"]).upper()
+        if direction not in VALID_DIRECTIONS:
+            raise ReportAssemblyError(f"transaction {reference} direction must be INBOUND or OUTBOUND")
+
+        value_date = _parse_date(record["value_date"], f"transaction {reference} value_date")
+        if value_date < start or value_date > end:
+            raise ReportAssemblyError(
+                f"transaction {reference} value date {value_date.isoformat()} falls outside the reporting period"
+            )
+
+        counterparty = str(record["counterparty_reference"]).strip()
+        if not counterparty:
+            raise ReportAssemblyError(f"transaction {reference} requires a counterparty reference")
+
+        amount = _parse_amount(record["amount"], reference)
+        if direction == "INBOUND":
+            inbound += amount
+        else:
+            outbound += amount
+
+        rows.append(
+            AssembledRow(
+                transaction_reference=reference,
+                value_date=value_date.isoformat(),
+                currency=currency,
+                amount=str(amount),
+                direction=direction,
+                counterparty_reference=counterparty,
+            )
+        )
+
+    ordered = tuple(sorted(rows, key=lambda row: (row.value_date, row.transaction_reference)))
+    totals = ReportTotals(
+        record_count=len(ordered),
+        inbound_total=str(inbound),
+        outbound_total=str(outbound),
+        net_total=str(inbound - outbound),
+    )
+
+    body = {
+        "regulator": normalised,
+        "corridor": corridor,
+        "settlement_currency": settlement_currency,
+        "report_type": report_type.strip(),
+        "period_start": start.isoformat(),
+        "period_end": end.isoformat(),
+        "regulated_entity_id": regulated_entity_id.strip(),
+        "totals": asdict(totals),
+        "rows": [asdict(row) for row in ordered],
+    }
+    digest = sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+    return AssembledReport(
+        regulator=normalised,
+        corridor=corridor,
+        settlement_currency=settlement_currency,
+        report_type=report_type.strip(),
+        period_start=start.isoformat(),
+        period_end=end.isoformat(),
+        regulated_entity_id=regulated_entity_id.strip(),
+        generated_at=(generated_at or datetime.now(timezone.utc)).isoformat(),
+        totals=totals,
+        rows=ordered,
+        artifact_digest=digest,
+        submission_state="requires_authorised_channel_reference",
+    )
+
+
+def validate_assembled_report(report: AssembledReport) -> None:
+    """Re-verify an assembled artifact's integrity digest and totals."""
+    recomputed = assemble_regulatory_report(
+        regulator=report.regulator,
+        report_type=report.report_type,
+        period_start=report.period_start,
+        period_end=report.period_end,
+        regulated_entity_id=report.regulated_entity_id,
+        transactions=[asdict(row) for row in report.rows],
+        generated_at=datetime.fromisoformat(report.generated_at),
+    )
+    if recomputed.artifact_digest != report.artifact_digest:
+        raise ReportValidationError("assembled report digest does not match its contents")
+    if recomputed.totals != report.totals:
+        raise ReportValidationError("assembled report totals do not match its rows")
+
+
+===== FILE: services/reporting-analytics/src/umojaflowos_reporting/geolibre_project.py =====
+"""Generate a credential-free GeoLibre v0.1.0 project for aggregate data."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from urllib.parse import urlparse
+
+
+class GeoLibrePublicationError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class GeoLibrePublication:
+    project: dict[str, object]
+    viewer_url: str
+
+
+def build_aggregate_project(project_name: str, aggregate_data_url: str, viewer_base_url: str) -> GeoLibrePublication:
+    data = urlparse(aggregate_data_url)
+    viewer = urlparse(viewer_base_url)
+    if not project_name.strip() or len(project_name) > 120:
+        raise GeoLibrePublicationError("GeoLibre project name is required and must be at most 120 characters")
+    if data.scheme != "https" or not data.hostname or data.username or data.password:
+        raise GeoLibrePublicationError("GeoLibre aggregate data URL must be HTTPS and contain no embedded credentials")
+    if viewer.scheme != "https" or not viewer.hostname or viewer.username or viewer.password:
+        raise GeoLibrePublicationError("GeoLibre viewer URL must be HTTPS and contain no embedded credentials")
+    lowered = aggregate_data_url.lower()
+    if any(fragment in lowered for fragment in ("secret=", "token=", "password=", "access_key=")):
+        raise GeoLibrePublicationError("GeoLibre data URL must not expose credential query parameters")
+    project = {
+        "version": "0.1.0",
+        "name": project_name.strip(),
+        "mapView": {"center": [24.0, 1.0], "zoom": 3.2, "bearing": 0, "pitch": 0},
+        "basemapStyleUrl": "",
+        "basemapVisible": False,
+        "basemapOpacity": 1,
+        "layers": [
+            {
+                "id": "jurisdiction-aggregate",
+                "name": "Privacy-preserving jurisdiction aggregate",
+                "type": "geojson",
+                "source": {"type": "geojson", "url": aggregate_data_url},
+                "visible": True,
+                "opacity": 1,
+                "metadata": {"classification": "aggregate_only", "minimum_cohort": 10},
+            }
+        ],
+        "styles": {},
+        "metadata": {"producer": "UmojaFlowOS", "data_policy": "aggregate_only_no_raw_locations_or_customer_data"},
+    }
+    separator = "&" if viewer.query else "?"
+    viewer_url = f"{viewer_base_url.rstrip('/')}/{separator}url={aggregate_data_url}&layout=viewer"
+    return GeoLibrePublication(project=project, viewer_url=viewer_url)
+
+
+===== FILE: services/reporting-analytics/src/umojaflowos_reporting/geolibre_projection.py =====
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from .geospatial import JurisdictionAggregation
+
+
+class GeoLibreProjectionError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class GeoLibreLayer:
+    layer_id: str
+    source_kind: str
+    jurisdiction: str
+    h3_resolution: int
+    metric_name: str
+    cohort_count: int
+
+
+def build_geolibre_layer(aggregate: JurisdictionAggregation) -> GeoLibreLayer:
+    if aggregate.cohort_count < 10:
+        raise GeoLibreProjectionError("GeoLibre projection requires a cohort of at least 10")
+    if aggregate.jurisdiction not in {"NG", "KE", "ZA"}:
+        raise GeoLibreProjectionError("unsupported jurisdiction")
+    if not aggregate.metric_name.strip():
+        raise GeoLibreProjectionError("metric name is required")
+    return GeoLibreLayer(
+        layer_id=f"umojaflowos-{aggregate.jurisdiction.lower()}-{aggregate.metric_name}",
+        source_kind="h3_aggregate",
+        jurisdiction=aggregate.jurisdiction,
+        h3_resolution=aggregate.h3_resolution,
+        metric_name=aggregate.metric_name,
+        cohort_count=aggregate.cohort_count,
+    )
+
+
+===== FILE: services/reporting-analytics/src/umojaflowos_reporting/geospatial.py =====
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Mapping, Sequence
+
+
+class GeospatialContractError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class JurisdictionAggregation:
+    jurisdiction: str
+    cohort_count: int
+    h3_resolution: int
+    metric_name: str
+
+
+def build_jurisdiction_aggregation(
+    jurisdiction: str,
+    cohort_count: int,
+    h3_resolution: int,
+    metric_name: str,
+    source_rows: Sequence[Mapping[str, object]],
+) -> JurisdictionAggregation:
+    if jurisdiction not in {"NG", "KE", "ZA"}:
+        raise GeospatialContractError("jurisdiction must be NG, KE, or ZA")
+    if not metric_name.strip():
+        raise GeospatialContractError("metric name is required")
+    if not 5 <= h3_resolution <= 9:
+        raise GeospatialContractError("H3 resolution must be between 5 and 9")
+    if cohort_count < 10:
+        raise GeospatialContractError("cohort count must be at least 10")
+    forbidden = {"latitude", "longitude", "geometry", "document_uri", "account_number", "customer_name"}
+    for row in source_rows:
+        if forbidden.intersection(row):
+            raise GeospatialContractError("raw location or identifying data is not permitted in a geospatial aggregate")
+    return JurisdictionAggregation(jurisdiction, cohort_count, h3_resolution, metric_name)
+
+
+===== FILE: services/reporting-analytics/src/umojaflowos_reporting/lakehouse.py =====
+from __future__ import annotations
+
+from dataclasses import dataclass
+from hashlib import sha256
+import json
+from typing import Mapping, Sequence
+
+
+class LakehouseContractError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class BatchManifest:
+    dataset: str
+    layer: str
+    schema_version: str
+    record_count: int
+    payload_sha256: str
+
+
+def build_bronze_manifest(dataset: str, records: Sequence[Mapping[str, object]], schema_version: str = "v1") -> BatchManifest:
+    if not dataset.strip() or not schema_version.strip():
+        raise LakehouseContractError("dataset and schema version are required")
+    if not all(isinstance(record, Mapping) for record in records):
+        raise LakehouseContractError("records must be mapping objects")
+    canonical = json.dumps(list(records), sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    return BatchManifest(dataset=dataset, layer="bronze", schema_version=schema_version, record_count=len(records), payload_sha256=sha256(canonical).hexdigest())
+
+
+===== FILE: services/reporting-analytics/src/umojaflowos_reporting/lakehouse_catalog.py =====
+"""Governed cross-service evidence catalog for the UmojaFlowOS lakehouse.
+
+This is intentionally a projection contract, not an operational event bus or a
+second ledger. PostgreSQL remains the operational and compliance record;
+TigerBeetle remains the confirmed double-entry record when activated. This
+module permits those systems, workflows, policy engines, and provider adapters
+to contribute only redacted, hashed, non-authoritative evidence suitable for
+approved analytics and model features.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timezone
+import re
+from typing import Literal, Mapping
+
+from .lakehouse import LakehouseContractError
+from .lakehouse_writer import BronzeLakehouseWriter
+
+
+CatalogSource = Literal[
+    "go_payment_engine",
+    "postgresql_control",
+    "tigerbeetle_reconciliation",
+    "temporal_workflow",
+    "permify_authorization",
+    "rust_risk",
+    "ai_ml_evidence",
+    "stablecoin_exposure",
+    "provider_lifecycle",
+    "service_health",
+    "python_reporting",
+]
+
+CATALOG_SOURCES: frozenset[str] = frozenset(
+    {
+        "go_payment_engine",
+        "postgresql_control",
+        "tigerbeetle_reconciliation",
+        "temporal_workflow",
+        "permify_authorization",
+        "rust_risk",
+        "ai_ml_evidence",
+        "stablecoin_exposure",
+        "provider_lifecycle",
+        "service_health",
+        "python_reporting",
+    }
+)
+
+CORRIDORS = frozenset({"NIGERIA_NGN", "KENYA_KES", "SOUTH_AFRICA_ZAR"})
+STABLECOINS = frozenset({"USDC", "USDT"})
+SHA256 = re.compile(r"^[a-f0-9]{64}$")
+FORBIDDEN_EVENT_FIELD = re.compile(
+    r"(?:secret|token|password|credential|private|customer|beneficiar|account|wallet|document|payload|base64|latitude|longitude|execute|transfer|payout|accept_quote|settle)",
+    re.I,
+)
+ALLOWED_EVENT_FIELDS = frozenset(
+    {
+        "source",
+        "event_type",
+        "observed_at",
+        "correlation_sha256",
+        "outcome",
+        "corridor",
+        "stablecoin",
+        "model_role",
+    }
+)
+
+
+@dataclass(frozen=True)
+class CatalogEvidence:
+    source: CatalogSource
+    event_type: str
+    observed_at: datetime
+    correlation_sha256: str
+    outcome: str
+    corridor: str | None = None
+    stablecoin: str | None = None
+    model_role: str | None = None
+
+    def to_record(self) -> dict[str, object]:
+        record: dict[str, object] = {
+            "schema_version": "v1",
+            "source": self.source,
+            "event_type": self.event_type,
+            "observed_at": self.observed_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "correlation_sha256": self.correlation_sha256,
+            "outcome": self.outcome,
+            "authoritative": False,
+        }
+        if self.corridor is not None:
+            record["corridor"] = self.corridor
+        if self.stablecoin is not None:
+            record["stablecoin"] = self.stablecoin
+        if self.model_role is not None:
+            record["model_role"] = self.model_role
+        return record
+
+
+def build_catalog_evidence(raw: Mapping[str, object]) -> CatalogEvidence:
+    """Validate an analytics-safe cross-service projection.
+
+    The caller must hash its native correlation identifier before this boundary.
+    That makes it impossible for this contract to become an unnoticed replication
+    path for payment IDs, customer IDs, wallets, account numbers, or provider
+    sequence values.
+    """
+
+    for key in raw:
+        if not isinstance(key, str) or key not in ALLOWED_EVENT_FIELDS or FORBIDDEN_EVENT_FIELD.search(key):
+            raise LakehouseContractError("lakehouse catalog evidence contains an unapproved identifying, credential, location, or execution field")
+
+    source = raw.get("source")
+    event_type = raw.get("event_type")
+    observed_at = raw.get("observed_at")
+    correlation = raw.get("correlation_sha256")
+    outcome = raw.get("outcome")
+    if not isinstance(source, str) or source not in CATALOG_SOURCES:
+        raise LakehouseContractError("lakehouse catalog source is not approved")
+    if not isinstance(event_type, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]{2,100}", event_type):
+        raise LakehouseContractError("lakehouse catalog event type is invalid")
+    if not isinstance(correlation, str) or not SHA256.fullmatch(correlation):
+        raise LakehouseContractError("lakehouse catalog requires a SHA-256 correlation reference")
+    if not isinstance(outcome, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]{1,80}", outcome):
+        raise LakehouseContractError("lakehouse catalog outcome is invalid")
+    if not isinstance(observed_at, str):
+        raise LakehouseContractError("lakehouse catalog observation time is required")
+    try:
+        parsed_observed_at = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise LakehouseContractError("lakehouse catalog observation time is invalid") from exc
+    if parsed_observed_at.tzinfo is None:
+        raise LakehouseContractError("lakehouse catalog observation time must include a timezone")
+
+    corridor = raw.get("corridor")
+    if corridor is not None and (not isinstance(corridor, str) or corridor not in CORRIDORS):
+        raise LakehouseContractError("lakehouse catalog corridor is not supported")
+    stablecoin = raw.get("stablecoin")
+    if stablecoin is not None and (not isinstance(stablecoin, str) or stablecoin not in STABLECOINS):
+        raise LakehouseContractError("lakehouse catalog stablecoin must be USDC or USDT")
+    model_role = raw.get("model_role")
+    if model_role is not None and (not isinstance(model_role, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]{2,80}", model_role)):
+        raise LakehouseContractError("lakehouse catalog model role is invalid")
+
+    return CatalogEvidence(
+        source=source,  # type: ignore[arg-type]
+        event_type=event_type,
+        observed_at=parsed_observed_at,
+        correlation_sha256=correlation,
+        outcome=outcome,
+        corridor=corridor,
+        stablecoin=stablecoin,
+        model_role=model_role,
+    )
+
+
+def write_catalog_evidence(writer: BronzeLakehouseWriter, raw: Mapping[str, object]) -> tuple[str, str]:
+    evidence = build_catalog_evidence(raw)
+    manifest, key, disposition = writer.write("payment-lifecycle-evidence", [evidence.to_record()])
+    # Deliberately return only non-sensitive object metadata. The manifest digest
+    # allows an approved reader to verify immutable object identity.
+    return manifest.payload_sha256, f"{key}:{disposition}"
+
+
+===== FILE: services/reporting-analytics/src/umojaflowos_reporting/lakehouse_writer.py =====
+"""S3-compatible immutable bronze writer for approved analytics evidence.
+
+The lakehouse is an analytics and model-training projection. PostgreSQL keeps
+the operational truth, TigerBeetle keeps double-entry facts, and this writer
+never accepts raw document material, account numbers, credentials, or customer
+names. Objects are keyed by their canonical payload digest and created with a
+conditional put so retry cannot overwrite previously recorded evidence.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass
+from hashlib import sha256
+from ipaddress import ip_address
+from typing import Any, Mapping, Sequence
+from urllib.parse import urlparse
+
+import boto3
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
+
+from .lakehouse import BatchManifest, LakehouseContractError, build_bronze_manifest
+
+APPROVED_DATASETS = {
+    "payment-lifecycle-evidence",
+    "compliance-decision-evidence",
+    "service-health",
+    "treasury-alerts",
+    "geospatial-aggregates",
+}
+FORBIDDEN_KEY = re.compile(r"(?:secret|token|password|document_bytes|base64|account_number|wallet_address|customer_name|latitude|longitude)", re.I)
+
+
+class LakehouseUnavailable(RuntimeError):
+    pass
+
+
+def _loopback(hostname: str | None) -> bool:
+    if hostname in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    if not hostname:
+        return False
+    try:
+        return ip_address(hostname).is_loopback
+    except ValueError:
+        return False
+
+
+def _walk_no_forbidden(value: object) -> None:
+    if isinstance(value, Mapping):
+        for key, nested in value.items():
+            if not isinstance(key, str) or FORBIDDEN_KEY.search(key):
+                raise LakehouseContractError("lakehouse evidence contains an unapproved identifying, credential, or raw-location field")
+            _walk_no_forbidden(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            _walk_no_forbidden(nested)
+
+
+@dataclass(frozen=True)
+class LakehouseConfig:
+    endpoint_url: str
+    bucket: str
+    access_key_id: str
+    secret_access_key: str
+    region_name: str = "us-east-1"
+    allow_insecure_loopback: bool = False
+
+    def validate(self) -> None:
+        parsed = urlparse(self.endpoint_url)
+        if not parsed.scheme or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise LakehouseUnavailable("lakehouse endpoint must be an absolute credential-free URL")
+        if parsed.scheme == "https":
+            pass
+        elif parsed.scheme == "http" and self.allow_insecure_loopback and _loopback(parsed.hostname):
+            pass
+        elif parsed.scheme == "http" and not self.allow_insecure_loopback:
+            raise LakehouseUnavailable("lakehouse plaintext transport requires the explicit loopback exemption")
+        else:
+            raise LakehouseUnavailable("lakehouse plaintext transport is permitted on loopback only")
+        if not re.fullmatch(r"[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]", self.bucket):
+            raise LakehouseUnavailable("lakehouse bucket name is invalid")
+        if not self.access_key_id or not self.secret_access_key:
+            raise LakehouseUnavailable("lakehouse deployment credentials are required")
+
+
+class BronzeLakehouseWriter:
+    def __init__(self, config: LakehouseConfig) -> None:
+        config.validate()
+        self._config = config
+        self._client = boto3.client(
+            "s3",
+            endpoint_url=config.endpoint_url,
+            aws_access_key_id=config.access_key_id,
+            aws_secret_access_key=config.secret_access_key,
+            region_name=config.region_name,
+            config=Config(
+                signature_version="s3v4",
+                retries={"max_attempts": 2, "mode": "standard"},
+                s3={"addressing_style": "path"},
+            ),
+        )
+
+    @staticmethod
+    def prepare(dataset: str, records: Sequence[Mapping[str, object]], schema_version: str = "v1") -> tuple[BatchManifest, bytes, str]:
+        if dataset not in APPROVED_DATASETS:
+            raise LakehouseContractError("lakehouse dataset is not approved")
+        for record in records:
+            _walk_no_forbidden(record)
+        manifest = build_bronze_manifest(dataset, records, schema_version)
+        payload = b"".join(
+            json.dumps(dict(record), sort_keys=True, separators=(",", ":"), default=str).encode("utf-8") + b"\n"
+            for record in records
+        )
+        # The manifest digest intentionally covers the canonical records array,
+        # whereas object bytes are newline-delimited JSON for incremental reads.
+        # Both are recorded so a reader can verify the object stream separately.
+        object_digest = sha256(payload).hexdigest()
+        return manifest, payload, object_digest
+
+    def write(self, dataset: str, records: Sequence[Mapping[str, object]], schema_version: str = "v1") -> tuple[BatchManifest, str, str]:
+        manifest, payload, object_digest = self.prepare(dataset, records, schema_version)
+        key = f"bronze/{dataset}/{manifest.schema_version}/{manifest.payload_sha256}.jsonl"
+        metadata = {"manifest-sha256": manifest.payload_sha256, "object-sha256": object_digest, "record-count": str(manifest.record_count)}
+        try:
+            self._client.put_object(
+                Bucket=self._config.bucket,
+                Key=key,
+                Body=payload,
+                ContentType="application/x-ndjson",
+                Metadata=metadata,
+                IfNoneMatch="*",
+            )
+            return manifest, key, "created"
+        except ClientError as exc:
+            if exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode") not in {409, 412}:
+                raise LakehouseUnavailable("lakehouse write failed") from exc
+        except BotoCoreError as exc:
+            raise LakehouseUnavailable("lakehouse endpoint is unavailable") from exc
+
+        try:
+            existing = self._client.get_object(Bucket=self._config.bucket, Key=key)
+            existing_payload = existing["Body"].read()
+            if sha256(existing_payload).hexdigest() != object_digest or existing.get("Metadata", {}).get("manifest-sha256") != manifest.payload_sha256:
+                raise LakehouseUnavailable("lakehouse immutable object conflict: existing evidence differs")
+            return manifest, key, "duplicate"
+        except (BotoCoreError, ClientError, KeyError) as exc:
+            if isinstance(exc, LakehouseUnavailable):
+                raise
+            raise LakehouseUnavailable("lakehouse duplicate could not be verified") from exc
+
+    def presigned_read_url(self, key: str, expires_seconds: int = 900) -> str:
+        if not 60 <= expires_seconds <= 3600:
+            raise LakehouseUnavailable("lakehouse signed URL expiry must be between one minute and one hour")
+        try:
+            return str(self._client.generate_presigned_url("get_object", Params={"Bucket": self._config.bucket, "Key": key}, ExpiresIn=expires_seconds))
+        except BotoCoreError as exc:
+            raise LakehouseUnavailable("could not create lakehouse signed URL") from exc
+
+
+===== FILE: services/reporting-analytics/src/umojaflowos_reporting/lifecycle_event_lakehouse.py =====
+"""Redacted lifecycle-event projection for the governed analytics lakehouse.
+
+The event stream is useful for operational analytics and model features, but it
+is not an unrestricted export path.  This module projects only a documented
+allowlist from already-validated Dapr evidence.  PostgreSQL remains the
+operational system of record; TigerBeetle remains the activated accounting
+record; the bronze object is immutable analytics evidence.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+import hashlib
+from typing import Any, Mapping
+
+from .lakehouse_catalog import build_catalog_evidence, write_catalog_evidence
+from .lakehouse_writer import BronzeLakehouseWriter
+
+
+PAYMENT_ORDER_VALIDATED_EVENT = "umojaflowos.payment.order.validated.v1"
+POLICY_DECISION_EVENT = "umojaflowos.policy.decision.v1"
+PAYMENT_ORDER_WORKFLOW_RECORDED_EVENT = "umojaflowos.payment.order.workflow-recorded.v1"
+PERMIFY_DECISION_EVENT = "umojaflowos.authorization.permify-decision.v1"
+
+# No customer, beneficiary, account, wallet, document, credential, raw source,
+# amount, or free-text reason crosses this boundary.  The analytics lakehouse
+# gets lifecycle category evidence, not a copy of the payment instruction.
+DAPR_SOURCE_TO_CATALOG_SOURCE = {
+    "payment-engine": "go_payment_engine",
+    "risk-compliance-core": "rust_risk",
+}
+
+
+class LifecycleEventProjectionError(ValueError):
+    pass
+
+
+def _clean_string(value: object, field: str, maximum: int = 128) -> str:
+    if not isinstance(value, str) or not value.strip() or len(value) > maximum:
+        raise LifecycleEventProjectionError(f"lifecycle event {field} is invalid")
+    return value.strip()
+
+
+def build_lifecycle_event_record(event: Mapping[str, Any], received_at: datetime | None = None) -> dict[str, object]:
+    """Create a narrow, deterministic lakehouse record from validated event evidence."""
+
+    data = event.get("data")
+    if not isinstance(data, Mapping):
+        raise LifecycleEventProjectionError("lifecycle event data is invalid")
+    event_type = _clean_string(data.get("event_type"), "event_type", 255)
+    if event_type not in {PAYMENT_ORDER_VALIDATED_EVENT, POLICY_DECISION_EVENT, PAYMENT_ORDER_WORKFLOW_RECORDED_EVENT, PERMIFY_DECISION_EVENT}:
+        raise LifecycleEventProjectionError("lifecycle event type is not approved for analytics projection")
+    payload = data.get("payload")
+    if not isinstance(payload, Mapping):
+        raise LifecycleEventProjectionError("lifecycle event payload is invalid")
+
+    source_service = _clean_string(event.get("source"), "source", 255)
+    catalog_source = DAPR_SOURCE_TO_CATALOG_SOURCE.get(source_service)
+    if catalog_source is None:
+        raise LifecycleEventProjectionError("lifecycle event source is not approved for analytics projection")
+    if event_type == PAYMENT_ORDER_VALIDATED_EVENT and catalog_source != "go_payment_engine":
+        raise LifecycleEventProjectionError("payment lifecycle evidence must originate from the Go payment engine")
+    if event_type == PAYMENT_ORDER_WORKFLOW_RECORDED_EVENT and catalog_source != "go_payment_engine":
+        raise LifecycleEventProjectionError("workflow lifecycle evidence must originate from the Go payment engine")
+    if event_type == POLICY_DECISION_EVENT and catalog_source != "rust_risk":
+        raise LifecycleEventProjectionError("policy lifecycle evidence must originate from the Rust risk core")
+
+    if event_type == PAYMENT_ORDER_WORKFLOW_RECORDED_EVENT:
+        catalog_source = "temporal_workflow"
+    if event_type == PERMIFY_DECISION_EVENT:
+        if source_service != "payment-engine":
+            raise LifecycleEventProjectionError("Permify evidence must originate from the Go payment engine")
+        catalog_source = "permify_authorization"
+
+    correlation = _clean_string(data.get("correlation_id"), "correlation_id", 255)
+    raw: dict[str, object] = {
+        "source": catalog_source,
+        "event_type": event_type,
+        "observed_at": (received_at or datetime.now(timezone.utc)).astimezone(timezone.utc).isoformat(),
+        "correlation_sha256": hashlib.sha256(correlation.encode("utf-8")).hexdigest(),
+        "outcome": _clean_string(payload.get("status") if event_type in {PAYMENT_ORDER_VALIDATED_EVENT, PAYMENT_ORDER_WORKFLOW_RECORDED_EVENT} else payload.get("decision"), "outcome", 80).lower(),
+    }
+    corridor = payload.get("corridor")
+    if corridor is not None:
+        raw["corridor"] = corridor
+    return build_catalog_evidence(raw).to_record()
+
+
+def project_lifecycle_event(writer: BronzeLakehouseWriter, event: Mapping[str, Any], received_at: datetime | None = None) -> tuple[str, str]:
+    """Write one idempotent redacted lifecycle-evidence record to bronze storage."""
+
+    record = build_lifecycle_event_record(event, received_at)
+    _digest, locator = write_catalog_evidence(writer, record)
+    key, status = locator.rsplit(":", 1)
+    return key, status
+
+
+===== FILE: services/reporting-analytics/src/umojaflowos_reporting/opensearch_adapter.py =====
+"""Minimal, fail-closed OpenSearch projection writer.
+
+OpenSearch is a *search projection* only. It is never a source of truth for
+payment, ledger, compliance, or customer state; PostgreSQL remains canonical.
+This writer accepts an already validated redacted projection, performs an
+idempotent create over HTTPS (or an explicit local-only development exception),
+and verifies an existing document byte-for-byte before acknowledging a retry.
+"""
+
+from __future__ import annotations
+
+import base64
+import json
+import socket
+import ssl
+from dataclasses import dataclass
+from ipaddress import ip_address
+from typing import Any, Mapping
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urlparse
+from urllib.request import Request, urlopen
+
+
+class OpenSearchUnavailable(RuntimeError):
+    """Raised when a configured search projection cannot be verified."""
+
+
+def _loopback(host: str | None) -> bool:
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    if not host:
+        return False
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        # Do not resolve a DNS name to decide it is safe for plaintext. A
+        # hostname that later resolves remotely must never inherit the local
+        # development exception.
+        return False
+
+
+def _safe_index(value: str) -> bool:
+    return bool(value.strip()) and all(char not in value for char in "/?#\\") and ".." not in value
+
+
+@dataclass(frozen=True)
+class OpenSearchConfig:
+    base_url: str
+    bearer_token: str
+    timeout_seconds: float = 5.0
+    allow_insecure_loopback: bool = False
+
+    def validate(self) -> None:
+        parsed = urlparse(self.base_url)
+        if not parsed.scheme or not parsed.hostname or parsed.username or parsed.password:
+            raise OpenSearchUnavailable("OpenSearch URL must be absolute and contain no embedded credentials")
+        if parsed.scheme == "https":
+            pass
+        elif parsed.scheme == "http" and self.allow_insecure_loopback and _loopback(parsed.hostname):
+            pass
+        elif parsed.scheme == "http" and not self.allow_insecure_loopback:
+            raise OpenSearchUnavailable("OpenSearch plaintext transport requires the explicit loopback exemption")
+        elif parsed.scheme == "http":
+            raise OpenSearchUnavailable("OpenSearch plaintext transport is permitted on loopback only")
+        else:
+            raise OpenSearchUnavailable(f"unsupported OpenSearch URL scheme {parsed.scheme!r}")
+        if not self.bearer_token.strip():
+            raise OpenSearchUnavailable("OpenSearch bearer token is required")
+        if self.timeout_seconds <= 0 or self.timeout_seconds > 30:
+            raise OpenSearchUnavailable("OpenSearch timeout must be between zero and thirty seconds")
+
+
+class OpenSearchProjectionWriter:
+    def __init__(self, config: OpenSearchConfig) -> None:
+        config.validate()
+        self._config = config
+        self._base_url = config.base_url.rstrip("/")
+
+    def _request(self, method: str, path: str, body: bytes | None = None) -> tuple[int, bytes]:
+        request = Request(
+            f"{self._base_url}{path}",
+            data=body,
+            method=method,
+            headers={
+                "Authorization": f"Bearer {self._config.bearer_token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+        )
+        try:
+            with urlopen(request, timeout=self._config.timeout_seconds, context=ssl.create_default_context()) as response:
+                return response.status, response.read()
+        except HTTPError as exc:
+            return exc.code, exc.read()
+        except (URLError, socket.timeout, TimeoutError, ssl.SSLError) as exc:
+            raise OpenSearchUnavailable("OpenSearch projection endpoint is unavailable") from exc
+
+    def write(self, index: str, document_id: str, document: Mapping[str, Any]) -> str:
+        """Create a redacted projection, or verify an idempotent replay.
+
+        `op_type=create` prevents a retry from overwriting search evidence. A
+        409 forces an exact source comparison: a duplicate identifier with
+        different material is a conflict, never an update.
+        """
+
+        if not _safe_index(index) or not document_id.strip():
+            raise OpenSearchUnavailable("OpenSearch index and document id are required and must be path-safe")
+        canonical = json.dumps(dict(document), sort_keys=True, separators=(",", ":"))
+        encoded_id = quote(document_id, safe="")
+        status, body = self._request(
+            "PUT",
+            f"/{quote(index, safe='')}/_doc/{encoded_id}?op_type=create",
+            canonical.encode("utf-8"),
+        )
+        if status in {200, 201}:
+            return "created"
+        if status != 409:
+            raise OpenSearchUnavailable(f"OpenSearch projection returned status {status}")
+
+        status, existing_body = self._request("GET", f"/{quote(index, safe='')}/_doc/{encoded_id}")
+        if status != 200:
+            raise OpenSearchUnavailable("OpenSearch reported a duplicate but could not read its existing projection")
+        try:
+            existing = json.loads(existing_body.decode("utf-8"))["_source"]
+        except (UnicodeDecodeError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise OpenSearchUnavailable("OpenSearch existing projection is not valid JSON") from exc
+        if json.dumps(existing, sort_keys=True, separators=(",", ":")) != canonical:
+            raise OpenSearchUnavailable("OpenSearch projection conflict: existing evidence differs for this document id")
+        return "duplicate"
+
+
+def redacted_search_document(event: Mapping[str, Any]) -> tuple[str, str, dict[str, Any]]:
+    """Build only the two permitted index families: audit evidence and cases."""
+
+    projection_type = event.get("projection_type")
+    if projection_type == "audit":
+        from .opensearch_projection import build_audit_projection
+
+        projection = build_audit_projection(event)
+        return projection.index, projection.document_id, projection.document
+    if projection_type == "case":
+        required = ("case_id", "status", "corridor", "updated_at")
+        if any(not isinstance(event.get(key), str) or not str(event[key]).strip() for key in required):
+            raise OpenSearchUnavailable("case id, status, corridor, and update time are required")
+        if event["corridor"] not in {"NIGERIA_NGN", "KENYA_KES", "SOUTH_AFRICA_ZAR"}:
+            raise OpenSearchUnavailable("case corridor is not recognised")
+        permitted = {"case_id", "status", "corridor", "updated_at", "classification", "reason_codes"}
+        unknown = set(event) - permitted - {"projection_type"}
+        if unknown:
+            raise OpenSearchUnavailable("case projection includes fields that are not approved for search")
+        document = {key: event[key] for key in permitted if key in event}
+        return "umojaflowos-cases-v1", str(event["case_id"]), document
+    raise OpenSearchUnavailable("search projection type must be audit or case")
+
+
+===== FILE: services/reporting-analytics/src/umojaflowos_reporting/opensearch_projection.py =====
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Mapping
+
+
+class SearchProjectionError(ValueError):
+    pass
+
+
+FORBIDDEN_FIELDS = {"amount", "balance", "account_number", "wallet_address", "document_bytes", "access_token", "secret"}
+
+
+@dataclass(frozen=True)
+class AuditProjection:
+    index: str
+    document_id: str
+    document: dict[str, object]
+
+
+def build_audit_projection(event: Mapping[str, object]) -> AuditProjection:
+    required = ("event_id", "action", "object_type", "occurred_at")
+    if any(not isinstance(event.get(key), str) or not str(event[key]).strip() for key in required):
+        raise SearchProjectionError("event identity, action, object type, and timestamp are required")
+    metadata = event.get("metadata", {})
+    if not isinstance(metadata, Mapping) or any(key in FORBIDDEN_FIELDS for key in metadata):
+        raise SearchProjectionError("audit projection contains forbidden monetary or secret data")
+    return AuditProjection(index="umojaflowos-audit-v1", document_id=str(event["event_id"]), document={"event_id": event["event_id"], "action": event["action"], "object_type": event["object_type"], "occurred_at": event["occurred_at"], "metadata": dict(metadata)})
+
+
+===== FILE: services/reporting-analytics/src/umojaflowos_reporting/regulatory_submission.py =====
+"""Authorised regulatory-channel submission boundary.
+
+The client is deliberately generic because regulator submission credentials and
+message profiles are issued to the regulated entity outside source control. It
+submits only an already-validated report artefact plus its immutable digest,
+requires a managed secret file, and returns an acknowledgement receipt. It
+never infers an external reference or marks a report submitted when the channel
+is unavailable.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import ssl
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
+
+
+class RegulatorySubmissionUnavailable(RuntimeError):
+    """Raised when an authorised channel is disabled or cannot prove a receipt."""
+
+
+@dataclass(frozen=True)
+class RegulatorySubmissionRequest:
+    regulator: str
+    report_type: str
+    regulated_entity_id: str
+    artifact_uri: str
+    artifact_digest: str
+    evidence_manifest: dict[str, Any]
+    correlation_id: str
+
+
+@dataclass(frozen=True)
+class RegulatorySubmissionReceipt:
+    channel_reference: str
+    external_reference: str
+    state: str
+    response_evidence_sha256: str
+
+
+def _resolve_secret(reference: str, root: str) -> str:
+    if not reference.startswith("file:///"):
+        raise RegulatorySubmissionUnavailable("regulatory channel API-key reference must be a file:/// path")
+    approved_root = Path(root).resolve(strict=True)
+    candidate = Path(reference.removeprefix("file://")).resolve(strict=True)
+    if candidate == approved_root or approved_root not in candidate.parents:
+        raise RegulatorySubmissionUnavailable("regulatory channel API-key reference escapes the approved secret root")
+    value = candidate.read_text(encoding="utf-8")
+    if len(value.encode("utf-8")) < 12:
+        raise RegulatorySubmissionUnavailable("regulatory channel API-key material is unavailable")
+    return value
+
+
+class AuthorisedRegulatoryChannel:
+    def __init__(self, *, endpoint: str, api_key: str, channel_reference: str, timeout_seconds: float = 15.0) -> None:
+        parsed = urlparse(endpoint)
+        if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise RegulatorySubmissionUnavailable("regulatory channel endpoint must be a credential-free HTTPS URL")
+        if not channel_reference.strip() or len(channel_reference) > 255:
+            raise RegulatorySubmissionUnavailable("regulatory channel reference is required")
+        self._endpoint = endpoint
+        self._api_key = api_key
+        self._channel_reference = channel_reference
+        self._timeout_seconds = timeout_seconds
+
+    @classmethod
+    def from_environment(cls) -> "AuthorisedRegulatoryChannel | None":
+        enabled = os.environ.get("UMOJA_REGULATORY_SUBMISSION_ENABLED", "false").lower()
+        if enabled not in {"true", "false"}:
+            raise RegulatorySubmissionUnavailable("UMOJA_REGULATORY_SUBMISSION_ENABLED must be true or false")
+        if enabled == "false":
+            return None
+        api_key = _resolve_secret(
+            os.environ.get("UMOJA_REGULATORY_SUBMISSION_API_KEY_SECRET_REFERENCE", ""),
+            os.environ.get("UMOJA_REGULATORY_SUBMISSION_MATERIAL_ROOT", "/run/umoja-secrets"),
+        )
+        return cls(
+            endpoint=os.environ.get("UMOJA_REGULATORY_SUBMISSION_ENDPOINT", ""),
+            api_key=api_key,
+            channel_reference=os.environ.get("UMOJA_REGULATORY_SUBMISSION_CHANNEL_REFERENCE", ""),
+        )
+
+    def submit(self, request: RegulatorySubmissionRequest) -> RegulatorySubmissionReceipt:
+        if request.regulator not in {"CBN", "CBK", "SARB"}:
+            raise RegulatorySubmissionUnavailable("unsupported regulatory channel")
+        if len(request.artifact_digest) != 64 or any(char not in "0123456789abcdef" for char in request.artifact_digest):
+            raise RegulatorySubmissionUnavailable("report artefact digest must be SHA-256")
+        if not request.artifact_uri.startswith("https://") or not request.correlation_id.strip():
+            raise RegulatorySubmissionUnavailable("report artefact URI and correlation ID are required")
+        payload = json.dumps(
+            {
+                "regulator": request.regulator,
+                "report_type": request.report_type,
+                "regulated_entity_id": request.regulated_entity_id,
+                "artifact_uri": request.artifact_uri,
+                "artifact_digest": request.artifact_digest,
+                "evidence_manifest": request.evidence_manifest,
+                "correlation_id": request.correlation_id,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        outbound = Request(
+            self._endpoint,
+            data=payload,
+            method="POST",
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self._api_key}",
+                "X-Umoja-Correlation-Id": request.correlation_id,
+            },
+        )
+        try:
+            with urlopen(outbound, timeout=self._timeout_seconds, context=ssl.create_default_context()) as response:
+                body = response.read(256 * 1024)
+                if response.status not in {200, 201, 202}:
+                    raise RegulatorySubmissionUnavailable(f"regulatory channel returned HTTP {response.status}")
+        except HTTPError as error:
+            raise RegulatorySubmissionUnavailable(f"regulatory channel returned HTTP {error.code}") from error
+        except URLError as error:
+            raise RegulatorySubmissionUnavailable("regulatory channel is unavailable") from error
+        try:
+            receipt = json.loads(body)
+        except json.JSONDecodeError as error:
+            raise RegulatorySubmissionUnavailable("regulatory channel response was not JSON") from error
+        external_reference = receipt.get("external_reference")
+        state = receipt.get("state")
+        if not isinstance(external_reference, str) or not external_reference.strip() or not isinstance(state, str) or state not in {"submitted", "accepted", "rejected"}:
+            raise RegulatorySubmissionUnavailable("regulatory channel did not return an attributable receipt")
+        return RegulatorySubmissionReceipt(
+            channel_reference=self._channel_reference,
+            external_reference=external_reference,
+            state=state,
+            response_evidence_sha256=hashlib.sha256(body).hexdigest(),
+        )
+
+
+===== FILE: services/reporting-analytics/src/umojaflowos_reporting/reporting.py =====
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from hashlib import sha256
+from typing import Iterable, Mapping
+
+
+class ReportValidationError(ValueError):
+    pass
+
+
+REQUIRED_BY_REGULATOR = {
+    "CBN": {"corridor", "report_type", "period_start", "period_end", "regulated_entity_id", "transactions"},
+    "CBK": {"corridor", "report_type", "period_start", "period_end", "regulated_entity_id", "transactions"},
+    "SARB": {"corridor", "report_type", "period_start", "period_end", "regulated_entity_id", "transactions"},
+}
+
+
+@dataclass(frozen=True)
+class EvidenceManifest:
+    regulator: str
+    source_hash: str
+    generated_at: str
+    record_count: int
+
+
+def validate_report_pack(pack: Mapping[str, object]) -> None:
+    regulator = str(pack.get("regulator", "")).upper()
+    if regulator not in REQUIRED_BY_REGULATOR:
+        raise ReportValidationError("regulator must be CBN, CBK, or SARB")
+    missing = [field for field in REQUIRED_BY_REGULATOR[regulator] if field not in pack]
+    if missing:
+        raise ReportValidationError(f"missing required report fields: {', '.join(sorted(missing))}")
+    corridor = str(pack["corridor"])
+    if corridor not in {"Nigeria", "Kenya", "South Africa"}:
+        raise ReportValidationError("corridor must be Nigeria, Kenya, or South Africa")
+    transactions = pack["transactions"]
+    if not isinstance(transactions, Iterable) or isinstance(transactions, (str, bytes, dict)):
+        raise ReportValidationError("transactions must be a sequence of validated transaction records")
+
+
+def build_evidence_manifest(regulator: str, canonical_payload: bytes, record_count: int) -> EvidenceManifest:
+    if regulator.upper() not in REQUIRED_BY_REGULATOR:
+        raise ReportValidationError("regulator must be CBN, CBK, or SARB")
+    if record_count < 0:
+        raise ReportValidationError("record_count cannot be negative")
+    return EvidenceManifest(
+        regulator=regulator.upper(),
+        source_hash=sha256(canonical_payload).hexdigest(),
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        record_count=record_count,
+    )
+
+
+===== FILE: services/reporting-analytics/src/umojaflowos_reporting/sedona_livy.py =====
+"""Apache Sedona aggregate-job client over a configured Livy endpoint."""
+
+from __future__ import annotations
+
+import json
+import socket
+import ssl
+from dataclasses import dataclass
+from ipaddress import ip_address
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
+
+
+class SedonaUnavailable(RuntimeError):
+    pass
+
+
+def _loopback(host: str | None) -> bool:
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    if not host:
+        return False
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+@dataclass(frozen=True)
+class SedonaLivyConfig:
+    base_url: str
+    bearer_token: str
+    aggregate_job_uri: str
+    allow_insecure_loopback: bool = False
+
+    def validate(self) -> None:
+        parsed = urlparse(self.base_url)
+        job_uri = urlparse(self.aggregate_job_uri)
+        if not parsed.hostname or parsed.username or parsed.password or not job_uri.scheme:
+            raise SedonaUnavailable("Sedona endpoint and job artifact must be absolute credential-free URLs")
+        if parsed.scheme == "https":
+            pass
+        elif parsed.scheme == "http" and self.allow_insecure_loopback and _loopback(parsed.hostname):
+            pass
+        else:
+            raise SedonaUnavailable("Sedona Livy transport must be HTTPS outside the explicit loopback exception")
+        if not self.bearer_token:
+            raise SedonaUnavailable("Sedona Livy bearer token is required")
+        if job_uri.scheme != "https":
+            raise SedonaUnavailable("Sedona aggregate job artifact must be HTTPS")
+
+
+class SedonaAggregateJobClient:
+    def __init__(self, config: SedonaLivyConfig) -> None:
+        config.validate()
+        self._config = config
+
+    def submit(self, input_uri: str, output_uri: str, metric_name: str, h3_resolution: int) -> int:
+        if not input_uri.startswith("s3://") or not output_uri.startswith("s3://"):
+            raise SedonaUnavailable("Sedona inputs and outputs must be S3-compatible lakehouse URIs")
+        if not metric_name.strip() or not 5 <= h3_resolution <= 9:
+            raise SedonaUnavailable("Sedona aggregate metric and H3 resolution are invalid")
+        payload = json.dumps(
+            {
+                "file": self._config.aggregate_job_uri,
+                "className": "org.apache.spark.deploy.PythonRunner",
+                "args": [input_uri, output_uri, metric_name, str(h3_resolution)],
+                "conf": {
+                    "spark.sql.extensions": "org.apache.sedona.sql.SedonaSqlExtensions",
+                    "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+                    "spark.kryo.registrator": "org.apache.sedona.core.serde.SedonaKryoRegistrator",
+                },
+            },
+            separators=(",", ":"),
+        ).encode("utf-8")
+        request = Request(
+            f"{self._config.base_url.rstrip('/')}/batches",
+            method="POST",
+            data=payload,
+            headers={"Authorization": f"Bearer {self._config.bearer_token}", "Content-Type": "application/json", "Accept": "application/json"},
+        )
+        try:
+            with urlopen(request, timeout=10, context=ssl.create_default_context()) as response:
+                if response.status not in {200, 201}:
+                    raise SedonaUnavailable(f"Sedona Livy returned status {response.status}")
+                body: dict[str, Any] = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            raise SedonaUnavailable(f"Sedona Livy returned status {exc.code}") from exc
+        except (URLError, socket.timeout, TimeoutError, ssl.SSLError, json.JSONDecodeError) as exc:
+            raise SedonaUnavailable("Sedona Livy endpoint is unavailable") from exc
+        batch_id = body.get("id")
+        if not isinstance(batch_id, int) or batch_id < 0:
+            raise SedonaUnavailable("Sedona Livy response omitted its batch id")
+        return batch_id
+
+
+===== FILE: services/reporting-analytics/src/umojaflowos_reporting/service.py =====
+from __future__ import annotations
+
+import json
+import hashlib
+import hmac
+import os
+import threading
+import time
+from dataclasses import asdict
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+from typing import Any, Literal, Protocol
+
+from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel, Field
+from redis import Redis
+from redis.exceptions import RedisError
+
+from .reporting import ReportValidationError, build_evidence_manifest, validate_report_pack
+from .lakehouse import LakehouseContractError, build_bronze_manifest
+from .geospatial import GeospatialContractError, build_jurisdiction_aggregation
+from .assembly import ReportAssemblyError, assemble_regulatory_report, validate_assembled_report
+from .stablecoin_exposure import (
+    ExposureReportError,
+    PegObservation,
+    StablecoinPosition,
+    build_stablecoin_exposure_report,
+)
+from .opensearch_adapter import OpenSearchConfig, OpenSearchProjectionWriter, OpenSearchUnavailable, redacted_search_document
+from .lakehouse_writer import BronzeLakehouseWriter, LakehouseConfig, LakehouseUnavailable
+from .lakehouse_catalog import CATALOG_SOURCES, write_catalog_evidence
+from .lifecycle_event_lakehouse import LifecycleEventProjectionError, project_lifecycle_event
+from .sedona_livy import SedonaAggregateJobClient, SedonaLivyConfig, SedonaUnavailable
+from .geolibre_project import GeoLibrePublicationError, build_aggregate_project
+from .regulatory_submission import (
+    AuthorisedRegulatoryChannel,
+    RegulatorySubmissionRequest,
+    RegulatorySubmissionUnavailable,
+)
+
+
+class ReportPackRequest(BaseModel):
+    regulator: Literal["CBN", "CBK", "SARB"]
+    corridor: Literal["Nigeria", "Kenya", "South Africa"]
+    report_type: str = Field(min_length=4, max_length=255)
+    period_start: str
+    period_end: str
+    regulated_entity_id: str = Field(min_length=1, max_length=255)
+    transactions: list[dict[str, Any]]
+
+
+class LakehouseBatchRequest(BaseModel):
+    dataset: str = Field(min_length=1, max_length=255)
+    schema_version: str = Field(default="v1", min_length=1, max_length=64)
+    records: list[dict[str, Any]]
+
+
+class CatalogEvidenceRequest(BaseModel):
+    evidence: dict[str, Any]
+
+
+class GeospatialAggregationRequest(BaseModel):
+    jurisdiction: Literal["NG", "KE", "ZA"]
+    cohort_count: int = Field(ge=0)
+    h3_resolution: int = Field(ge=0, le=15)
+    metric_name: str = Field(min_length=1, max_length=255)
+    source_rows: list[dict[str, Any]]
+
+
+class SearchProjectionRequest(BaseModel):
+    projection: dict[str, Any]
+
+
+class SedonaAggregateSubmissionRequest(BaseModel):
+    input_uri: str = Field(min_length=8, max_length=2048)
+    output_uri: str = Field(min_length=8, max_length=2048)
+    metric_name: str = Field(min_length=1, max_length=255)
+    h3_resolution: int = Field(ge=5, le=9)
+
+
+class GeoLibreProjectRequest(BaseModel):
+    project_name: str = Field(min_length=1, max_length=120)
+    aggregate_object_key: str = Field(min_length=1, max_length=1024)
+
+
+class ReportAssemblyRequest(BaseModel):
+    regulator: Literal["CBN", "CBK", "SARB"]
+    report_type: str = Field(min_length=4, max_length=255)
+    period_start: str
+    period_end: str
+    regulated_entity_id: str = Field(min_length=1, max_length=255)
+    transactions: list[dict[str, Any]]
+
+
+class AuthorisedReportSubmissionRequest(BaseModel):
+    regulator: Literal["CBN", "CBK", "SARB"]
+    report_type: str = Field(min_length=4, max_length=255)
+    regulated_entity_id: str = Field(min_length=1, max_length=255)
+    artifact_uri: str = Field(pattern=r"^https://", max_length=2048)
+    artifact_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    evidence_manifest: dict[str, Any]
+    correlation_id: str = Field(min_length=1, max_length=255)
+
+
+class StablecoinPositionRequest(BaseModel):
+    corridor: Literal["NIGERIA_NGN", "KENYA_KES", "SOUTH_AFRICA_ZAR"]
+    asset: Literal["USDC", "USDT"]
+    account_reference: str = Field(min_length=1, max_length=255)
+    available_amount: str
+    reserved_amount: str
+    source_reference: str = Field(min_length=1, max_length=255)
+    reconciled_at: datetime
+
+
+class PegObservationRequest(BaseModel):
+    asset: Literal["USDC", "USDT"]
+    rate_to_usd: str
+    source_reference: str = Field(min_length=1, max_length=255)
+    observed_at: datetime
+
+
+class StablecoinExposureRequest(BaseModel):
+    as_of: datetime
+    max_position_age_minutes: int = Field(gt=0, le=10_080)
+    max_observation_age_minutes: int = Field(gt=0, le=1_440)
+    positions: list[StablecoinPositionRequest]
+    peg_observations: list[PegObservationRequest]
+
+
+PAYMENT_ORDER_VALIDATED_EVENT = "umojaflowos.payment.order.validated.v1"
+POLICY_DECISION_EVENT = "umojaflowos.policy.decision.v1"
+PAYMENT_ORDER_WORKFLOW_RECORDED_EVENT = "umojaflowos.payment.order.workflow-recorded.v1"
+PERMIFY_DECISION_EVENT = "umojaflowos.authorization.permify-decision.v1"
+
+
+class DaprCloudEvent(BaseModel):
+    """The documented CloudEvents envelope Dapr delivers to a subscriber.
+
+    The `data` member remains deliberately narrow and opaque at this boundary:
+    it is evidence from another service, not an instruction to execute a
+    payment or submit a report. The event identity, type, version and
+    correlation ID are checked before it reaches a durable ledger.
+    """
+
+    id: str = Field(min_length=1, max_length=255)
+    source: str = Field(min_length=1, max_length=255)
+    specversion: Literal["1.0"]
+    type: str = Field(min_length=1, max_length=255)
+    topic: str = Field(min_length=1, max_length=255)
+    pubsubname: str = Field(min_length=1, max_length=255)
+    data: dict[str, Any]
+
+
+class EventEvidenceLedger(Protocol):
+    """Durably records a validated stream event before the subscriber ACKs it."""
+
+    def record(self, event: DaprCloudEvent) -> bool:
+        """Persist an event idempotently or raise when the durable store is unavailable."""
+
+
+class UnavailableEventEvidenceLedger:
+    """Safe default until a configured durable event ledger is attached.
+
+    Returning success here would tell Kafka that an event had been processed
+    even though it had nowhere durable to go. Raising makes FastAPI return 503,
+    and Dapr will retry rather than discard it. Redis becomes the configured
+    ledger in the platform-tier integration; this object is deliberately not an
+    in-memory stand-in.
+    """
+
+    def record(self, event: DaprCloudEvent) -> bool:
+        raise RuntimeError("event evidence ledger is unavailable")
+
+
+class RedisEventEvidenceLedger:
+    """Redis-backed idempotency and append-only evidence stream.
+
+    Redis is deliberately *not* the payment or accounting record — PostgreSQL
+    remains canonical and TigerBeetle remains the activation-gated double-entry
+    system. This ledger solves a narrower stream-processing problem: Dapr/Kafka
+    delivery is at-least-once, so a consumer needs a durable atomic marker before
+    it ACKs an event. The Lua transaction sets a hashed event-id marker and
+    appends the exact validated CloudEvent to the operational evidence stream in
+    one server-side operation. If Redis cannot do both, the route returns 503
+    and Dapr retries rather than claiming delivery.
+
+    The stream is immutable from the application's perspective. No `XDEL`,
+    `XTRIM`, `SET`, `DEL`, or expiry operation is exposed; production retention
+    is an operator policy on Redis, not code deciding what evidence may vanish.
+    """
+
+    _STREAM_KEY = "umojaflowos:event-evidence:v1"
+    _DEDUPE_PREFIX = "umojaflowos:event-evidence:seen:v1:"
+    _DEDUPE_TTL_SECONDS = 60 * 60 * 24 * 7
+    _RECORD_SCRIPT = """
+local added = redis.call('SET', KEYS[1], '1', 'NX', 'EX', ARGV[1])
+if added then
+  redis.call('XADD', KEYS[2], '*', 'cloud_event', ARGV[2], 'event_id', ARGV[3], 'event_type', ARGV[4])
+  return 1
+end
+return 0
+"""
+
+    def __init__(self, redis_url: str) -> None:
+        if not redis_url.strip():
+            raise ValueError("Redis URL is required for the event evidence ledger")
+        self._redis = Redis.from_url(redis_url, decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
+        self._record_script = self._redis.register_script(self._RECORD_SCRIPT)
+
+    def verify_connection(self) -> None:
+        """Prove the configured endpoint is a reachable Redis before activation."""
+        try:
+            if not self._redis.ping():
+                raise RuntimeError("Redis did not acknowledge PING")
+        except RedisError as exc:
+            raise RuntimeError("event evidence ledger is unavailable") from exc
+
+    @staticmethod
+    def _dedupe_key(event_id: str) -> str:
+        # Event IDs came from another service. Hashing keeps their untrusted
+        # bytes out of Redis keyspace while retaining collision resistance.
+        digest = hashlib.sha256(event_id.encode("utf-8")).hexdigest()
+        return f"{RedisEventEvidenceLedger._DEDUPE_PREFIX}{digest}"
+
+    def record(self, event: DaprCloudEvent) -> bool:
+        serialized = json.dumps(event.model_dump(), sort_keys=True, separators=(",", ":"))
+        if len(serialized.encode("utf-8")) > 256 * 1024:
+            raise RuntimeError("event evidence exceeds the 256 KiB operational stream limit")
+        data = event.data
+        try:
+            inserted = self._record_script(
+                keys=[self._dedupe_key(str(data["event_id"])), self._STREAM_KEY],
+                args=[self._DEDUPE_TTL_SECONDS, serialized, data["event_id"], data["event_type"]],
+            )
+            return bool(inserted)
+        except RedisError as exc:
+            raise RuntimeError("event evidence ledger is unavailable") from exc
+
+
+def configure_event_evidence_ledger(redis_url: str) -> None:
+    """Activate the stream consumer only after a real Redis PING succeeds."""
+
+    global EVENT_EVIDENCE_LEDGER
+    ledger = RedisEventEvidenceLedger(redis_url)
+    ledger.verify_connection()
+    EVENT_EVIDENCE_LEDGER = ledger
+
+
+app = FastAPI(title="UmojaFlowOS Reporting Analytics", version="1.0.0")
+
+# Envelope identity published in docs/service-contracts.md and pinned by the
+# TypeScript control plane with strict literals. Changing any of these strings is
+# a breaking contract change and requires a new v2 envelope type, not an edit.
+SERVICE_NAME = "umojaflowos-reporting-analytics"
+CONTRACT_VERSION = "v1"
+ASSEMBLED_REPORT_ENVELOPE = "umojaflowos.reporting.assembled_report.v1"
+STABLECOIN_EXPOSURE_ENVELOPE = "umojaflowos.reporting.stablecoin_exposure.v1"
+
+# The assembler names corridors in prose ("Nigeria"); the cross-language contract
+# uses the platform's canonical corridor identifiers. Mapping here keeps the
+# assembler's own output unchanged while making the wire form unambiguous.
+CONTRACT_CORRIDOR_BY_REGULATOR = {
+    "CBN": "NIGERIA_NGN",
+    "CBK": "KENYA_KES",
+    "SARB": "SOUTH_AFRICA_ZAR",
+}
+
+
+class ServiceMetrics:
+    """Counters observed while the service runs.
+
+    These are collected in middleware rather than inside each endpoint. Counting
+    per-endpoint would mean every new route has to remember to increment, and
+    the one that forgets is invisible: the dashboard would simply under-report
+    with no signal that it was doing so. Middleware makes the measurement a
+    property of the server rather than a convention.
+
+    Nothing here is derived or estimated. A quantity the service cannot observe
+    is absent from the payload rather than reported as zero, because a
+    fabricated zero reads as "nothing happening" and is worse than a gap.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._started_at = time.monotonic()
+        self.requests_total = 0
+        self.requests_rejected = 0  # 4xx: the caller's input was refused
+        self.requests_failed = 0  # 5xx: the service itself failed
+        self.reports_assembled = 0
+        self.exposure_reports = 0
+        self.lakehouse_batches = 0
+        self.sedona_jobs_submitted = 0
+
+    def record_request(self, status_code: int) -> None:
+        with self._lock:
+            self.requests_total += 1
+            if 400 <= status_code < 500:
+                self.requests_rejected += 1
+            elif status_code >= 500:
+                self.requests_failed += 1
+
+    def record_assembly(self) -> None:
+        with self._lock:
+            self.reports_assembled += 1
+
+    def record_exposure(self) -> None:
+        with self._lock:
+            self.exposure_reports += 1
+
+    def record_lakehouse_batch(self) -> None:
+        with self._lock:
+            self.lakehouse_batches += 1
+
+    def record_sedona_job(self) -> None:
+        with self._lock:
+            self.sedona_jobs_submitted += 1
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "service": "reporting-analytics",
+                "language": "python",
+                "uptime_seconds": int(time.monotonic() - self._started_at),
+                "requests_total": self.requests_total,
+                "requests_rejected": self.requests_rejected,
+                "requests_failed": self.requests_failed,
+                "reports_assembled": self.reports_assembled,
+                "exposure_reports": self.exposure_reports,
+                "lakehouse_batches": self.lakehouse_batches,
+                "sedona_jobs_submitted": self.sedona_jobs_submitted,
+                "observed_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+                "regulatory_submission": "configured_authorised_channel" if REGULATORY_CHANNEL else "disabled_without_verified_channel",
+            }
+
+
+METRICS = ServiceMetrics()
+EVENT_EVIDENCE_LEDGER: EventEvidenceLedger = UnavailableEventEvidenceLedger()
+REGULATORY_CHANNEL: AuthorisedRegulatoryChannel | None = None
+
+
+@app.on_event("startup")
+def configure_event_evidence_ledger_from_environment() -> None:
+    """Opt in only when deployment supplies an explicit Redis URL.
+
+    There is intentionally no localhost default. An unconfigured deployment
+    continues to return 503 to Dapr, making event handling visibly blocked
+    rather than quietly starting against an accidental Redis instance.
+    """
+
+    redis_url = os.environ.get("UMOJA_REDIS_URL")
+    if not redis_url:
+        return
+    configure_event_evidence_ledger(redis_url)
+
+
+@app.on_event("startup")
+def configure_regulatory_channel_from_environment() -> None:
+    global REGULATORY_CHANNEL
+    try:
+        REGULATORY_CHANNEL = AuthorisedRegulatoryChannel.from_environment()
+    except RegulatorySubmissionUnavailable as exc:
+        raise RuntimeError(f"regulated submission channel cannot start safely: {exc}") from exc
+
+
+@app.middleware("http")
+async def count_requests(request: Request, call_next):  # type: ignore[no-untyped-def]
+    """Counts every served request, including those that raise."""
+    try:
+        response = await call_next(request)
+    except Exception:
+        # An unhandled exception is a served request that failed; not counting
+        # it would make the failure invisible in exactly the case that matters.
+        METRICS.record_request(500)
+        raise
+    # The metrics read itself is excluded, otherwise polling the dashboard would
+    # inflate the very numbers it displays.
+    if request.url.path != "/v1/metrics":
+        METRICS.record_request(response.status_code)
+    return response
+
+
+@app.get("/v1/metrics")
+def metrics() -> dict[str, Any]:
+    return METRICS.snapshot()
+
+
+@app.get("/healthz")
+def health() -> dict[str, str]:
+    return {
+        "service": "reporting-analytics",
+        "status": "healthy",
+        "regulatory_submission": "configured_authorised_channel" if REGULATORY_CHANNEL else "disabled_without_verified_channel",
+    }
+
+
+@app.post("/events/payment-order-validated")
+def receive_payment_or_policy_event(event: DaprCloudEvent) -> dict[str, str]:
+    """Validate and durably record a Dapr-delivered event before acknowledging it.
+
+    Dapr invokes this route for the Kafka `payment.events` subscription. An
+    HTTP success is an acknowledgement to the broker, so the route refuses to
+    return one until a durable evidence ledger has accepted the event. In the
+    absence of configured Redis that produces a 503 and Dapr retries; silently
+    accepting then dropping an event would be a data-loss bug.
+    """
+
+    if event.topic != "payment.events" or event.pubsubname != "kafka":
+        raise HTTPException(status_code=422, detail="event arrived through an unrecognised stream")
+    if event.type not in {"com.dapr.event.sent", PAYMENT_ORDER_VALIDATED_EVENT, POLICY_DECISION_EVENT, PAYMENT_ORDER_WORKFLOW_RECORDED_EVENT, PERMIFY_DECISION_EVENT}:
+        raise HTTPException(status_code=422, detail="event type is not accepted by this subscriber")
+
+    data = event.data
+    required = {"event_id", "event_type", "schema_version", "correlation_id", "payload"}
+    if not required.issubset(data):
+        raise HTTPException(status_code=422, detail="event evidence is incomplete")
+    if data["event_type"] not in {PAYMENT_ORDER_VALIDATED_EVENT, POLICY_DECISION_EVENT, PAYMENT_ORDER_WORKFLOW_RECORDED_EVENT, PERMIFY_DECISION_EVENT}:
+        raise HTTPException(status_code=422, detail="event evidence type is not recognised")
+    if data["schema_version"] != "v1":
+        raise HTTPException(status_code=422, detail="event evidence schema version is not supported")
+    if not isinstance(data["event_id"], str) or not data["event_id"].strip():
+        raise HTTPException(status_code=422, detail="event evidence id is invalid")
+    if not isinstance(data["correlation_id"], str) or not data["correlation_id"].strip():
+        raise HTTPException(status_code=422, detail="event evidence correlation id is invalid")
+    if not isinstance(data["payload"], dict):
+        raise HTTPException(status_code=422, detail="event evidence payload must be an object")
+
+    try:
+        inserted = EVENT_EVIDENCE_LEDGER.record(event)
+    except RuntimeError as exc:
+        # A 503 deliberately tells Dapr/Kafka not to ACK. It is not a user
+        # input refusal; it is a durable-processing outage that must retry.
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    # A governed deployment can require the redacted immutable analytics
+    # projection before Dapr receives an ACK.  Without this explicit flag the
+    # event remains durable in Redis evidence only; there is intentionally no
+    # implicit object-store endpoint or credential fallback.
+    response = {"status": "SUCCESS", "delivery": "recorded" if inserted else "duplicate"}
+    if os.environ.get("UMOJA_LAKEHOUSE_PROJECT_EVENTS") == "true":
+        try:
+            _key, lakehouse_status = project_lifecycle_event(configured_lakehouse_writer(), event.model_dump())
+            METRICS.record_lakehouse_batch()
+        except (LakehouseUnavailable, LifecycleEventProjectionError, LakehouseContractError) as exc:
+            raise HTTPException(status_code=503, detail=f"lifecycle analytics projection is unavailable: {exc}") from exc
+        response["lakehouse_projection"] = lakehouse_status
+    # Dapr treats both results as an ACK. `duplicate` means a prior delivery
+    # was already durably appended; it does not create a second evidence row.
+    return response
+
+
+@app.post("/v1/reports/validate")
+def validate_report(request: ReportPackRequest) -> dict[str, Any]:
+    pack = request.model_dump()
+    try:
+        validate_report_pack(pack)
+        canonical_payload = json.dumps(pack, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        manifest = build_evidence_manifest(request.regulator, canonical_payload, len(request.transactions))
+        return {"valid": True, "manifest": manifest.__dict__, "regulatory_submission": "disabled_without_verified_channel"}
+    except ReportValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/v1/reports/submit-authorised")
+def submit_authorised_report(request: AuthorisedReportSubmissionRequest) -> dict[str, Any]:
+    """Submit a reviewed artefact only through the configured authorised channel.
+
+    The receipt is attributable evidence, not a statement of CBN approval,
+    settlement, or licence. A missing channel is an explicit 503; no submission
+    reference is manufactured locally.
+    """
+    if REGULATORY_CHANNEL is None:
+        raise HTTPException(status_code=503, detail="regulatory submission channel is not configured")
+    try:
+        receipt = REGULATORY_CHANNEL.submit(
+            RegulatorySubmissionRequest(
+                regulator=request.regulator,
+                report_type=request.report_type,
+                regulated_entity_id=request.regulated_entity_id,
+                artifact_uri=request.artifact_uri,
+                artifact_digest=request.artifact_digest,
+                evidence_manifest=request.evidence_manifest,
+                correlation_id=request.correlation_id,
+            )
+        )
+    except RegulatorySubmissionUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {
+        "channel_reference": receipt.channel_reference,
+        "external_reference": receipt.external_reference,
+        "state": receipt.state,
+        "response_evidence_sha256": receipt.response_evidence_sha256,
+    }
+
+
+@app.post("/v1/lakehouse/bronze-manifest")
+def lakehouse_bronze_manifest(request: LakehouseBatchRequest) -> dict[str, Any]:
+    try:
+        return {"manifest": build_bronze_manifest(request.dataset, request.records, request.schema_version).__dict__, "storage": "disabled_without_governed_lakehouse"}
+    except LakehouseContractError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+===== FILE: services/reporting-analytics/src/umojaflowos_reporting/stablecoin_exposure.py =====
+"""Stablecoin exposure reporting for USDC and USDT across the NGN, KES, and ZAR corridors.
+
+Every figure in the output is derived arithmetically from reconciled position
+records supplied by the caller. This module never fetches a rate, never
+interpolates a missing balance, and never substitutes a default: if a position
+lacks a reconciliation timestamp, a source reference, or a peg observation for
+its asset, the report fails closed with an explicit reason instead of producing
+a partial exposure figure that could be mistaken for a reconciled total.
+
+Peg deviation is reported as an observation, not as a valuation adjustment. The
+module deliberately produces no accounting entry and no rebalancing instruction.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
+from typing import Mapping, Sequence
+
+SUPPORTED_STABLECOINS = ("USDC", "USDT")
+SUPPORTED_CORRIDORS = ("NIGERIA_NGN", "KENYA_KES", "SOUTH_AFRICA_ZAR")
+
+
+class ExposureReportError(ValueError):
+    """Raised when exposure cannot be computed from the supplied evidence."""
+
+
+@dataclass(frozen=True)
+class StablecoinPosition:
+    """A reconciled stablecoin position. All fields are required evidence."""
+
+    corridor: str
+    asset: str
+    account_reference: str
+    available_amount: Decimal
+    reserved_amount: Decimal
+    source_reference: str
+    reconciled_at: datetime
+
+
+@dataclass(frozen=True)
+class PegObservation:
+    """An observed stablecoin-to-USD rate with its own provenance."""
+
+    asset: str
+    rate_to_usd: Decimal
+    source_reference: str
+    observed_at: datetime
+
+
+@dataclass(frozen=True)
+class CorridorExposure:
+    corridor: str
+    asset: str
+    available_amount: Decimal
+    reserved_amount: Decimal
+    total_amount: Decimal
+    usd_equivalent: Decimal
+    peg_deviation_basis_points: int
+    position_count: int
+    source_references: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExposureReport:
+    generated_at: datetime
+    corridor_exposures: tuple[CorridorExposure, ...]
+    total_usd_equivalent: Decimal
+    observations: tuple[str, ...] = field(default=())
+
+
+def _require_decimal(value: object, label: str) -> Decimal:
+    if isinstance(value, Decimal):
+        candidate = value
+    else:
+        try:
+            candidate = Decimal(str(value))
+        except (InvalidOperation, TypeError) as error:
+            raise ExposureReportError(f"{label} is not a decimal amount") from error
+    if candidate.is_nan() or candidate.is_infinite():
+        raise ExposureReportError(f"{label} must be a finite amount")
+    if candidate < 0:
+        raise ExposureReportError(f"{label} cannot be negative")
+    return candidate
+
+
+def _validate_position(position: StablecoinPosition) -> None:
+    if position.corridor not in SUPPORTED_CORRIDORS:
+        raise ExposureReportError(f"unsupported corridor: {position.corridor}")
+    if position.asset not in SUPPORTED_STABLECOINS:
+        raise ExposureReportError(f"unsupported stablecoin: {position.asset}")
+    if not position.source_reference.strip():
+        raise ExposureReportError("each position requires a source reference")
+    if not position.account_reference.strip():
+        raise ExposureReportError("each position requires an account reference")
+    if position.reconciled_at.tzinfo is None:
+        raise ExposureReportError("reconciled_at must be timezone-aware")
+    _require_decimal(position.available_amount, "available_amount")
+    _require_decimal(position.reserved_amount, "reserved_amount")
+
+
+def _validate_observation(observation: PegObservation) -> None:
+    if observation.asset not in SUPPORTED_STABLECOINS:
+        raise ExposureReportError(f"unsupported stablecoin: {observation.asset}")
+    if not observation.source_reference.strip():
+        raise ExposureReportError("each peg observation requires a source reference")
+    if observation.observed_at.tzinfo is None:
+        raise ExposureReportError("observed_at must be timezone-aware")
+    rate = _require_decimal(observation.rate_to_usd, "rate_to_usd")
+    if rate == 0:
+        raise ExposureReportError("rate_to_usd must be greater than zero")
+
+
+def build_stablecoin_exposure_report(
+    positions: Sequence[StablecoinPosition],
+    peg_observations: Mapping[str, PegObservation],
+    *,
+    as_of: datetime,
+    max_position_age: timedelta,
+    max_observation_age: timedelta,
+) -> ExposureReport:
+    """Aggregate reconciled positions into corridor-level exposure.
+
+    Raises ExposureReportError when any required evidence is missing or stale.
+    """
+    if as_of.tzinfo is None:
+        raise ExposureReportError("as_of must be timezone-aware")
+    if not positions:
+        raise ExposureReportError("no reconciled stablecoin positions were supplied")
+
+    buckets: dict[tuple[str, str], list[StablecoinPosition]] = {}
+    for position in positions:
+        _validate_position(position)
+        if position.reconciled_at > as_of:
+            raise ExposureReportError(
+                f"position {position.account_reference} has a reconciliation timestamp after the report cutoff"
+            )
+        if as_of - position.reconciled_at > max_position_age:
+            raise ExposureReportError(
+                f"position {position.account_reference} was reconciled outside the permitted window"
+            )
+        buckets.setdefault((position.corridor, position.asset), []).append(position)
+
+    exposures: list[CorridorExposure] = []
+    observations: list[str] = []
+    total_usd = Decimal("0")
+
+    for (corridor, asset), bucket in sorted(buckets.items()):
+        observation = peg_observations.get(asset)
+        if observation is None:
+            raise ExposureReportError(f"no peg observation supplied for {asset}")
+        _validate_observation(observation)
+        if observation.observed_at > as_of:
+            raise ExposureReportError(f"peg observation for {asset} is after the report cutoff")
+        if as_of - observation.observed_at > max_observation_age:
+            raise ExposureReportError(f"peg observation for {asset} is stale")
+
+        available = sum((p.available_amount for p in bucket), Decimal("0"))
+        reserved = sum((p.reserved_amount for p in bucket), Decimal("0"))
+        total = available + reserved
+        usd_equivalent = total * observation.rate_to_usd
+        # Deviation from the 1.00 USD peg, in basis points, as an observation.
+        deviation_bps = int(((observation.rate_to_usd - Decimal("1")) * Decimal("10000")).to_integral_value())
+        if deviation_bps != 0:
+            observations.append(
+                f"{asset} observed at {observation.rate_to_usd} USD ({deviation_bps} bps from peg) per {observation.source_reference}"
+            )
+
+        exposures.append(
+            CorridorExposure(
+                corridor=corridor,
+                asset=asset,
+                available_amount=available,
+                reserved_amount=reserved,
+                total_amount=total,
+                usd_equivalent=usd_equivalent,
+                peg_deviation_basis_points=deviation_bps,
+                position_count=len(bucket),
+                source_references=tuple(sorted({p.source_reference for p in bucket})),
+            )
+        )
+        total_usd += usd_equivalent
+
+    return ExposureReport(
+        generated_at=as_of,
+        corridor_exposures=tuple(exposures),
+        total_usd_equivalent=total_usd,
+        observations=tuple(observations),
+    )
+
+
+def utc(*args: int) -> datetime:
+    """Small helper for constructing timezone-aware UTC datetimes."""
+    return datetime(*args, tzinfo=timezone.utc)
+
+
+===== FILE: services/reporting-analytics/tests/test_analytics_platform_routes.py =====
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+from fastapi.testclient import TestClient
+
+from umojaflowos_reporting.service import app
+
+
+class IntegrationProtocolHandler(BaseHTTPRequestHandler):
+    seen: list[tuple[str, str, dict[str, str], bytes]] = []
+
+    def do_PUT(self) -> None:  # noqa: N802
+        self._handle()
+
+    def do_POST(self) -> None:  # noqa: N802
+        self._handle()
+
+    def _handle(self) -> None:
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length) if length else b""
+        type(self).seen.append((self.command, self.path, dict(self.headers), body))
+        if self.path == "/batches":
+            payload = json.dumps({"id": 51}).encode("utf-8")
+            self.send_response(201)
+            self.send_header("Content-Type", "application/json")
+        else:
+            payload = b""
+            self.send_response(200)
+            self.send_header("ETag", '"route-regression"')
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, format: str, *args) -> None:  # type: ignore[no-untyped-def]
+        return
+
+
+def live_protocol_endpoint():
+    IntegrationProtocolHandler.seen = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), IntegrationProtocolHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, thread, f"http://127.0.0.1:{server.server_port}"
+
+
+def test_analytics_routes_are_explicitly_unavailable_without_deployment_configuration(monkeypatch) -> None:
+    for key in (
+        "UMOJA_LAKEHOUSE_ENDPOINT",
+        "UMOJA_LAKEHOUSE_BUCKET",
+        "UMOJA_LAKEHOUSE_ACCESS_KEY_ID",
+        "UMOJA_LAKEHOUSE_SECRET_ACCESS_KEY",
+        "UMOJA_SEDONA_LIVY_URL",
+        "UMOJA_SEDONA_LIVY_BEARER_TOKEN",
+        "UMOJA_SEDONA_AGGREGATE_JOB_URI",
+        "UMOJA_GEOLIBRE_VIEWER_URL",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    client = TestClient(app)
+    bronze = client.post("/v1/lakehouse/bronze", json={"dataset": "service-health", "records": []})
+    sedona = client.post(
+        "/v1/geospatial/sedona/submit",
+        json={"input_uri": "s3://bucket/in", "output_uri": "s3://bucket/out", "metric_name": "payment_count", "h3_resolution": 7},
+    )
+    geolibre = client.post("/v1/geospatial/geolibre-project", json={"project_name": "Kenya aggregate", "aggregate_object_key": "silver/geospatial-aggregates/kenya.geojson"})
+    assert (bronze.status_code, sedona.status_code, geolibre.status_code) == (503, 503, 503)
+    assert "configured" in bronze.json()["detail"]
+    assert "configured" in sedona.json()["detail"]
+
+
+def test_configured_routes_use_real_protocol_requests_and_return_aggregate_only_results(monkeypatch) -> None:
+    server, thread, endpoint = live_protocol_endpoint()
+    try:
+        monkeypatch.setenv("UMOJA_LAKEHOUSE_ENDPOINT", endpoint)
+        monkeypatch.setenv("UMOJA_LAKEHOUSE_BUCKET", "umojaflowos-lakehouse")
+        monkeypatch.setenv("UMOJA_LAKEHOUSE_ACCESS_KEY_ID", "local-access-key")
+        monkeypatch.setenv("UMOJA_LAKEHOUSE_SECRET_ACCESS_KEY", "local-secret-key")
+        monkeypatch.setenv("UMOJA_LAKEHOUSE_ALLOW_INSECURE_LOOPBACK", "true")
+        monkeypatch.setenv("UMOJA_SEDONA_LIVY_URL", endpoint)
+        monkeypatch.setenv("UMOJA_SEDONA_LIVY_BEARER_TOKEN", "local-sedona-token")
+        monkeypatch.setenv("UMOJA_SEDONA_AGGREGATE_JOB_URI", "https://artifacts.example.test/sedona_jurisdiction_aggregate.py")
+        monkeypatch.setenv("UMOJA_SEDONA_ALLOW_INSECURE_LOOPBACK", "true")
+        monkeypatch.setenv("UMOJA_GEOLIBRE_VIEWER_URL", "https://maps.example.test")
+        client = TestClient(app)
+
+        bronze = client.post("/v1/lakehouse/bronze", json={"dataset": "service-health", "records": [{"service": "risk-core", "status": "healthy"}]})
+        assert bronze.status_code == 200
+        assert bronze.json()["status"] == "created"
+        assert bronze.json()["object_key"].startswith("bronze/service-health/")
+
+        sedona = client.post(
+            "/v1/geospatial/sedona/submit",
+            json={"input_uri": "s3://umojaflowos-lakehouse/bronze/geospatial-aggregates/input", "output_uri": "s3://umojaflowos-lakehouse/silver/geospatial-aggregates/output", "metric_name": "payment_count", "h3_resolution": 7},
+        )
+        assert sedona.status_code == 200
+        assert sedona.json()["livy_batch_id"] == 51
+
+        # A browser-facing GeoLibre project must never be given the local HTTP
+        # object-store endpoint used by this protocol test. Generating a signed
+        # URL does not make a request, so this switches only the publication
+        # base to the production HTTPS invariant before the project route runs.
+        monkeypatch.setenv("UMOJA_LAKEHOUSE_ENDPOINT", "https://lakehouse.example.test")
+        monkeypatch.delenv("UMOJA_LAKEHOUSE_ALLOW_INSECURE_LOOPBACK", raising=False)
+        project = client.post("/v1/geospatial/geolibre-project", json={"project_name": "Kenya (KES) aggregate", "aggregate_object_key": "silver/geospatial-aggregates/kenya.geojson"})
+        assert project.status_code == 200
+        assert project.json()["data_policy"] == "aggregate_only"
+        assert project.json()["project"]["version"] == "0.1.0"
+        assert project.json()["project"]["layers"][0]["source"]["url"].startswith("http")
+
+        methods_paths = {(method, path) for method, path, _, _ in IntegrationProtocolHandler.seen}
+        assert any(method == "PUT" and "/umojaflowos-lakehouse/bronze/service-health/" in path for method, path in methods_paths)
+        assert ("POST", "/batches") in methods_paths
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+===== FILE: services/reporting-analytics/tests/test_assembly.py =====
+"""Regressions for CBN/CBK/SARB regulatory report assembly."""
+from datetime import datetime, timezone
+
+import pytest
+
+from umojaflowos_reporting.assembly import (
+    ReportAssemblyError,
+    assemble_regulatory_report,
+    validate_assembled_report,
+)
+
+GENERATED_AT = datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc)
+
+
+def txn(ref="TXN-1", amount="100.00", direction="INBOUND", currency="NGN", value_date="2026-07-15"):
+    return {
+        "transaction_reference": ref,
+        "value_date": value_date,
+        "currency": currency,
+        "amount": amount,
+        "counterparty_reference": "CP-1",
+        "direction": direction,
+    }
+
+
+def assemble(regulator="CBN", transactions=None, **overrides):
+    kwargs = {
+        "regulator": regulator,
+        "report_type": "monthly-cross-border-settlement",
+        "period_start": "2026-07-01",
+        "period_end": "2026-07-31",
+        "regulated_entity_id": "ENTITY-1",
+        "transactions": transactions if transactions is not None else [txn()],
+        "generated_at": GENERATED_AT,
+    }
+    kwargs.update(overrides)
+    return assemble_regulatory_report(**kwargs)
+
+
+def test_assembles_totals_from_rows_rather_than_trusting_supplied_totals():
+    report = assemble(
+        transactions=[
+            txn("TXN-1", "100.00", "INBOUND"),
+            txn("TXN-2", "40.50", "OUTBOUND"),
+            txn("TXN-3", "9.50", "OUTBOUND"),
+        ]
+    )
+    assert report.totals.record_count == 3
+    assert report.totals.inbound_total == "100.00"
+    assert report.totals.outbound_total == "50.00"
+    assert report.totals.net_total == "50.00"
+
+
+def test_binds_each_regulator_to_its_corridor_and_settlement_currency():
+    assert assemble("CBN").settlement_currency == "NGN"
+    assert assemble("CBK", transactions=[txn(currency="KES")]).settlement_currency == "KES"
+    assert assemble("SARB", transactions=[txn(currency="ZAR")]).settlement_currency == "ZAR"
+    assert assemble("CBK", transactions=[txn(currency="KES")]).corridor == "Kenya"
+
+
+def test_rejects_a_currency_that_does_not_match_the_regulator():
+    with pytest.raises(ReportAssemblyError, match="does not match"):
+        assemble("CBN", transactions=[txn(currency="KES")])
+
+
+def test_rejects_a_transaction_outside_the_reporting_period():
+    with pytest.raises(ReportAssemblyError, match="outside the reporting period"):
+        assemble(transactions=[txn(value_date="2026-08-02")])
+
+
+def test_rejects_duplicate_transaction_references():
+    with pytest.raises(ReportAssemblyError, match="duplicate transaction reference"):
+        assemble(transactions=[txn("TXN-1"), txn("TXN-1")])
+
+
+def test_rejects_missing_required_transaction_fields_instead_of_dropping_the_row():
+    incomplete = txn()
+    del incomplete["counterparty_reference"]
+    with pytest.raises(ReportAssemblyError, match="missing required fields"):
+        assemble(transactions=[incomplete])
+
+
+def test_rejects_non_positive_and_non_finite_amounts():
+    with pytest.raises(ReportAssemblyError, match="greater than zero"):
+        assemble(transactions=[txn(amount="0")])
+    with pytest.raises(ReportAssemblyError, match="finite"):
+        assemble(transactions=[txn(amount="NaN")])
+
+
+def test_rejects_an_inverted_period_and_an_empty_record_set():
+    with pytest.raises(ReportAssemblyError, match="cannot precede"):
+        assemble(period_start="2026-07-31", period_end="2026-07-01")
+    with pytest.raises(ReportAssemblyError, match="no canonical transaction records"):
+        assemble(transactions=[])
+
+
+def test_digest_is_deterministic_and_changes_when_any_row_changes():
+    first = assemble(transactions=[txn("TXN-1"), txn("TXN-2", "5.00")])
+    same = assemble(transactions=[txn("TXN-2", "5.00"), txn("TXN-1")])
+    assert first.artifact_digest == same.artifact_digest, "row order must not change the digest"
+    changed = assemble(transactions=[txn("TXN-1"), txn("TXN-2", "5.01")])
+    assert changed.artifact_digest != first.artifact_digest
+
+
+def test_assembled_report_verifies_against_its_own_digest():
+    report = assemble(transactions=[txn("TXN-1"), txn("TXN-2", "5.00", "OUTBOUND")])
+    validate_assembled_report(report)
+
+
+def test_assembled_report_is_never_marked_submitted():
+    report = assemble()
+    assert report.submission_state == "requires_authorised_channel_reference"
+
+
+===== FILE: services/reporting-analytics/tests/test_enterprise_governance.py =====
+import unittest
+
+from enterprise_governance import summarize_enterprise_governance, summarize_vasp_readiness
+
+
+class EnterpriseGovernanceReportingTests(unittest.TestCase):
+    def test_summary_never_claims_external_authority(self):
+        result = summarize_enterprise_governance([
+            {"module_kind": "stablecoin_treasury", "review_status": "approved"},
+            {"module_kind": "spend_card_programme", "review_status": "blocked"},
+        ])
+        self.assertEqual(result["record_count"], 2)
+        self.assertFalse(result["stablecoin_transfer_initiated"])
+        self.assertFalse(result["credit_decision_made"])
+        self.assertFalse(result["card_issued"])
+        self.assertFalse(result["authoritative_for_execution"])
+
+    def test_vasp_summary_never_claims_external_authority(self):
+        result = summarize_vasp_readiness([
+            {
+                "category": "aml_cft_cpf_and_travel_rule_programme",
+                "route_state": "incomplete",
+                "missing_category": "counterparty_identity_and_authorisation",
+            }
+        ])
+        self.assertEqual(result["missing_categories"], ["counterparty_identity_and_authorisation"])
+        self.assertFalse(result["external_submission_initiated"])
+        self.assertFalse(result["travel_rule_transmission"])
+        self.assertFalse(result["provider_activation_initiated"])
+        self.assertFalse(result["custody_initiated"])
+        self.assertFalse(result["value_movement_initiated"])
+        self.assertFalse(result["authoritative_for_execution"])
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+===== FILE: services/reporting-analytics/tests/test_event_consumer.py =====
+"""Dapr/Kafka subscriber boundary regressions.
+
+The service deliberately starts with no durable event ledger. These tests prove
+that it rejects malformed evidence and returns 503 when the durable store is
+unavailable, which makes Dapr retry rather than acknowledge and lose an event.
+The successful path is covered in the Redis integration tests once the real
+ledger is attached; no in-memory recorder is substituted here.
+"""
+
+from fastapi.testclient import TestClient
+
+from umojaflowos_reporting.service import app
+
+
+client = TestClient(app)
+
+
+def event(data: dict) -> dict:
+    return {
+        "id": "dapr-id-1",
+        "source": "payment-engine",
+        "specversion": "1.0",
+        "type": "com.dapr.event.sent",
+        "topic": "payment.events",
+        "pubsubname": "kafka",
+        "data": data,
+    }
+
+
+def valid_data() -> dict:
+    return {
+        "event_id": "event-1",
+        "event_type": "umojaflowos.payment.order.validated.v1",
+        "schema_version": "v1",
+        "correlation_id": "order-1",
+        "payload": {"status": "APPROVED"},
+    }
+
+
+def test_consumer_retries_when_no_durable_ledger_is_configured() -> None:
+    response = client.post("/events/payment-order-validated", json=event(valid_data()))
+    assert response.status_code == 503
+    assert response.json()["detail"] == "event evidence ledger is unavailable"
+
+
+def test_consumer_refuses_unknown_stream_before_attempting_persistence() -> None:
+    payload = event(valid_data())
+    payload["topic"] = "untrusted.events"
+    response = client.post("/events/payment-order-validated", json=payload)
+    assert response.status_code == 422
+    assert response.json()["detail"] == "event arrived through an unrecognised stream"
+
+
+def test_consumer_refuses_incomplete_evidence() -> None:
+    payload = event(valid_data())
+    payload["data"].pop("correlation_id")
+    response = client.post("/events/payment-order-validated", json=payload)
+    assert response.status_code == 422
+    assert response.json()["detail"] == "event evidence is incomplete"
+
+
+def test_consumer_refuses_an_unrecognised_contract_version() -> None:
+    payload = event(valid_data())
+    payload["data"]["schema_version"] = "v2"
+    response = client.post("/events/payment-order-validated", json=payload)
+    assert response.status_code == 422
+    assert response.json()["detail"] == "event evidence schema version is not supported"
+
+
+def test_consumer_refuses_an_execution_shaped_event_type() -> None:
+    payload = event(valid_data())
+    payload["data"]["event_type"] = "umojaflowos.payment.execute.v1"
+    response = client.post("/events/payment-order-validated", json=payload)
+    assert response.status_code == 422
+    assert response.json()["detail"] == "event evidence type is not recognised"
+
+
+===== FILE: services/reporting-analytics/tests/test_geolibre_projection.py =====
+import unittest
+
+from umojaflowos_reporting.geolibre_projection import GeoLibreProjectionError, build_geolibre_layer
+from umojaflowos_reporting.geospatial import JurisdictionAggregation
+
+
+class GeoLibreProjectionTests(unittest.TestCase):
+    def test_projects_only_privacy_safe_aggregate(self):
+        layer = build_geolibre_layer(JurisdictionAggregation("NG", 10, 7, "payment_volume"))
+        self.assertEqual(layer.source_kind, "h3_aggregate")
+        self.assertEqual(layer.jurisdiction, "NG")
+
+    def test_rejects_small_cohort(self):
+        with self.assertRaises(GeoLibreProjectionError):
+            build_geolibre_layer(JurisdictionAggregation("KE", 9, 7, "payment_volume"))
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+===== FILE: services/reporting-analytics/tests/test_geospatial.py =====
+import pytest
+
+from umojaflowos_reporting.geospatial import GeospatialContractError, build_jurisdiction_aggregation
+
+
+def test_geospatial_aggregate_rejects_raw_coordinates_and_small_cohorts():
+    with pytest.raises(GeospatialContractError):
+        build_jurisdiction_aggregation("ZA", 9, 7, "payment_count", [])
+    with pytest.raises(GeospatialContractError):
+        build_jurisdiction_aggregation("ZA", 10, 7, "payment_count", [{"latitude": -26.2}])
+
+
+def test_geospatial_aggregate_accepts_jurisdiction_level_cohort():
+    result = build_jurisdiction_aggregation("ZA", 10, 7, "payment_count", [{"corridor": "SOUTH_AFRICA_ZAR"}])
+    assert result.jurisdiction == "ZA"
+
+
+===== FILE: services/reporting-analytics/tests/test_lakehouse.py =====
+import unittest
+from umojaflowos_reporting.lakehouse import LakehouseContractError, build_bronze_manifest
+
+
+class LakehouseContractTests(unittest.TestCase):
+    def test_manifest_is_deterministic_for_identical_records(self):
+        records = [{"corridor": "South Africa", "currency": "ZAR"}]
+        self.assertEqual(build_bronze_manifest("settlement-events", records), build_bronze_manifest("settlement-events", records))
+
+    def test_rejects_non_mapping_record(self):
+        with self.assertRaises(LakehouseContractError):
+            build_bronze_manifest("settlement-events", ["not-a-record"])
+
+
+===== FILE: services/reporting-analytics/tests/test_lakehouse_catalog.py =====
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+
+import pytest
+
+from umojaflowos_reporting.lakehouse import LakehouseContractError
+from umojaflowos_reporting.lakehouse_catalog import CATALOG_SOURCES, build_catalog_evidence, write_catalog_evidence
+
+
+def raw(source: str) -> dict[str, object]:
+    return {
+        "source": source,
+        "event_type": "evidence.recorded",
+        "observed_at": "2026-08-19T12:00:00Z",
+        "correlation_sha256": "a" * 64,
+        "outcome": "recorded",
+        "corridor": "NIGERIA_NGN",
+        "stablecoin": "USDC",
+        "model_role": "review_only",
+    }
+
+
+def test_every_core_source_can_emit_a_redacted_non_authoritative_catalog_record() -> None:
+    for source in CATALOG_SOURCES:
+        evidence = build_catalog_evidence(raw(source))
+        record = evidence.to_record()
+        assert record["source"] == source
+        assert record["authoritative"] is False
+        assert record["correlation_sha256"] == "a" * 64
+        assert record["stablecoin"] == "USDC"
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("customer_id", "not-allowed"),
+        ("wallet_address", "not-allowed"),
+        ("provider_token", "not-allowed"),
+        ("execute_transfer", False),
+        ("authoritative", True),
+        ("correlation_sha256", "raw-provider-id"),
+        ("stablecoin", "DAI"),
+        ("observed_at", "2026-08-19T12:00:00"),
+    ],
+)
+def test_catalog_rejects_direct_identifiers_secrets_execution_authority_and_unsupported_assets(field: str, value: object) -> None:
+    record = raw("stablecoin_exposure")
+    record[field] = value
+    with pytest.raises(LakehouseContractError):
+        build_catalog_evidence(record)
+
+
+class FakeWriter:
+    def __init__(self) -> None:
+        self.dataset: str | None = None
+        self.records: list[dict[str, object]] | None = None
+
+    def write(self, dataset: str, records: list[dict[str, object]]) -> Any:
+        self.dataset = dataset
+        self.records = records
+        return type("Manifest", (), {"payload_sha256": "b" * 64})(), "bronze/object.jsonl", "created"
+
+
+def test_catalog_writes_only_the_governed_projection() -> None:
+    writer = FakeWriter()
+    digest, location = write_catalog_evidence(writer, raw("temporal_workflow"))  # type: ignore[arg-type]
+    assert digest == "b" * 64
+    assert location == "bronze/object.jsonl:created"
+    assert writer.dataset == "payment-lifecycle-evidence"
+    assert writer.records == [
+        {
+            "schema_version": "v1",
+            "source": "temporal_workflow",
+            "event_type": "evidence.recorded",
+            "observed_at": datetime(2026, 8, 19, 12, 0, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+            "correlation_sha256": "a" * 64,
+            "outcome": "recorded",
+            "authoritative": False,
+            "corridor": "NIGERIA_NGN",
+            "stablecoin": "USDC",
+            "model_role": "review_only",
+        }
+    ]
+
+
+===== FILE: services/reporting-analytics/tests/test_lakehouse_catalog_endpoint.py =====
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+from fastapi.testclient import TestClient
+
+from umojaflowos_reporting import service
+
+
+class RecordingWriter:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, list[dict[str, object]]]] = []
+
+    def write(self, dataset: str, records: list[dict[str, object]]):
+        self.calls.append((dataset, records))
+        return SimpleNamespace(payload_sha256="a" * 64), "bronze/payment-lifecycle-evidence/catalog.json", "created"
+
+
+def catalog_evidence(source: str = "go_payment_engine") -> dict[str, object]:
+    return {
+        "source": source,
+        "event_type": "umojaflowos.payment.order.validated.v1",
+        "observed_at": "2026-08-19T00:00:00Z",
+        "correlation_sha256": "b" * 64,
+        "outcome": "approved",
+        "corridor": "NIGERIA_NGN",
+    }
+
+
+def configure_catalog(monkeypatch, writer: RecordingWriter) -> str:
+    key = "local" + "-catalog-" + "key"
+    monkeypatch.setenv("UMOJA_LAKEHOUSE_CATALOG_INGESTION_ENABLED", "true")
+    monkeypatch.setenv("UMOJA_LAKEHOUSE_CATALOG_GO_PAYMENT_ENGINE_KEY", key)
+    monkeypatch.setattr(service, "configured_lakehouse_writer", lambda: writer)
+    return key
+
+
+def test_catalog_endpoint_is_disabled_without_explicit_configuration(monkeypatch) -> None:
+    monkeypatch.delenv("UMOJA_LAKEHOUSE_CATALOG_INGESTION_ENABLED", raising=False)
+    response = TestClient(service.app).post(
+        "/v1/lakehouse/catalog/go_payment_engine",
+        json={"evidence": catalog_evidence()},
+    )
+    assert response.status_code == 503
+
+
+def test_catalog_endpoint_requires_the_source_specific_secret(monkeypatch) -> None:
+    writer = RecordingWriter()
+    configure_catalog(monkeypatch, writer)
+    response = TestClient(service.app).post(
+        "/v1/lakehouse/catalog/go_payment_engine",
+        json={"evidence": catalog_evidence()},
+        headers={"X-Umoja-Lakehouse-Key": "wrong"},
+    )
+    assert response.status_code == 403
+    assert writer.calls == []
+
+
+def test_catalog_endpoint_refuses_a_body_that_claims_a_different_source(monkeypatch) -> None:
+    writer = RecordingWriter()
+    key = configure_catalog(monkeypatch, writer)
+    response = TestClient(service.app).post(
+        "/v1/lakehouse/catalog/go_payment_engine",
+        json={"evidence": catalog_evidence("rust_risk")},
+        headers={"X-Umoja-Lakehouse-Key": key},
+    )
+    assert response.status_code == 422
+    assert writer.calls == []
+
+
+def test_catalog_endpoint_writes_one_strict_non_authoritative_record(monkeypatch) -> None:
+    writer = RecordingWriter()
+    key = configure_catalog(monkeypatch, writer)
+    response = TestClient(service.app).post(
+        "/v1/lakehouse/catalog/go_payment_engine",
+        json={"evidence": catalog_evidence()},
+        headers={"X-Umoja-Lakehouse-Key": key},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "recorded"
+    assert response.json()["authoritative"] is False
+    assert writer.calls[0][0] == "payment-lifecycle-evidence"
+    assert writer.calls[0][1][0]["authoritative"] is False
+
+
+===== FILE: services/reporting-analytics/tests/test_lakehouse_geospatial_integrations.py =====
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import pytest
+
+from umojaflowos_reporting.geolibre_project import GeoLibrePublicationError, build_aggregate_project
+from umojaflowos_reporting.lakehouse import LakehouseContractError
+from umojaflowos_reporting.lakehouse_writer import BronzeLakehouseWriter, LakehouseConfig, LakehouseUnavailable
+from umojaflowos_reporting.sedona_livy import SedonaAggregateJobClient, SedonaLivyConfig, SedonaUnavailable
+
+
+class ProtocolServer(BaseHTTPRequestHandler):
+    received: list[tuple[str, str, dict[str, str], bytes]] = []
+    response_status = 200
+    response_body: dict = {}
+
+    def do_PUT(self) -> None:  # noqa: N802
+        self._record()
+
+    def do_POST(self) -> None:  # noqa: N802
+        self._record()
+
+    def do_GET(self) -> None:  # noqa: N802
+        self._record()
+
+    def _record(self) -> None:
+        length = int(self.headers.get("Content-Length", 0))
+        if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
+            chunks: list[bytes] = []
+            while True:
+                header = self.rfile.readline().strip().split(b";", 1)[0]
+                chunk_size = int(header, 16)
+                if chunk_size == 0:
+                    # Consume the final CRLF after the terminal chunk.
+                    self.rfile.readline()
+                    break
+                chunks.append(self.rfile.read(chunk_size))
+                self.rfile.read(2)
+            body = b"".join(chunks)
+        else:
+            body = self.rfile.read(length) if length else b""
+        type(self).received.append((self.command, self.path, dict(self.headers), body))
+        encoded = b"" if self.command == "PUT" else json.dumps(type(self).response_body).encode("utf-8")
+        self.send_response(type(self).response_status)
+        if encoded:
+            self.send_header("Content-Type", "application/json")
+        self.send_header("ETag", '"local-protocol-regression"')
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def log_message(self, format: str, *args) -> None:  # type: ignore[no-untyped-def]
+        return
+
+
+@pytest.fixture
+def protocol_endpoint():
+    ProtocolServer.received = []
+    ProtocolServer.response_status = 200
+    ProtocolServer.response_body = {}
+    server = ThreadingHTTPServer(("127.0.0.1", 0), ProtocolServer)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+def test_lakehouse_writer_signs_and_conditionally_puts_redacted_evidence(protocol_endpoint: str) -> None:
+    ProtocolServer.response_status = 200
+    writer = BronzeLakehouseWriter(
+        LakehouseConfig(
+            endpoint_url=protocol_endpoint,
+            bucket="umojaflowos-lakehouse",
+            access_key_id="local-access-key",
+            secret_access_key="local-secret-key",
+            allow_insecure_loopback=True,
+        )
+    )
+    manifest, key, outcome = writer.write(
+        "service-health",
+        [{"service": "payment-engine", "status": "healthy", "observed_at": "2026-08-19T04:00:00Z"}],
+    )
+    assert outcome == "created"
+    assert key.startswith("bronze/service-health/v1/")
+    assert manifest.record_count == 1
+    method, path, headers, body = ProtocolServer.received[0]
+    assert method == "PUT"
+    assert path.startswith(f"/umojaflowos-lakehouse/{key}")
+    assert headers["If-None-Match"] == "*"
+    assert headers["Authorization"].startswith("AWS4-HMAC-SHA256")
+    assert json.loads(body.decode("utf-8"))["service"] == "payment-engine"
+
+
+def test_lakehouse_writer_refuses_sensitive_fields_and_remote_plaintext() -> None:
+    with pytest.raises(LakehouseUnavailable, match="loopback only"):
+        BronzeLakehouseWriter(
+            LakehouseConfig(
+                endpoint_url="http://198.51.100.8:9000",
+                bucket="umojaflowos-lakehouse",
+                access_key_id="key",
+                secret_access_key="secret",
+                allow_insecure_loopback=True,
+            )
+        )
+    with pytest.raises(LakehouseContractError, match="unapproved"):
+        BronzeLakehouseWriter.prepare("service-health", [{"customer_name": "must-not-enter-lakehouse"}])
+
+
+def test_sedona_livy_submission_uses_only_aggregate_lakehouse_arguments(protocol_endpoint: str) -> None:
+    ProtocolServer.response_status = 201
+    ProtocolServer.response_body = {"id": 27}
+    client = SedonaAggregateJobClient(
+        SedonaLivyConfig(
+            base_url=protocol_endpoint,
+            bearer_token="local-sedona-token",
+            aggregate_job_uri="https://artifacts.example.test/sedona-jurisdiction-aggregate.py",
+            allow_insecure_loopback=True,
+        )
+    )
+    assert client.submit("s3://umojaflowos-lakehouse/bronze/geospatial-aggregates/input.jsonl", "s3://umojaflowos-lakehouse/silver/geospatial-aggregates/output", "payment_count", 7) == 27
+    method, path, headers, raw = ProtocolServer.received[0]
+    body = json.loads(raw.decode("utf-8"))
+    assert (method, path) == ("POST", "/batches")
+    assert headers["Authorization"] == "Bearer local-sedona-token"
+    assert body["args"] == [
+        "s3://umojaflowos-lakehouse/bronze/geospatial-aggregates/input.jsonl",
+        "s3://umojaflowos-lakehouse/silver/geospatial-aggregates/output",
+        "payment_count",
+        "7",
+    ]
+    assert body["conf"]["spark.sql.extensions"] == "org.apache.sedona.sql.SedonaSqlExtensions"
+    with pytest.raises(SedonaUnavailable, match="S3-compatible"):
+        client.submit("https://raw-location.example.test/data", "s3://umojaflowos-lakehouse/out", "payment_count", 7)
+
+
+def test_geolibre_project_is_compatible_and_contains_only_a_signed_aggregate_url() -> None:
+    publication = build_aggregate_project(
+        "Nigeria (NGN) aggregate payment activity",
+        "https://lakehouse.example.test/signed/jurisdiction-aggregate.geojson?expires=900&signature=redacted",
+        "https://maps.example.test",
+    )
+    assert publication.project["version"] == "0.1.0"
+    layer = publication.project["layers"][0]  # type: ignore[index]
+    assert layer["source"]["url"].startswith("https://")  # type: ignore[index]
+    assert "layout=viewer" in publication.viewer_url
+    with pytest.raises(GeoLibrePublicationError, match="credential"):
+        build_aggregate_project("Unsafe", "https://lakehouse.example.test/data.geojson?token=must-not-share", "https://maps.example.test")
+
+
+===== FILE: services/reporting-analytics/tests/test_lifecycle_event_lakehouse.py =====
+from datetime import datetime, timezone
+
+import pytest
+
+from umojaflowos_reporting.lifecycle_event_lakehouse import (
+    LifecycleEventProjectionError,
+    build_lifecycle_event_record,
+)
+
+
+def payment_event(payload: dict) -> dict:
+    return {
+        "source": "payment-engine",
+        "data": {
+            "event_id": "event-123",
+            "event_type": "umojaflowos.payment.order.validated.v1",
+            "schema_version": "v1",
+            "correlation_id": "order-123",
+            "payload": payload,
+        },
+    }
+
+
+def test_projection_keeps_only_approved_lifecycle_fields() -> None:
+    record = build_lifecycle_event_record(
+        payment_event(
+            {
+                "corridor": "NIGERIA_NGN",
+                "currency": "NGN",
+                "status": "APPROVED",
+                "customer_name": "must-not-cross",
+                "account_number": "must-not-cross",
+                "amount": "50000.00",
+                "free_text_reason": "must-not-cross",
+            }
+        ),
+        datetime(2026, 8, 19, tzinfo=timezone.utc),
+    )
+    assert record == {
+        "event_type": "umojaflowos.payment.order.validated.v1",
+        "schema_version": "v1",
+        "observed_at": "2026-08-19T00:00:00Z",
+        "source": "go_payment_engine",
+        "correlation_sha256": "3b6a198e6f182f27b91aa5a8b37ab70d4c54d3889e4a947243c1afd3e718ca66",
+        "outcome": "approved",
+        "authoritative": False,
+        "corridor": "NIGERIA_NGN",
+    }
+
+
+def test_projection_refuses_unknown_event_type_and_invalid_correlation() -> None:
+    unknown = payment_event({"status": "APPROVED"})
+    unknown["data"]["event_type"] = "umojaflowos.payment.execute.v1"
+    with pytest.raises(LifecycleEventProjectionError, match="not approved"):
+        build_lifecycle_event_record(unknown)
+
+    invalid = payment_event({"status": "APPROVED"})
+    invalid["data"]["correlation_id"] = ""
+    with pytest.raises(LifecycleEventProjectionError, match="correlation_id"):
+        build_lifecycle_event_record(invalid)
+
+
+def test_projection_rejects_an_unapproved_service_source() -> None:
+    unapproved = payment_event({"corridor": "NIGERIA_NGN", "status": "APPROVED"})
+    unapproved["source"] = "unrecognised-service"
+    with pytest.raises(LifecycleEventProjectionError, match="source"):
+        build_lifecycle_event_record(unapproved)
+
+
+def test_projection_maps_go_workflow_outcome_to_temporal_catalog_source() -> None:
+    event = payment_event({"status": "APPROVED"})
+    event["data"]["event_type"] = "umojaflowos.payment.order.workflow-recorded.v1"
+    record = build_lifecycle_event_record(event, datetime(2026, 8, 19, tzinfo=timezone.utc))
+    assert record["source"] == "temporal_workflow"
+    assert record["outcome"] == "approved"
+    assert record["authoritative"] is False
+
+
+def test_projection_maps_go_permify_outcome_to_authorization_catalog_source() -> None:
+    event = payment_event({"decision": "allowed"})
+    event["data"]["event_type"] = "umojaflowos.authorization.permify-decision.v1"
+    record = build_lifecycle_event_record(event, datetime(2026, 8, 19, tzinfo=timezone.utc))
+    assert record["source"] == "permify_authorization"
+    assert record["outcome"] == "allowed"
+    assert record["authoritative"] is False
+
+
+===== FILE: services/reporting-analytics/tests/test_opensearch_adapter.py =====
+"""OpenSearch writer regressions against a real local HTTP server.
+
+OpenSearch itself does not fit the current host. These tests do not replace the
+writer with a mock: they run an actual HTTP listener, validate the emitted
+method/path/authorization/body, and drive the create/duplicate/conflict
+protocol that a configured OpenSearch endpoint must support.
+"""
+
+import json
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import pytest
+
+from umojaflowos_reporting.opensearch_adapter import (
+    OpenSearchConfig,
+    OpenSearchProjectionWriter,
+    OpenSearchUnavailable,
+    redacted_search_document,
+)
+
+
+class SearchServer(BaseHTTPRequestHandler):
+    responses: list[tuple[int, dict]] = []
+    received: list[tuple[str, str, str, dict]] = []
+
+    def do_PUT(self) -> None:  # noqa: N802
+        self._record()
+
+    def do_GET(self) -> None:  # noqa: N802
+        self._record()
+
+    def _record(self) -> None:
+        length = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(length) if length else b""
+        body = json.loads(raw) if raw else {}
+        type(self).received.append((self.command, self.path, self.headers.get("Authorization", ""), body))
+        status, response = type(self).responses.pop(0)
+        encoded = json.dumps(response).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def log_message(self, format: str, *args) -> None:  # type: ignore[no-untyped-def]
+        return
+
+
+@pytest.fixture
+def search_endpoint():
+    SearchServer.responses = []
+    SearchServer.received = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), SearchServer)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        thread.join()
+
+
+def writer(endpoint: str) -> OpenSearchProjectionWriter:
+    return OpenSearchProjectionWriter(
+        OpenSearchConfig(
+            base_url=endpoint,
+            bearer_token="development-secret-reference-resolved-outside-browser",
+            allow_insecure_loopback=True,
+        )
+    )
+
+
+def test_writer_creates_a_redacted_projection_over_the_real_http_protocol(search_endpoint: str) -> None:
+    SearchServer.responses = [(201, {"result": "created"})]
+    outcome = writer(search_endpoint).write("umojaflowos-audit-v1", "audit-1", {"event_id": "audit-1", "action": "case.opened"})
+    assert outcome == "created"
+    method, path, authorization, body = SearchServer.received[0]
+    assert method == "PUT"
+    assert path == "/umojaflowos-audit-v1/_doc/audit-1?op_type=create"
+    assert authorization.startswith("Bearer ")
+    assert body == {"event_id": "audit-1", "action": "case.opened"}
+
+
+def test_duplicate_is_acknowledged_only_when_existing_source_matches(search_endpoint: str) -> None:
+    document = {"event_id": "audit-1", "action": "case.opened"}
+    SearchServer.responses = [(409, {"error": {"type": "version_conflict_engine_exception"}}), (200, {"_source": document})]
+    assert writer(search_endpoint).write("umojaflowos-audit-v1", "audit-1", document) == "duplicate"
+
+    SearchServer.responses = [(409, {"error": {"type": "version_conflict_engine_exception"}}), (200, {"_source": {"event_id": "audit-1", "action": "case.closed"}})]
+    with pytest.raises(OpenSearchUnavailable, match="differs"):
+        writer(search_endpoint).write("umojaflowos-audit-v1", "audit-1", document)
+
+
+def test_writer_refuses_remote_plaintext_and_path_shaped_index() -> None:
+    with pytest.raises(OpenSearchUnavailable, match="loopback only"):
+        OpenSearchProjectionWriter(OpenSearchConfig(base_url="http://198.51.100.4:9200", bearer_token="secret", allow_insecure_loopback=True))
+    with pytest.raises(OpenSearchUnavailable, match="path-safe"):
+        writer("http://127.0.0.1:9200").write("audit/unsafe", "id", {"event_id": "id"})
+
+
+def test_case_projection_allows_only_approved_search_fields() -> None:
+    index, document_id, document = redacted_search_document(
+        {
+            "projection_type": "case",
+            "case_id": "case-1",
+            "status": "open",
+            "corridor": "KENYA_KES",
+            "updated_at": "2026-08-19T04:00:00Z",
+            "reason_codes": ["SCREENING_UNAVAILABLE"],
+        }
+    )
+    assert (index, document_id) == ("umojaflowos-cases-v1", "case-1")
+    assert "amount" not in document
+    with pytest.raises(OpenSearchUnavailable, match="not approved"):
+        redacted_search_document(
+            {
+                "projection_type": "case",
+                "case_id": "case-1",
+                "status": "open",
+                "corridor": "KENYA_KES",
+                "updated_at": "2026-08-19T04:00:00Z",
+                "amount": "100",
+            }
+        )
+
+
+===== FILE: services/reporting-analytics/tests/test_opensearch_projection.py =====
+import unittest
+from umojaflowos_reporting.opensearch_projection import SearchProjectionError, build_audit_projection
+
+
+class OpenSearchProjectionTests(unittest.TestCase):
+    def test_projects_redacted_audit_evidence_only(self):
+        projection = build_audit_projection({"event_id": "evt-1", "action": "policy.evaluated", "object_type": "payment_order", "occurred_at": "2026-08-18T00:00:00Z", "metadata": {"corridor": "South Africa"}})
+        self.assertEqual(projection.index, "umojaflowos-audit-v1")
+
+    def test_rejects_monetary_or_secret_metadata(self):
+        with self.assertRaises(SearchProjectionError):
+            build_audit_projection({"event_id": "evt-1", "action": "x", "object_type": "x", "occurred_at": "t", "metadata": {"amount": "1"}})
+
+
+===== FILE: services/reporting-analytics/tests/test_redis_event_ledger.py =====
+"""Live Redis regressions for the Dapr event evidence ledger.
+
+These tests connect to the actual local Redis server on a dedicated database
+(`15`) rather than substituting an in-memory cache. That is important because
+the property we need is Redis's atomic Lua execution: a duplicate must not be
+able to add a second stream entry even if deliveries race.
+"""
+
+import json
+
+import pytest
+from fastapi.testclient import TestClient
+from redis import Redis
+
+import umojaflowos_reporting.service as service
+
+
+REDIS_URL = "redis://127.0.0.1:6379/15"
+
+
+def event() -> dict:
+    return {
+        "id": "dapr-live-redis-event-1",
+        "source": "payment-engine",
+        "specversion": "1.0",
+        "type": "com.dapr.event.sent",
+        "topic": "payment.events",
+        "pubsubname": "kafka",
+        "data": {
+            "event_id": "redis-event-1",
+            "event_type": "umojaflowos.payment.order.validated.v1",
+            "schema_version": "v1",
+            "correlation_id": "order-redis-1",
+            "payload": {"status": "APPROVED"},
+        },
+    }
+
+
+@pytest.fixture(autouse=True)
+def real_redis_ledger():
+    redis = Redis.from_url(REDIS_URL, decode_responses=True)
+    try:
+        redis.ping()
+    except Exception as exc:  # pragma: no cover - explicit environment block
+        pytest.skip(f"local Redis is not running: {exc}")
+    # Database 15 is reserved for this regression; it holds no operational data.
+    redis.delete(service.RedisEventEvidenceLedger._STREAM_KEY)
+    for key in redis.scan_iter(match=f"{service.RedisEventEvidenceLedger._DEDUPE_PREFIX}*"):
+        redis.delete(key)
+
+    service.configure_event_evidence_ledger(REDIS_URL)
+    try:
+        yield redis
+    finally:
+        service.EVENT_EVIDENCE_LEDGER = service.UnavailableEventEvidenceLedger()
+        redis.delete(service.RedisEventEvidenceLedger._STREAM_KEY)
+        for key in redis.scan_iter(match=f"{service.RedisEventEvidenceLedger._DEDUPE_PREFIX}*"):
+            redis.delete(key)
+
+
+def test_real_redis_records_once_then_acknowledges_duplicates(real_redis_ledger: Redis) -> None:
+    client = TestClient(service.app)
+    first = client.post("/events/payment-order-validated", json=event())
+    assert first.status_code == 200
+    assert first.json() == {"status": "SUCCESS", "delivery": "recorded"}
+
+    second = client.post("/events/payment-order-validated", json=event())
+    assert second.status_code == 200
+    assert second.json() == {"status": "SUCCESS", "delivery": "duplicate"}
+
+    assert real_redis_ledger.xlen(service.RedisEventEvidenceLedger._STREAM_KEY) == 1
+    _, fields = real_redis_ledger.xrange(service.RedisEventEvidenceLedger._STREAM_KEY, count=1)[0]
+    captured = json.loads(fields["cloud_event"])
+    assert captured["data"]["event_id"] == "redis-event-1"
+    assert captured["data"]["correlation_id"] == "order-redis-1"
+    # The exact CloudEvent is preserved as a canonical JSON string — no caller
+    # may replace it with an interpreted approval or an execution instruction.
+    assert captured["data"]["payload"] == {"status": "APPROVED"}
+
+
+def test_redis_ledger_hashes_untrusted_event_ids_in_its_keyspace(real_redis_ledger: Redis) -> None:
+    payload = event()
+    payload["data"]["event_id"] = "../untrusted event id/with separators"
+    client = TestClient(service.app)
+    response = client.post("/events/payment-order-validated", json=payload)
+    assert response.status_code == 200
+    keys = list(real_redis_ledger.scan_iter(match=f"{service.RedisEventEvidenceLedger._DEDUPE_PREFIX}*"))
+    assert len(keys) == 1
+    assert ".." not in keys[0]
+    assert "/" not in keys[0]
+
+
+===== FILE: services/reporting-analytics/tests/test_regulatory_submission.py =====
+from __future__ import annotations
+
+import json
+import unittest
+from unittest.mock import patch
+
+from umojaflowos_reporting.regulatory_submission import (
+    AuthorisedRegulatoryChannel,
+    RegulatorySubmissionRequest,
+    RegulatorySubmissionUnavailable,
+)
+
+
+class _Response:
+    status = 202
+
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def read(self, _limit: int) -> bytes:
+        return self._body
+
+    def __enter__(self) -> "_Response":
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+
+def request() -> RegulatorySubmissionRequest:
+    return RegulatorySubmissionRequest(
+        regulator="CBN",
+        report_type="monthly-return",
+        regulated_entity_id="entity-001",
+        artifact_uri="https://evidence.example/reports/monthly-return.json",
+        artifact_digest="a" * 64,
+        evidence_manifest={"record_count": 1, "source_hash": "b" * 64},
+        correlation_id="report-001",
+    )
+
+
+class RegulatorySubmissionTests(unittest.TestCase):
+    def test_requires_https_channel(self) -> None:
+        with self.assertRaises(RegulatorySubmissionUnavailable):
+            AuthorisedRegulatoryChannel(endpoint="http://channel.example/submit", api_key="x" * 16, channel_reference="cbn-channel")
+
+    def test_records_only_an_attributable_receipt(self) -> None:
+        channel = AuthorisedRegulatoryChannel(endpoint="https://channel.example/submit", api_key="x" * 16, channel_reference="cbn-channel")
+        body = json.dumps({"external_reference": "CBN-ACK-1001", "state": "accepted"}).encode("utf-8")
+        with patch("umojaflowos_reporting.regulatory_submission.urlopen", return_value=_Response(body)) as opener:
+            receipt = channel.submit(request())
+        self.assertEqual(receipt.external_reference, "CBN-ACK-1001")
+        self.assertEqual(receipt.state, "accepted")
+        self.assertEqual(len(receipt.response_evidence_sha256), 64)
+        outbound = opener.call_args.args[0]
+        self.assertEqual(outbound.get_header("X-umoja-correlation-id"), "report-001")
+
+    def test_refuses_receipt_without_external_reference(self) -> None:
+        channel = AuthorisedRegulatoryChannel(endpoint="https://channel.example/submit", api_key="x" * 16, channel_reference="cbn-channel")
+        with patch("umojaflowos_reporting.regulatory_submission.urlopen", return_value=_Response(b'{"state":"accepted"}')):
+            with self.assertRaises(RegulatorySubmissionUnavailable):
+                channel.submit(request())
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+===== FILE: services/reporting-analytics/tests/test_reporting.py =====
+import unittest
+
+from umojaflowos_reporting import ReportValidationError, build_evidence_manifest, validate_report_pack
+
+
+class ReportingTests(unittest.TestCase):
+    def test_requires_regulator_specific_report_fields(self) -> None:
+        with self.assertRaises(ReportValidationError):
+            validate_report_pack({"regulator": "CBN", "corridor": "Nigeria"})
+
+    def test_builds_hash_evidence_for_valid_regulator(self) -> None:
+        manifest = build_evidence_manifest("SARB", b'{"report":"validated"}', 2)
+        self.assertEqual(manifest.regulator, "SARB")
+        self.assertEqual(manifest.record_count, 2)
+        self.assertEqual(len(manifest.source_hash), 64)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+===== FILE: services/reporting-analytics/tests/test_service_contract_envelopes.py =====
+"""Service-level regressions for the two cross-language contract envelopes.
+
+The module-level tests already prove the assembly and exposure arithmetic. What
+these tests prove is different and was previously untested: that the FastAPI
+responses are shaped exactly as the TypeScript control plane's strict contract
+parsers require. Those parsers reject unknown fields, so an extra key here is a
+failure and not a harmless addition — which is why the previous free-form
+``{"report": ...}`` wrapper could never have been accepted at the boundary.
+"""
+
+from __future__ import annotations
+
+import json
+from datetime import datetime, timedelta, timezone
+
+from fastapi.testclient import TestClient
+
+from umojaflowos_reporting.service import (
+    ASSEMBLED_REPORT_ENVELOPE,
+    CONTRACT_VERSION,
+    SERVICE_NAME,
+    STABLECOIN_EXPOSURE_ENVELOPE,
+    app,
+)
+
+client = TestClient(app)
+
+# Keys the control plane refuses at any depth, because a service output must
+# never carry execution authority or credentials.
+FORBIDDEN_KEYS = {
+    "execute",
+    "execution_instruction",
+    "settle",
+    "settlement_instruction",
+    "submit",
+    "submission_instruction",
+    "file_report",
+    "transfer",
+    "transfer_instruction",
+    "provider_credential",
+    "credential",
+    "api_key",
+}
+
+# Exactly the fields the assembled-report contract declares. Both directions are
+# asserted: a missing field fails the parse, and an extra field fails it too.
+ASSEMBLED_REPORT_FIELDS = {
+    "service",
+    "contract_version",
+    "envelope_type",
+    "regulator",
+    "corridor",
+    "settlement_currency",
+    "report_type",
+    "period_start",
+    "period_end",
+    "regulated_entity_id",
+    "generated_at",
+    "totals",
+    "artifact_digest",
+    "submission_state",
+}
+
+EXPOSURE_FIELDS = {
+    "service",
+    "contract_version",
+    "envelope_type",
+    "generated_at",
+    "total_usd_equivalent",
+    "corridor_exposures",
+    "observations",
+}
+
+EXPOSURE_LINE_FIELDS = {
+    "corridor",
+    "asset",
+    "available_amount",
+    "reserved_amount",
+    "total_amount",
+    "usd_equivalent",
+    "peg_deviation_basis_points",
+    "position_count",
+    "source_references",
+}
+
+
+def _assert_no_execution_authority(value: object, path: str = "$") -> None:
+    if isinstance(value, list):
+        for index, entry in enumerate(value):
+            _assert_no_execution_authority(entry, f"{path}[{index}]")
+        return
+    if not isinstance(value, dict):
+        return
+    for key, nested in value.items():
+        assert key.lower() not in FORBIDDEN_KEYS, f"forbidden key at {path}.{key}"
+        _assert_no_execution_authority(nested, f"{path}.{key}")
+
+
+def response_text(body: object) -> str:
+    """Serialise a response body for substring assertions."""
+    return json.dumps(body)
+
+
+def _sarb_assembly_request() -> dict[str, object]:
+    return {
+        "regulator": "SARB",
+        "report_type": "cross_border_settlement_return",
+        "period_start": "2026-01-01",
+        "period_end": "2026-01-31",
+        "regulated_entity_id": "entity-under-test",
+        "transactions": [
+            {
+                "transaction_reference": "txn-inbound-1",
+                "value_date": "2026-01-05",
+                "currency": "ZAR",
+                "amount": "1000.00",
+                "direction": "inbound",
+                "counterparty_reference": "cp-1",
+            },
+            {
+                "transaction_reference": "txn-outbound-1",
+                "value_date": "2026-01-06",
+                "currency": "ZAR",
+                "amount": "250.00",
+                "direction": "outbound",
+                "counterparty_reference": "cp-2",
+            },
+        ],
+    }
+
+
+def test_assembled_report_envelope_matches_the_published_contract_exactly() -> None:
+    response = client.post("/v1/reports/assemble", json=_sarb_assembly_request())
+    assert response.status_code == 200
+    body = response.json()
+
+    assert set(body) == ASSEMBLED_REPORT_FIELDS
+    assert body["service"] == SERVICE_NAME
+    assert body["contract_version"] == CONTRACT_VERSION
+    assert body["envelope_type"] == ASSEMBLED_REPORT_ENVELOPE
+    # The regulator must be paired with the corridor it actually supervises; the
+    # control plane rejects a mismatch as a mis-filed return.
+    assert body["regulator"] == "SARB"
+    assert body["corridor"] == "SOUTH_AFRICA_ZAR"
+    assert body["settlement_currency"] == "ZAR"
+    assert set(body["totals"]) == {
+        "record_count",
+        "inbound_total",
+        "outbound_total",
+        "net_total",
+    }
+    assert body["totals"]["record_count"] == 2
+    assert len(body["artifact_digest"]) == 64
+    _assert_no_execution_authority(body)
+
+
+def test_assembled_report_is_never_declared_submitted() -> None:
+    body = client.post("/v1/reports/assemble", json=_sarb_assembly_request()).json()
+    # A submitted state would let an assembler assert a regulator filing that no
+    # authorised channel has acknowledged.
+    assert body["submission_state"] == "assembled_pending_review"
+    assert "submitted" not in response_text(body)
+
+
+def test_assembled_report_envelope_carries_no_row_level_customer_data() -> None:
+    body = client.post("/v1/reports/assemble", json=_sarb_assembly_request()).json()
+    # Row detail stays inside the service. The envelope carries recomputed totals
+    # and a digest, so the boundary transfers no per-transaction counterparty data.
+    assert "rows" not in body
+    assert "cp-1" not in response_text(body)
+
+
+def test_mismatched_currency_fails_closed_rather_than_assembling() -> None:
+    request = _sarb_assembly_request()
+    request["transactions"][0]["currency"] = "NGN"
+    response = client.post("/v1/reports/assemble", json=request)
+    assert response.status_code == 422
+    assert "settlement currency" in response.json()["detail"]
+
+
+def _exposure_request() -> dict[str, object]:
+    now = datetime.now(timezone.utc)
+    recent = (now - timedelta(minutes=5)).isoformat()
+    return {
+        "as_of": now.isoformat(),
+        "max_position_age_minutes": 60,
+        "max_observation_age_minutes": 60,
+        "positions": [
+            {
+                "corridor": "NIGERIA_NGN",
+                "asset": "USDC",
+                "account_reference": "custody-ngn-1",
+                "available_amount": "1000.000000",
+                "reserved_amount": "0.000000",
+                "source_reference": "recon-ngn-1",
+                "reconciled_at": recent,
+            }
+        ],
+        "peg_observations": [
+            {
+                "asset": "USDC",
+                "rate_to_usd": "1.0000",
+                "source_reference": "peg-usdc-1",
+                "observed_at": recent,
+            }
+        ],
+    }
+
+
+def test_stablecoin_exposure_envelope_matches_the_published_contract_exactly() -> None:
+    response = client.post("/v1/treasury/stablecoin-exposure", json=_exposure_request())
+    assert response.status_code == 200
+    body = response.json()
+
+    assert set(body) == EXPOSURE_FIELDS
+    assert body["service"] == SERVICE_NAME
+    assert body["envelope_type"] == STABLECOIN_EXPOSURE_ENVELOPE
+    assert len(body["corridor_exposures"]) == 1
+    line = body["corridor_exposures"][0]
+    assert set(line) == EXPOSURE_LINE_FIELDS
+    assert line["corridor"] == "NIGERIA_NGN"
+    assert line["asset"] == "USDC"
+    # Source references must be a JSON array the contract can require to be
+    # non-empty; a tuple serialised as a string would defeat that check.
+    assert line["source_references"] == ["recon-ngn-1"]
+    assert line["position_count"] == 1
+    _assert_no_execution_authority(body)
+
+
+def test_stale_position_fails_closed_rather_than_reporting_exposure() -> None:
+    request = _exposure_request()
+    stale = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+    request["positions"][0]["reconciled_at"] = stale
+    response = client.post("/v1/treasury/stablecoin-exposure", json=request)
+    assert response.status_code == 422
+
+
+def test_missing_peg_observation_fails_closed_rather_than_assuming_parity() -> None:
+    request = _exposure_request()
+    request["peg_observations"] = []
+    response = client.post("/v1/treasury/stablecoin-exposure", json=request)
+    # A missing peg observation must not be silently treated as 1.00 USD.
+    assert response.status_code == 422
+
+
+===== FILE: services/reporting-analytics/tests/test_service_metrics.py =====
+"""Regressions for the reporting service's metrics endpoint.
+
+The endpoint is only worth anything if its numbers are measurements. Each test
+drives real requests through the ASGI application and then requires the
+counters to reflect exactly that traffic, so an implementation returning
+plausible constants would fail.
+"""
+
+from __future__ import annotations
+
+import importlib
+
+import pytest
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture()
+def client() -> TestClient:
+    # The module holds process-wide counters, so it is reloaded per test to
+    # give each one a service that has served nothing.
+    module = importlib.reload(importlib.import_module("umojaflowos_reporting.service"))
+    return TestClient(module.app)
+
+
+def test_metrics_identify_the_service_and_start_at_zero(client: TestClient) -> None:
+    payload = client.get("/v1/metrics").json()
+    assert payload["service"] == "reporting-analytics"
+    assert payload["language"] == "python"
+    assert payload["requests_total"] == 0
+    assert payload["reports_assembled"] == 0
+    # An observation time is required so a stale reading is visibly stale.
+    assert payload["observed_at"].endswith("Z")
+
+
+def test_metrics_count_every_served_request(client: TestClient) -> None:
+    for _ in range(3):
+        client.get("/healthz")
+    payload = client.get("/v1/metrics").json()
+    assert payload["requests_total"] == 3
+
+
+def test_reading_metrics_does_not_inflate_the_metrics(client: TestClient) -> None:
+    # Polling the dashboard must not change what the dashboard reports.
+    client.get("/healthz")
+    for _ in range(4):
+        client.get("/v1/metrics")
+    payload = client.get("/v1/metrics").json()
+    assert payload["requests_total"] == 1
+
+
+def test_rejected_requests_are_distinguished_from_failures(client: TestClient) -> None:
+    # A malformed body is the caller's error, not the service's, and the two
+    # must not be collapsed: they call for different operational responses.
+    response = client.post("/v1/reports/assemble", json={"regulator": "CBN"})
+    assert response.status_code in (422, 400)
+    payload = client.get("/v1/metrics").json()
+    assert payload["requests_total"] == 1
+    assert payload["requests_rejected"] == 1
+    assert payload["requests_failed"] == 0
+
+
+def test_assembled_reports_are_counted_only_on_success(client: TestClient) -> None:
+    # A rejected assembly must not count as an assembled report.
+    client.post("/v1/reports/assemble", json={"regulator": "CBN"})
+    payload = client.get("/v1/metrics").json()
+    assert payload["reports_assembled"] == 0
+
+
+def test_metrics_restate_that_submission_is_disabled(client: TestClient) -> None:
+    payload = client.get("/v1/metrics").json()
+    assert payload["regulatory_submission"] == "disabled_without_verified_channel"
+
+
+===== FILE: services/reporting-analytics/tests/test_stablecoin_exposure.py =====
+"""Regressions for stablecoin exposure reporting.
+
+These assert exact decimal arithmetic and prove that every missing or stale
+piece of evidence fails closed rather than producing a partial total.
+"""
+from datetime import timedelta
+from decimal import Decimal
+
+import pytest
+
+from umojaflowos_reporting.stablecoin_exposure import (
+    ExposureReportError,
+    PegObservation,
+    StablecoinPosition,
+    build_stablecoin_exposure_report,
+    utc,
+)
+
+AS_OF = utc(2026, 8, 18, 12, 0, 0)
+MAX_POSITION_AGE = timedelta(hours=24)
+MAX_OBSERVATION_AGE = timedelta(minutes=30)
+
+
+def position(corridor="NIGERIA_NGN", asset="USDC", available="1000.00", reserved="250.00", minutes_old=5):
+    return StablecoinPosition(
+        corridor=corridor,
+        asset=asset,
+        account_reference=f"{corridor}-{asset}-CUSTODY-1",
+        available_amount=Decimal(available),
+        reserved_amount=Decimal(reserved),
+        source_reference=f"custody-statement-{corridor}-{asset}",
+        reconciled_at=AS_OF - timedelta(minutes=minutes_old),
+    )
+
+
+def observation(asset="USDC", rate="1.0000", minutes_old=2):
+    return PegObservation(
+        asset=asset,
+        rate_to_usd=Decimal(rate),
+        source_reference=f"market-data-{asset}",
+        observed_at=AS_OF - timedelta(minutes=minutes_old),
+    )
+
+
+def build(positions, observations, **overrides):
+    kwargs = {
+        "as_of": AS_OF,
+        "max_position_age": MAX_POSITION_AGE,
+        "max_observation_age": MAX_OBSERVATION_AGE,
+    }
+    kwargs.update(overrides)
+    return build_stablecoin_exposure_report(positions, observations, **kwargs)
+
+
+def test_aggregates_positions_per_corridor_and_asset_with_exact_arithmetic():
+    report = build(
+        [
+            position(available="1000.00", reserved="250.00"),
+            position(available="500.50", reserved="0.50"),
+            position(corridor="KENYA_KES", asset="USDT", available="2000.00", reserved="0.00"),
+        ],
+        {"USDC": observation("USDC", "1.0000"), "USDT": observation("USDT", "1.0000")},
+    )
+    by_key = {(e.corridor, e.asset): e for e in report.corridor_exposures}
+    ngn_usdc = by_key[("NIGERIA_NGN", "USDC")]
+    assert ngn_usdc.available_amount == Decimal("1500.50")
+    assert ngn_usdc.reserved_amount == Decimal("250.50")
+    assert ngn_usdc.total_amount == Decimal("1751.00")
+    assert ngn_usdc.position_count == 2
+    assert report.total_usd_equivalent == Decimal("3751.0000")
+
+
+def test_reports_peg_deviation_as_an_observation_not_an_adjustment():
+    report = build([position()], {"USDC": observation("USDC", "0.9985")})
+    exposure = report.corridor_exposures[0]
+    assert exposure.peg_deviation_basis_points == -15
+    assert exposure.usd_equivalent == Decimal("1250.00") * Decimal("0.9985")
+    assert any("bps from peg" in note for note in report.observations)
+
+
+def test_fails_closed_when_no_peg_observation_exists_for_a_held_asset():
+    with pytest.raises(ExposureReportError, match="no peg observation supplied for USDT"):
+        build([position(asset="USDT")], {"USDC": observation("USDC")})
+
+
+def test_fails_closed_on_a_stale_peg_observation():
+    with pytest.raises(ExposureReportError, match="stale"):
+        build([position()], {"USDC": observation("USDC", minutes_old=45)})
+
+
+def test_fails_closed_on_a_position_reconciled_outside_the_window():
+    with pytest.raises(ExposureReportError, match="reconciled outside the permitted window"):
+        build([position(minutes_old=60 * 30)], {"USDC": observation("USDC")})
+
+
+def test_fails_closed_on_future_dated_position_or_peg_observation():
+    with pytest.raises(ExposureReportError, match="after the report cutoff"):
+        build([position(minutes_old=-1)], {"USDC": observation("USDC")})
+    with pytest.raises(ExposureReportError, match="after the report cutoff"):
+        build([position()], {"USDC": observation("USDC", minutes_old=-1)})
+
+
+def test_fails_closed_when_no_positions_are_supplied():
+    with pytest.raises(ExposureReportError, match="no reconciled stablecoin positions"):
+        build([], {"USDC": observation("USDC")})
+
+
+def test_rejects_unsupported_assets_and_corridors():
+    with pytest.raises(ExposureReportError, match="unsupported stablecoin"):
+        build([position(asset="DAI")], {"USDC": observation("USDC")})
+    with pytest.raises(ExposureReportError, match="unsupported corridor"):
+        build([position(corridor="GHANA_GHS")], {"USDC": observation("USDC")})
+
+
+def test_rejects_a_position_without_a_source_reference():
+    bad = StablecoinPosition(
+        corridor="NIGERIA_NGN",
+        asset="USDC",
+        account_reference="acct-1",
+        available_amount=Decimal("1"),
+        reserved_amount=Decimal("0"),
+        source_reference="   ",
+        reconciled_at=AS_OF,
+    )
+    with pytest.raises(ExposureReportError, match="requires a source reference"):
+        build([bad], {"USDC": observation("USDC")})
+
+
+def test_rejects_negative_and_non_finite_amounts():
+    with pytest.raises(ExposureReportError, match="cannot be negative"):
+        build([position(available="-1.00")], {"USDC": observation("USDC")})
+    with pytest.raises(ExposureReportError, match="finite"):
+        build([position(available="NaN")], {"USDC": observation("USDC")})
+
+
+def test_rejects_a_zero_or_negative_peg_rate():
+    with pytest.raises(ExposureReportError, match="greater than zero"):
+        build([position()], {"USDC": observation("USDC", "0")})
+    with pytest.raises(ExposureReportError, match="cannot be negative"):
+        build([position()], {"USDC": observation("USDC", "-1")})
+
+
+def test_report_carries_provenance_and_no_rebalancing_instruction():
+    report = build([position()], {"USDC": observation("USDC")})
+    exposure = report.corridor_exposures[0]
+    assert exposure.source_references == ("custody-statement-NIGERIA_NGN-USDC",)
+    # The report must not expose anything that reads as an execution instruction.
+    for forbidden in ("instruction", "transfer", "rebalance", "execute"):
+        assert not any(forbidden in name for name in vars(exposure))
+
+
+===== FILE: services/reporting-analytics/tests/test_stablecoin_lakehouse_projection.py =====
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+from fastapi.testclient import TestClient
+
+from umojaflowos_reporting import service
+
+
+class RecordingWriter:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, list[dict[str, object]]]] = []
+
+    def write(self, dataset: str, records: list[dict[str, object]]):
+        self.calls.append((dataset, records))
+        return SimpleNamespace(payload_sha256="c" * 64), "bronze/payment-lifecycle-evidence/exposure.json", "created"
+
+
+def request_payload() -> dict[str, object]:
+    return {
+        "as_of": "2026-08-19T00:00:00Z",
+        "max_position_age_minutes": 60,
+        "max_observation_age_minutes": 60,
+        "positions": [
+            {
+                "corridor": "NIGERIA_NGN",
+                "asset": "USDC",
+                "account_reference": "internal-account-ref",
+                "available_amount": "12.50",
+                "reserved_amount": "0.50",
+                "source_reference": "reconciled-source-ref",
+                "reconciled_at": "2026-08-18T23:55:00Z",
+            }
+        ],
+        "peg_observations": [
+            {
+                "asset": "USDC",
+                "rate_to_usd": "1.00",
+                "source_reference": "peg-source-ref",
+                "observed_at": "2026-08-18T23:59:00Z",
+            }
+        ],
+    }
+
+
+def test_stablecoin_exposure_writes_only_redacted_catalog_evidence_when_enabled(monkeypatch) -> None:
+    writer = RecordingWriter()
+    monkeypatch.setenv("UMOJA_LAKEHOUSE_PROJECT_STABLECOIN_EXPOSURE", "true")
+    monkeypatch.setattr(service, "configured_lakehouse_writer", lambda: writer)
+
+    response = TestClient(service.app).post("/v1/treasury/stablecoin-exposure", json=request_payload())
+
+    assert response.status_code == 200
+    assert "lakehouse_projection" not in response.json()
+    assert writer.calls[0][0] == "payment-lifecycle-evidence"
+    record = writer.calls[0][1][0]
+    assert record["source"] == "stablecoin_exposure"
+    assert record["authoritative"] is False
+    rendered = str(record)
+    assert "12.50" not in rendered
+    assert "internal-account-ref" not in rendered
+    assert "reconciled-source-ref" not in rendered
+
+
+def test_stablecoin_exposure_does_not_write_lakehouse_evidence_when_disabled(monkeypatch) -> None:
+    writer = RecordingWriter()
+    monkeypatch.delenv("UMOJA_LAKEHOUSE_PROJECT_STABLECOIN_EXPOSURE", raising=False)
+    monkeypatch.setattr(service, "configured_lakehouse_writer", lambda: writer)
+
+    response = TestClient(service.app).post("/v1/treasury/stablecoin-exposure", json=request_payload())
+
+    assert response.status_code == 200
+    assert writer.calls == []
+
+
+===== FILE: services/reporting-analytics/tests/test_trade_payment_control.py =====
+import unittest
+from trade_payment_control import summarize_trade_cases
+
+
+class TradePaymentControlReportTests(unittest.TestCase):
+    def test_summary_is_non_authoritative_and_does_not_claim_execution(self):
+        result = summarize_trade_cases([{"case_reference": "TPC-NG-001", "status": "blocked"}])
+        self.assertEqual(result["blocked_case_references"], ["TPC-NG-001"])
+        self.assertFalse(result["provider_execution_initiated"])
+        self.assertFalse(result["settlement_asserted"])
+        self.assertFalse(result["authoritative_for_execution"])
+
+
+if __name__ == "__main__":
+    unittest.main()

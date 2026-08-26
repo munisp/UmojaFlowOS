@@ -1,0 +1,23 @@
+# Merge these fragments into the Prometheus server configuration for a staging-only run.
+# The Locust target must be a protected internal service or a short-lived test-runner endpoint.
+scrape_configs:
+  - job_name: umoja-retention-locust
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - locust-retention-loadtest.security.svc.cluster.local:9646
+        labels:
+          service: retention-worker-loadtest
+          environment: staging
+
+  - job_name: umoja-postgres-exporter
+    static_configs:
+      - targets:
+          - postgres-exporter.monitoring.svc.cluster.local:9187
+        labels:
+          service: retention-postgresql
+          environment: staging
+
+# Configure postgres_exporter with:
+#   PG_EXPORTER_EXTEND_QUERY_PATH=/etc/postgres-exporter/queries.yaml
+# where queries.yaml is postgres-retention-lock-queries.yaml.

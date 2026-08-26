@@ -12,10 +12,11 @@
 --   psql -v app_role=<role> -d umojaflowos_dev -f database/postgresql/grants.sql
 
 \set app_role_ident :app_role
+SELECT current_database() AS target_database_name \gset
 
 BEGIN;
 
-GRANT CONNECT ON DATABASE umojaflowos_dev TO :"app_role_ident";
+GRANT CONNECT ON DATABASE :"target_database_name" TO :"app_role_ident";
 GRANT USAGE ON SCHEMA public TO :"app_role_ident";
 
 -- Read access across the canonical schema for auditor-visible ledgers.

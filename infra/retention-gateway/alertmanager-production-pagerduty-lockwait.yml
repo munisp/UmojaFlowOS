@@ -1,0 +1,66 @@
+# Merge this route and receiver into the production Alertmanager configuration.
+# Store the routing key in a mounted secret; never commit it to this file.
+route:
+  receiver: default
+  group_by: [alertname, service, environment, database]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - alertname = "UmojaRetentionPostgresLockWaitProductionCritical"
+        - service = "retention-delete-worker"
+        - environment = "production"
+        - urgency = "page"
+      receiver: pagerduty-retention-postgres-critical
+      group_wait: 0s
+      group_interval: 5m
+      repeat_interval: 30m
+    - matchers:
+        - alertname =~ "UmojaRetention(DatabaseCircuit(Open|OpenTransition)|SyntheticCircuitOpenObserved)"
+        - service = "retention-delete-worker"
+        - environment = "production"
+        - urgency = "page"
+      receiver: pagerduty-retention-postgres-critical
+      group_wait: 0s
+      group_interval: 5m
+      repeat_interval: 30m
+      continue: true
+    - matchers:
+        - team = "engineering"
+        - service = "retention-delete-worker"
+        - environment = "production"
+      receiver: webhook-retention-engineering
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 2h
+
+receivers:
+  - name: default
+  - name: webhook-retention-engineering
+    webhook_configs:
+      - url_file: /etc/alertmanager/secrets/retention-engineering-webhook/url
+        send_resolved: true
+        max_alerts: 0
+  - name: pagerduty-retention-postgres-critical
+    pagerduty_configs:
+      - routing_key_file: /etc/alertmanager/secrets/retention-postgres-pagerduty/routing-key
+        severity: critical
+        component: postgresql-lock-manager
+        class: retention-authorization
+        group: umojaflowos-retention-production
+        description: '{{ .CommonAnnotations.summary }}'
+        details:
+          firing_alerts: '{{ template "__alerts_firing" . }}'
+          runbook_url: '{{ .CommonAnnotations.runbook_url }}'
+          database: '{{ .CommonLabels.database }}'
+          observed_value: '{{ .CommonAnnotations.observed_value }}'
+
+inhibit_rules:
+  - source_matchers:
+      - alertname = "UmojaRetentionPostgresLockWaitProductionCritical"
+      - environment = "production"
+    target_matchers:
+      - alertname = "UmojaRetentionPostgresLockWaitProductionWarning"
+      - environment = "production"
+    equal: [service, database]

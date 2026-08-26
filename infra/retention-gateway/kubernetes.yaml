@@ -1,0 +1,160 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: umoja-retention-worker
+  namespace: security
+  labels:
+    app.kubernetes.io/name: umoja-retention-worker
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: umoja-retention-worker-secrets
+  namespace: security
+type: Opaque
+stringData:
+  # Replace through an external-secrets controller; do not commit real values.
+  RETENTION_WORKER_DATABASE_URL: postgresql://retention_worker_app@postgres.security.svc.cluster.local:5432/umoja?sslmode=verify-full
+  RETENTION_WORKER_BEARER_TOKEN: replace-via-external-secrets
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  # This Secret is mounted only by the Gateway issuance service, never by the worker.
+  name: umoja-retention-gateway-secrets
+  namespace: security
+type: Opaque
+stringData:
+  RETENTION_GATEWAY_DATABASE_URL: postgresql://retention_gateway_app@postgres.security.svc.cluster.local:5432/umoja?sslmode=verify-full
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: umoja-retention-worker
+  namespace: security
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: umoja-retention-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: umoja-retention-worker
+    spec:
+      serviceAccountName: umoja-retention-worker
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: worker
+          image: ghcr.io/munisp/umojaflowos-retention-worker:sha256-replace
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              valueFrom: {secretKeyRef: {name: umoja-retention-worker-secrets, key: RETENTION_WORKER_DATABASE_URL}}
+            - name: RETENTION_WORKER_BEARER_TOKEN
+              valueFrom: {secretKeyRef: {name: umoja-retention-worker-secrets, key: RETENTION_WORKER_BEARER_TOKEN}}
+            - name: OPENSEARCH_URL
+              value: https://opensearch.security.svc.cluster.local:9200
+            - name: OPENSEARCH_CA_FILE
+              value: /var/run/secrets/opensearch/ca.crt
+            - name: OPENSEARCH_CLIENT_CERT_FILE
+              value: /var/run/secrets/opensearch/tls.crt
+            - name: OPENSEARCH_CLIENT_KEY_FILE
+              value: /var/run/secrets/opensearch/tls.key
+            - name: RETENTION_GATEWAY_HMAC_SECRET_FILE
+              value: /var/run/secrets/retention-gateway/hmac
+            - name: RETENTION_MANIFEST_HMAC_SECRET_FILE
+              value: /var/run/secrets/retention-manifest/hmac
+            - name: RETENTION_DB_POOL_MIN_SIZE
+              value: "2"
+            - name: RETENTION_DB_POOL_MAX_SIZE
+              value: "10"
+            - name: RETENTION_DB_POOL_TIMEOUT_SECONDS
+              value: "2"
+            - name: RETENTION_DB_CIRCUIT_FAILURE_THRESHOLD
+              value: "3"
+            - name: RETENTION_DB_CIRCUIT_RESET_SECONDS
+              value: "30"
+            - name: RETENTION_DB_STATEMENT_TIMEOUT_MS
+              value: "5000"
+            - name: RETENTION_DB_LOCK_TIMEOUT_MS
+              value: "1500"
+            - name: RETENTION_DB_IDLE_TRANSACTION_TIMEOUT_MS
+              value: "10000"
+          volumeMounts:
+            - {name: opensearch-tls, mountPath: /var/run/secrets/opensearch, readOnly: true}
+            - {name: retention-gateway-hmac, mountPath: /var/run/secrets/retention-gateway, readOnly: true}
+            - {name: retention-manifest-hmac, mountPath: /var/run/secrets/retention-manifest, readOnly: true}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+      volumes:
+        - name: opensearch-tls
+          secret:
+            secretName: umoja-retention-opensearch-client-tls
+            items:
+              - {key: ca.crt, path: ca.crt}
+              - {key: tls.crt, path: tls.crt}
+              - {key: tls.key, path: tls.key}
+        - name: retention-gateway-hmac
+          secret:
+            secretName: umoja-retention-gateway-hmac
+            items: [{key: hmac, path: hmac}]
+        - name: retention-manifest-hmac
+          secret:
+            secretName: umoja-retention-manifest-hmac
+            items: [{key: hmac, path: hmac}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: umoja-retention-worker
+  namespace: security
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: umoja-retention-worker
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: umoja-retention-worker
+  namespace: security
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: umoja-retention-worker
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: security}
+      ports: [{protocol: TCP, port: 8080}]
+  egress:
+    - to:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: postgres}}
+      ports: [{protocol: TCP, port: 5432}]
+    - to:
+        - podSelector: {matchLabels: {app.kubernetes.io/name: opensearch}}
+      ports: [{protocol: TCP, port: 9200}]

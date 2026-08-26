@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: umoja-retention-chaos-validator
+  namespace: security
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: umoja-retention-chaos-reports
+  namespace: security
+  labels:
+    app.kubernetes.io/name: umoja-retention-chaos-validator
+    umoja.io/environment: staging
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: umoja-retention-postgres-pool-weekly-validate
+  namespace: security
+  labels:
+    app.kubernetes.io/name: umoja-retention-chaos-validator
+    umoja.io/environment: staging
+spec:
+  # Runs after the Sunday 03:00 UTC Chaos Mesh Schedule begins its bounded fault.
+  schedule: "2 3 * * 0"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 4
+  failedJobsHistoryLimit: 8
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 900
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: umoja-retention-chaos-validator
+            umoja.io/environment: staging
+        spec:
+          serviceAccountName: umoja-retention-chaos-validator
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: validator
+              image: ghcr.io/munisp/umojaflowos-retention-loadtest:sha256-replace
+              imagePullPolicy: Always
+              command: ["/app/run_weekly_pool_saturation.sh"]
+              env:
+                - name: PYTHONPATH
+                  value: /app
+                - name: CHAOS_ENVIRONMENT
+                  value: staging
+                - name: RETENTION_GATEWAY_DATABASE_URL
+                  valueFrom: {secretKeyRef: {name: umoja-retention-loadtest-secrets, key: RETENTION_GATEWAY_DATABASE_URL}}
+                - name: WORKER_BEARER_TOKEN
+                  valueFrom: {secretKeyRef: {name: umoja-retention-loadtest-secrets, key: RETENTION_WORKER_BEARER_TOKEN}}
+                - name: RETENTION_GATEWAY_HMAC_SECRET_FILE
+                  value: /var/run/secrets/retention-gateway/hmac
+                - name: WORKER_SERVICE_URL
+                  value: http://umoja-retention-worker.security.svc.cluster.local:8080
+                - name: WORKER_METRICS_URL
+                  value: http://umoja-retention-worker.security.svc.cluster.local:8080/metrics
+                - name: PROMETHEUS_URL
+                  valueFrom: {secretKeyRef: {name: umoja-retention-chaos-observability, key: PROMETHEUS_URL}}
+                - name: PROMETHEUS_BEARER_TOKEN_FILE
+                  value: /var/run/secrets/prometheus/token
+                - name: CHAOS_POOL_PAYLOAD_COUNT
+                  value: "20"
+                - name: CHAOS_SETTLE_SECONDS
+                  value: "20"
+              volumeMounts:
+                - name: gateway-hmac
+                  mountPath: /var/run/secrets/retention-gateway
+                  readOnly: true
+                - name: prometheus-token
+                  mountPath: /var/run/secrets/prometheus
+                  readOnly: true
+                - name: reports
+                  mountPath: /work
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 10001
+                runAsGroup: 10001
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: {drop: [ALL]}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {cpu: "1", memory: 1Gi}
+          volumes:
+            - name: gateway-hmac
+              secret:
+                secretName: umoja-retention-gateway-hmac
+                items: [{key: hmac, path: hmac}]
+            - name: prometheus-token
+              secret:
+                secretName: umoja-retention-chaos-observability
+                items: [{key: token, path: token}]
+            - name: reports
+              persistentVolumeClaim:
+                claimName: umoja-retention-chaos-reports
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: umoja-retention-chaos-validator-egress
+  namespace: security
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: umoja-retention-chaos-validator
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: postgres}
+      ports: [{protocol: TCP, port: 5432}]
+    - to:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: umoja-retention-worker}
+      ports: [{protocol: TCP, port: 8080}]
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: monitoring}
+      ports: [{protocol: TCP, port: 9090}]
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]

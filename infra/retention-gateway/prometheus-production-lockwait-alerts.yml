@@ -1,0 +1,31 @@
+groups:
+  - name: umoja-retention-worker-production-postgres
+    rules:
+      - alert: UmojaRetentionPostgresLockWaitProductionWarning
+        expr: max by (database) (pg_retention_lock_wait_max_wait_seconds{environment="production"}) > 1
+        for: 2m
+        labels:
+          severity: warning
+          service: retention-delete-worker
+          compliance_domain: audit_retention
+          environment: production
+        annotations:
+          summary: PostgreSQL retention lock wait exceeds one second
+          description: "The maximum PostgreSQL retention authorization lock wait has exceeded one second for database {{ $labels.database }}. Investigate pool pressure and long-running transactions."
+          observed_value: "{{ $value }} seconds"
+          runbook_url: https://docs.example.invalid/runbooks/retention-worker-postgres-lock-loadtest
+
+      - alert: UmojaRetentionPostgresLockWaitProductionCritical
+        expr: max by (database) (pg_retention_lock_wait_max_wait_seconds{environment="production"}) > 2
+        for: 2m
+        labels:
+          severity: critical
+          urgency: page
+          service: retention-delete-worker
+          compliance_domain: audit_retention
+          environment: production
+        annotations:
+          summary: PostgreSQL retention lock wait exceeds two seconds in production
+          description: "The maximum PostgreSQL retention authorization lock wait has exceeded two seconds for database {{ $labels.database }} for two minutes. Pause retention workload changes, inspect blocking sessions, and reconcile claimed authorizations before retrying."
+          observed_value: "{{ $value }} seconds"
+          runbook_url: https://docs.example.invalid/runbooks/retention-worker-postgres-lock-loadtest

@@ -1,0 +1,17 @@
+# OpenSearch Security plugin roles.yml
+# OpenSearch Security plugin 2.x syntax.
+umoja_retention_delete_worker:
+  reserved: false
+  hidden: false
+  static: false
+  cluster_permissions: []
+  index_permissions:
+    - index_patterns:
+        - "umoja-security-audit-v1-*"
+      dls: ""
+      fls: []
+      masked_fields: []
+      allowed_actions:
+        - "indices:monitor/settings/get"
+        - "indices:admin/delete"
+  tenant_permissions: []

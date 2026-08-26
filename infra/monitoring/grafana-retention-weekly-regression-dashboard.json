@@ -1,0 +1,70 @@
+{
+  "id": null,
+  "uid": "umoja-retention-weekly-regression",
+  "title": "UmojaFlowOS Retention Worker — Weekly Regression Trends",
+  "tags": ["umoja", "retention", "weekly", "locust", "postgresql"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1h",
+  "time": {"from": "now-12w", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Weekly Locust p95 latency",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "umoja_retention_weekly_report_value{metric=\"unique_locust_p95_seconds\",statistic=\"p95\"}", "legendFormat": "unique-digest"},
+        {"expr": "umoja_retention_weekly_report_value{metric=\"contention_locust_p95_seconds\",statistic=\"p95\"}", "legendFormat": "single-digest contention"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s", "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 5}]}}, "overrides": []}
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Weekly request-rate baseline",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "umoja_retention_weekly_report_value{metric=\"unique_requests_per_second\",statistic=\"mean\"}", "legendFormat": "unique mean RPS"},
+        {"expr": "umoja_retention_weekly_report_value{metric=\"contention_requests_per_second\",statistic=\"mean\"}", "legendFormat": "contention mean RPS"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Weekly PostgreSQL lock pressure",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "umoja_retention_weekly_report_value{metric=\"postgres_max_lock_wait_seconds\",statistic=\"maximum\"}", "legendFormat": "maximum lock wait"},
+        {"expr": "umoja_retention_weekly_report_value{metric=\"postgres_lock_waiting_sessions\",statistic=\"maximum\"}", "legendFormat": "maximum waiters"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Weekly security-failure rate",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "umoja_retention_weekly_report_value{metric=\"security_failures_per_second\",statistic=\"maximum\"}", "legendFormat": "maximum failures/sec"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ops", "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 0.000001}]}}, "overrides": []}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Weekly report freshness",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "time() - umoja_retention_weekly_report_generated{environment=\"staging\"}", "legendFormat": "age"}],
+      "fieldConfig": {"defaults": {"unit": "s", "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "orange", "value": 691200}, {"color": "red", "value": 1209600}]}}, "overrides": []}
+    }
+  ],
+  "annotations": {"list": []}
+}

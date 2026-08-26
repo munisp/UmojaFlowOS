@@ -1,0 +1,29 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: umoja-retention-worker-postgres-pool-saturation
+  namespace: security
+  labels:
+    app.kubernetes.io/name: umoja-retention-worker
+    umoja.io/chaos-scope: staging-only
+spec:
+  action: delay
+  mode: all
+  selector:
+    namespaces:
+      - security
+    labelSelectors:
+      app.kubernetes.io/name: umoja-retention-worker
+  direction: to
+  target:
+    mode: all
+    selector:
+      namespaces:
+        - security
+      labelSelectors:
+        app.kubernetes.io/name: postgres
+  delay:
+    latency: 3000ms
+    jitter: 500ms
+    correlation: "100"
+  duration: 2m

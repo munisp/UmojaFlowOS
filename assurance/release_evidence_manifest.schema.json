@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UmojaFlowOS Production Release Evidence Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["release_sha", "environment", "created_at", "artifacts", "approvals"],
+  "properties": {
+    "release_sha": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "environment": {"type": "string", "enum": ["staging", "production"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "artifacts": {
+      "type": "array",
+      "minItems": 9,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["evidence_id", "path", "sha256", "run_id"],
+        "properties": {
+          "evidence_id": {"type": "string", "pattern": "^E-0[1-9]$"},
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "run_id": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "approvals": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "subject", "release_sha", "approved_at"],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": ["release_manager", "security_owner", "compliance_owner", "operations_owner"]
+          },
+          "subject": {"type": "string", "minLength": 1},
+          "release_sha": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+          "approved_at": {"type": "string", "format": "date-time"}
+        }
+      }
+    }
+  }
+}

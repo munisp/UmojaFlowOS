@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { postgresTestPsqlArguments } from "./testPostgres";
+import { postgresTestSchemaOwnerPsqlArguments } from "./testPostgres";
 import { beginCounterpartyRecertification, createCounterpartyOnboarding, decideCounterpartyOnboardingGate } from "./counterpartyOnboarding";
 import {
   closePostgresPool,
@@ -15,11 +15,13 @@ import {
 const admin = { openId: `onboarding-admin-${crypto.randomUUID()}`, role: "admin" as const };
 const compliance = { openId: `onboarding-compliance-${crypto.randomUUID()}`, role: "compliance_officer" as const };
 const treasury = { openId: `onboarding-treasury-${crypto.randomUUID()}`, role: "treasury_operator" as const };
+const runIntegration = process.env.POSTGRES_INTEGRATION_TEST === "1";
+const describeIntegration = runIntegration ? describe : describe.skip;
 
 function purgeFixtureRows() {
   execFileSync(
     "psql",
-    ["-v", "ON_ERROR_STOP=1", "-q", ...postgresTestPsqlArguments(), "-f", "-"],
+    ["-v", "ON_ERROR_STOP=1", "-q", ...postgresTestSchemaOwnerPsqlArguments(), "-f", "-"],
     { input: readFileSync(new URL("../../../database/postgresql/purge_regression_fixtures.sql", import.meta.url)) },
   );
 }
@@ -62,7 +64,7 @@ async function enableFixtureIntegration(counterpartyId: string) {
   await getPool().query("UPDATE integration_connections SET state='active' WHERE id=$1", [integration.id]);
 }
 
-describe("canonical counterparty onboarding lifecycle", () => {
+describeIntegration("canonical counterparty onboarding lifecycle", () => {
   it("requires a verified legal gate, then a verified technical connection, and two independent pilot decisions", async () => {
     purgeFixtureRows();
     const { counterparty, onboarding } = await fixture();

@@ -1,0 +1,68 @@
+alertmanager_config: |
+  global:
+    resolve_timeout: 5m
+
+  route:
+    receiver: default
+    group_by: [alertname, service, environment, database]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
+    routes:
+      - matchers:
+          - alertname = "UmojaRetentionPostgresLockWaitProductionCritical"
+          - service = "retention-delete-worker"
+          - environment = "${environment}"
+          - urgency = "page"
+        receiver: pagerduty-retention-postgres-critical
+        group_wait: 0s
+        group_interval: 5m
+        repeat_interval: 30m
+      - matchers:
+          - alertname =~ "UmojaRetentionDatabaseCircuit(Open|OpenTransition)"
+          - service = "retention-delete-worker"
+          - environment = "${environment}"
+          - urgency = "page"
+        receiver: pagerduty-retention-postgres-critical
+        group_wait: 0s
+        group_interval: 5m
+        repeat_interval: 30m
+        continue: true
+      - matchers:
+          - team = "engineering"
+          - service = "retention-delete-worker"
+          - environment = "${environment}"
+        receiver: webhook-retention-engineering
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 2h
+
+  receivers:
+    - name: default
+    - name: webhook-retention-engineering
+      webhook_configs:
+        - url: "${engineering_webhook}"
+          send_resolved: true
+          max_alerts: 0
+    - name: pagerduty-retention-postgres-critical
+      pagerduty_configs:
+        - routing_key: "${pagerduty_routing_key}"
+          severity: critical
+          component: postgresql-lock-manager
+          class: retention-authorization
+          group: umojaflowos-retention-${environment}
+          description: '{{ .CommonAnnotations.summary }}'
+          details:
+            firing_alerts: '{{ template "__alerts_firing" . }}'
+            runbook_url: '${runbook_url}'
+            database: '{{ .CommonLabels.database }}'
+            observed_value: '{{ .CommonAnnotations.observed_value }}'
+
+  inhibit_rules:
+    - source_matchers:
+        - alertname = "UmojaRetentionPostgresLockWaitProductionCritical"
+        - environment = "${environment}"
+      target_matchers:
+        - alertname = "UmojaRetentionPostgresLockWaitProductionWarning"
+        - environment = "${environment}"
+      equal: [service, database]

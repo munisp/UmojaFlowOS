@@ -1,0 +1,114 @@
+name: retention-loadtest-cronjob-deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/retention-gateway/locust-regression/**'
+      - 'tests/load/**'
+      - 'scripts/infra/prepare_retention_worker_lock_loadtest.py'
+      - 'simulators/retention_gateway/requirements.txt'
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: Optional pre-built immutable sha256 digest to deploy
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+concurrency:
+  group: retention-loadtest-cronjob-staging
+  cancel-in-progress: false
+
+env:
+  IMAGE_REPOSITORY: ghcr.io/munisp/umojaflowos-retention-loadtest
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    environment: staging-gates
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate manifests and runner
+        run: |
+          bash -n infra/retention-gateway/locust-regression/run_profile.sh
+          python3 -m py_compile \
+            tests/load/locust_retention_worker.py \
+            tests/load/locust_prometheus_metrics.py \
+            scripts/infra/prepare_retention_worker_lock_loadtest.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import yaml
+          for path in [
+              Path('infra/retention-gateway/locust-regression/kubernetes-cronjob.yaml'),
+              Path('infra/retention-gateway/prometheus-loadtest-alerts.yml'),
+          ]:
+              list(yaml.safe_load_all(path.read_text()))
+          PY
+      - name: Build container without publishing
+        if: ${{ inputs.image_digest == '' }}
+        run: |
+          docker build \
+            -f infra/retention-gateway/locust-regression/Dockerfile \
+            -t retention-loadtest:validation .
+
+  publish:
+    needs: validate
+    if: ${{ inputs.image_digest == '' }}
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/retention-gateway/locust-regression/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_REPOSITORY }}:${{ github.sha }}
+          provenance: true
+          sbom: true
+
+  deploy:
+    needs: [validate, publish]
+    if: ${{ always() && needs.validate.result == 'success' && (needs.publish.result == 'success' || inputs.image_digest != '') }}
+    runs-on: ubuntu-latest
+    environment: staging-loadtest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure protected staging Kubernetes context
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}
+        run: |
+          test -n "$KUBECONFIG_B64" || { echo 'STAGING_KUBECONFIG_B64 is required'; exit 2; }
+          printf '%s' "$KUBECONFIG_B64" | base64 --decode > "$RUNNER_TEMP/kubeconfig"
+          chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+      - name: Render immutable image reference
+        env:
+          INPUT_DIGEST: ${{ inputs.image_digest }}
+          BUILT_DIGEST: ${{ needs.publish.outputs.digest }}
+        run: |
+          digest="${INPUT_DIGEST:-$BUILT_DIGEST}"
+          case "$digest" in sha256:*) ;; *) echo 'digest must be immutable sha256:*'; exit 2;; esac
+          image="${IMAGE_REPOSITORY}@${digest}"
+          sed "s|ghcr.io/munisp/umojaflowos-retention-loadtest:sha256-replace|${image}|g" \
+            infra/retention-gateway/locust-regression/kubernetes-cronjob.yaml \
+            > "$RUNNER_TEMP/retention-loadtest-cronjobs.yaml"
+          grep -F "$image" "$RUNNER_TEMP/retention-loadtest-cronjobs.yaml"
+      - name: Apply staging-only CronJobs and validate resources
+        run: |
+          kubectl apply -f "$RUNNER_TEMP/retention-loadtest-cronjobs.yaml"
+          kubectl -n security get cronjob umoja-retention-lock-unique umoja-retention-lock-contention
+          kubectl -n security get service locust-retention-loadtest
+          kubectl -n security get networkpolicy umoja-retention-loadtest

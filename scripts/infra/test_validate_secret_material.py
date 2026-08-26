@@ -54,6 +54,22 @@ class SecretMaterialGuardTests(unittest.TestCase):
         self.assertEqual(1, len(violations))
         self.assertIn("deployment-secret reference", violations[0])
 
+    def test_allows_kubernetes_camel_case_non_secret_options(self) -> None:
+        violations = self.scan(
+            {
+                "infra/workload.yaml": (
+                    "automountServiceAccountToken: false\n"
+                    "existingSecret: named-secret-reference\n"
+                )
+            }
+        )
+        self.assertEqual([], violations)
+
+    def test_rejects_uppercase_literal_secret_in_kubernetes_environment(self) -> None:
+        violations = self.scan({"infra/workload.yaml": "WEBHOOK_SECRET: literal-value\n"})
+        self.assertEqual(1, len(violations))
+        self.assertIn("deployment-secret reference", violations[0])
+
     def test_rejects_literal_credential_assignment_in_source(self) -> None:
         literal = "abcdefghijklmnopqrstuvwxyz012345"
         violations = self.scan({"src/unsafe.ts": f'const providerToken = "{literal}";\n'})

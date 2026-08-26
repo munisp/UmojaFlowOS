@@ -1,0 +1,121 @@
+{
+  "id": null,
+  "uid": "umoja-retention-worker-loadtest",
+  "title": "UmojaFlowOS Retention Worker — Locust and PostgreSQL Locking",
+  "tags": ["umoja", "retention", "locust", "postgresql", "security"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {"from": "now-1h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "scenario",
+        "label": "Locust scenario",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "definition": "label_values(umoja_locust_requests_total, scenario)",
+        "query": {"query": "label_values(umoja_locust_requests_total, scenario)", "refId": "Prometheus-scenario"},
+        "includeAll": true,
+        "allValue": ".+",
+        "multi": false,
+        "current": {"text": "All", "value": "$__all"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Locust active users",
+      "gridPos": {"h": 6, "w": 4, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "max(umoja_locust_active_users)", "legendFormat": "users"}],
+      "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]}}, "overrides": []}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Locust request rate",
+      "gridPos": {"h": 6, "w": 4, "x": 4, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(rate(umoja_locust_requests_total{scenario=~\"$scenario\"}[1m]))", "legendFormat": "req/s"}],
+      "fieldConfig": {"defaults": {"unit": "reqps", "thresholds": {"mode": "absolute", "steps": [{"color": "green"}]}}, "overrides": []}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "PostgreSQL lock waiters",
+      "gridPos": {"h": 6, "w": 4, "x": 8, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "max(pg_retention_lock_wait_waiting_sessions)", "legendFormat": "sessions"}],
+      "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "orange", "value": 1}, {"color": "red", "value": 5}]}}, "overrides": []}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Longest PostgreSQL lock wait",
+      "gridPos": {"h": 6, "w": 4, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "max(pg_retention_lock_wait_max_wait_seconds)", "legendFormat": "seconds"}],
+      "fieldConfig": {"defaults": {"unit": "s", "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "orange", "value": 0.25}, {"color": "red", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Worker p95 execution latency",
+      "gridPos": {"h": 6, "w": 4, "x": 16, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(umoja_retention_worker_execution_seconds_bucket[5m])))", "legendFormat": "p95"}],
+      "fieldConfig": {"defaults": {"unit": "s", "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "orange", "value": 1}, {"color": "red", "value": 5}]}}, "overrides": []}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Locust request throughput and failure rate",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "sum(rate(umoja_locust_requests_total{scenario=~\"$scenario\"}[1m]))", "legendFormat": "requests/sec"},
+        {"expr": "sum(rate(umoja_locust_requests_total{scenario=~\"$scenario\",outcome=\"failure\"}[1m]))", "legendFormat": "unexpected failures/sec"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "showPoints": "never"}}, "overrides": []}
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Locust and worker p95 latency",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(umoja_locust_request_duration_seconds_bucket{scenario=~\"$scenario\"}[5m])))", "legendFormat": "Locust p95"},
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(umoja_retention_worker_execution_seconds_bucket[5m])))", "legendFormat": "Worker p95"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s", "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "showPoints": "never"}}, "overrides": []}
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "PostgreSQL lock wait pressure",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "pg_retention_lock_wait_waiting_sessions", "legendFormat": "waiting sessions"},
+        {"expr": "pg_retention_lock_wait_max_wait_seconds", "legendFormat": "max wait seconds"},
+        {"expr": "pg_retention_lock_wait_avg_wait_seconds", "legendFormat": "average wait seconds"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "showPoints": "never"}}, "overrides": []}
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Worker outcomes by result",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum by (result) (rate(umoja_retention_worker_results_total[1m]))", "legendFormat": "{{result}}"}],
+      "fieldConfig": {"defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "showPoints": "never"}}, "overrides": []}
+    }
+  ],
+  "annotations": {"list": []}
+}

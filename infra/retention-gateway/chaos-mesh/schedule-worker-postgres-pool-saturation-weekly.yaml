@@ -1,0 +1,39 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: Schedule
+metadata:
+  name: umoja-retention-postgres-pool-weekly
+  namespace: security
+  labels:
+    app.kubernetes.io/name: umoja-retention-worker
+    umoja.io/environment: staging
+    umoja.io/chaos-scope: staging-only
+  annotations:
+    # Set experiment.chaos-mesh.org/pause=true before blackout periods or releases.
+    umoja.io/off-peak-window: "Sunday 03:00 UTC"
+spec:
+  schedule: "0 3 * * 0"
+  historyLimit: 4
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  type: NetworkChaos
+  networkChaos:
+    action: delay
+    mode: all
+    selector:
+      namespaces:
+        - security
+      labelSelectors:
+        app.kubernetes.io/name: umoja-retention-worker
+    direction: to
+    target:
+      mode: all
+      selector:
+        namespaces:
+          - security
+        labelSelectors:
+          app.kubernetes.io/name: postgres
+    delay:
+      latency: 3000ms
+      jitter: 500ms
+      correlation: "100"
+    duration: 10m

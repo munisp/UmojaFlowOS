@@ -1,0 +1,29 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: umoja-synthetic-monitor-worker-latency
+  namespace: security
+  labels:
+    app.kubernetes.io/part-of: umojaflowos-retention
+    chaos.umoja.io/scope: staging-only
+spec:
+  action: delay
+  mode: all
+  selector:
+    namespaces:
+      - security
+    labelSelectors:
+      app.kubernetes.io/name: umoja-retention-synthetic-monitor
+  direction: to
+  target:
+    mode: all
+    selector:
+      namespaces:
+        - security
+      labelSelectors:
+        app.kubernetes.io/name: umoja-retention-worker
+  delay:
+    latency: 7000ms
+    jitter: 500ms
+    correlation: "100"
+  duration: 2m

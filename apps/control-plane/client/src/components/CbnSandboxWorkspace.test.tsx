@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 vi.mock("@/lib/trpc", () => ({
   trpc: {
-    useUtils: () => ({ postgres: { cbnSandboxDossiers: { invalidate: vi.fn() }, cbnSandboxReadiness: { invalidate: vi.fn() }, vaspRegulatoryProfiles: { invalidate: vi.fn() }, vaspSupervisoryReadiness: { invalidate: vi.fn() }, vaspTravelRuleAssessments: { invalidate: vi.fn() } } }),
+    useUtils: () => ({ postgres: { cbnSandboxDossiers: { invalidate: vi.fn() }, cbnSandboxReadiness: { invalidate: vi.fn() }, vaspRegulatoryProfiles: { invalidate: vi.fn() }, vaspSupervisoryReadiness: { invalidate: vi.fn() }, vaspTravelRuleAssessments: { invalidate: vi.fn() }, readinessAssurance: { invalidate: vi.fn() }, assessReadinessAssurance: { invalidate: vi.fn() } } }),
     postgres: {
       cbnSandboxDossiers: { useQuery: () => ({ data: [], isLoading: false }) },
       legalEntities: { useQuery: () => ({ data: [{ id: "entity-1", legalName: "Nigeria Applicant Ltd", jurisdiction: "Nigeria" }] }) },
@@ -14,6 +14,8 @@ vi.mock("@/lib/trpc", () => ({
       vaspTravelRuleAssessments: { useQuery: () => ({ data: [] }) },
       vaspSupervisoryReadiness: { useQuery: () => ({ data: undefined, isLoading: false }) },
       counterparties: { useQuery: () => ({ data: [] }) },
+      readinessAssurance: { useQuery: () => ({ data: [], isLoading: false }) },
+      assessReadinessAssurance: { useQuery: () => ({ data: undefined, isLoading: false }) },
       createCbnSandboxDossier: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
       recordCbnSandboxEvidence: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
       assessCbnSandboxEvidenceCompleteness: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
@@ -25,6 +27,9 @@ vi.mock("@/lib/trpc", () => ({
       recordVaspSupervisoryEvidence: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
       recordVaspTravelRuleEvidence: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
       assessVaspTravelRuleRoute: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
+      initialiseReadinessAssurance: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
+      recordReadinessAssuranceEvidence: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
+      verifyReadinessAssuranceEvidence: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
     },
   },
 }));

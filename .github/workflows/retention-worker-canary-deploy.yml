@@ -1,0 +1,86 @@
+name: retention-worker-canary-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      tls_secret_name:
+        description: Kubernetes Secret containing the new worker client certificate
+        required: true
+        default: umoja-retention-opensearch-client-tls
+      opensearch_url:
+        description: Private OpenSearch HTTPS URL
+        required: true
+        default: https://opensearch.security.svc.cluster.local:9200
+      test_index:
+        description: Existing disposable audit index for metadata canary
+        required: true
+        default: umoja-security-audit-v1-canary
+  workflow_call:
+    inputs:
+      tls_secret_name: {required: true, type: string}
+      opensearch_url: {required: true, type: string}
+      test_index: {required: true, type: string}
+
+concurrency:
+  group: retention-worker-staging
+  cancel-in-progress: false
+
+jobs:
+  canary-rollout:
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+    env:
+      NAMESPACE: security
+      SECRET_NAME: ${{ inputs.tls_secret_name || github.event.inputs.tls_secret_name }}
+      OPENSEARCH_URL: ${{ inputs.opensearch_url || github.event.inputs.opensearch_url }}
+      TEST_INDEX: ${{ inputs.test_index || github.event.inputs.test_index }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Kubernetes context
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}
+        run: |
+          test -n "$KUBECONFIG_B64"
+          printf '%s' "$KUBECONFIG_B64" | base64 --decode > "$RUNNER_TEMP/kubeconfig"
+          chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+      - name: Verify new certificate Secret exists
+        run: kubectl -n "$NAMESPACE" get secret "$SECRET_NAME"
+      - name: Run pre-rollout mTLS canary
+        run: ./scripts/infra/verify_retention_worker_mtls_canary.sh
+      - name: Restart worker for rolling certificate adoption
+        run: |
+          kubectl -n "$NAMESPACE" rollout restart deployment/umoja-retention-worker
+          kubectl -n "$NAMESPACE" rollout status deployment/umoja-retention-worker --timeout=10m
+      - name: Run post-rollout mTLS canary
+        run: ./scripts/infra/verify_retention_worker_mtls_canary.sh
+      - name: Verify all worker replicas and security metrics
+        run: |
+          ready=$(kubectl -n "$NAMESPACE" get pods -l app.kubernetes.io/name=umoja-retention-worker \
+            -o jsonpath='{range .items[*]}{.status.containerStatuses[0].ready}{"\n"}{end}' | grep -c '^true$' || true)
+          desired=$(kubectl -n "$NAMESPACE" get deployment umoja-retention-worker -o jsonpath='{.spec.replicas}')
+          test "$ready" = "$desired"
+
+  rollback:
+    if: ${{ needs.canary-rollout.result == 'failure' }}
+    needs: canary-rollout
+    runs-on: ubuntu-latest
+    environment: staging-rollback
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Kubernetes context
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}
+        run: |
+          test -n "$KUBECONFIG_B64"
+          printf '%s' "$KUBECONFIG_B64" | base64 --decode > "$RUNNER_TEMP/kubeconfig"
+          chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+      - name: Roll back the worker deployment
+        run: |
+          kubectl -n security rollout undo deployment/umoja-retention-worker
+          kubectl -n security rollout status deployment/umoja-retention-worker --timeout=10m

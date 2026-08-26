@@ -1,4 +1,4 @@
-.PHONY: check contracts-check infra-check keycloak-check go-check rust-check python-check typescript-check postgres-check
+.PHONY: check contracts-check infra-check keycloak-check go-check rust-check python-check typescript-check postgres-check postgres-app-role-integration release-evidence-check
 
 check: contracts-check infra-check keycloak-check go-check rust-check python-check typescript-check
 
@@ -31,3 +31,15 @@ typescript-check:
 
 postgres-check:
 	psql "$${POSTGRES_DATABASE_URL:-postgresql:///umojaflowos_dev}" -v ON_ERROR_STOP=1 -f database/postgresql/validate_schema.sql
+
+# Local-only assurance gate. It creates and destroys a disposable database with
+# distinct schema-owner and application roles before running the guarded
+# counterparty onboarding integration suite.
+postgres-app-role-integration:
+	UMOJA_ASSURANCE_ENV=local_assurance scripts/infra/run_postgres_app_role_integration.sh
+
+# Fail closed unless a complete, hash-verified and independently approved
+# evidence bundle binds to the immutable SHA under review.
+release-evidence-check:
+	@test -n "$(MANIFEST)" || (echo "MANIFEST=<path> is required" >&2; exit 64)
+	python3 scripts/infra/verify_production_release_evidence.py --manifest "$(MANIFEST)" --repo .

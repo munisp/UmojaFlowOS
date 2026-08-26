@@ -1,0 +1,2611 @@
+# SERVICE AREA: risk-compliance-core
+# TRACKED PATH: services/risk-compliance-core
+
+
+
+===== FILE: services/risk-compliance-core/Cargo.toml =====
+[package]
+name = "risk-compliance-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "risk_compliance_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "risk-compliance-core"
+path = "src/main.rs"
+
+[[bin]]
+name = "stress-test-runner"
+path = "src/bin/stress_test_runner.rs"
+
+[dependencies]
+axum = "0.7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+fluvio = "0.50.1"
+
+[dev-dependencies]
+# Exercises the real axum router in-process so route registration is asserted
+# rather than assumed. The tests open no network listener.
+tower = { version = "0.5", features = ["util"] }
+
+
+===== FILE: services/risk-compliance-core/src/bin/stress_test_runner.rs =====
+//! Executes a settlement-outflow surge stress test against real configured
+//! inputs and prints an evidence record.
+//!
+//! The runner reads a JSON document describing the approved buffer policy, the
+//! scenario, and (optionally) a reconciled balance observation. It never
+//! synthesises inputs: if the document omits a reconciled balance, or the
+//! balance is stale or unsourced, the run fails closed and the printed evidence
+//! records exactly that outcome. This is the intended behaviour when no
+//! authorised balance source is connected.
+//!
+//! Usage:
+//!   stress-test-runner <path-to-inputs.json>
+
+use std::{env, fs, process};
+
+use risk_compliance_core::treasury_stress::{
+    evaluate_stress_test, BufferPolicy, ReconciledBalance, StressScenario, StressTestStatus,
+};
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+struct RunnerInputs {
+    buffer_policy: BufferPolicy,
+    scenario: StressScenario,
+    #[serde(default)]
+    reconciled_balance: Option<ReconciledBalance>,
+}
+
+fn main() {
+    let Some(path) = env::args().nth(1) else {
+        eprintln!("usage: stress-test-runner <path-to-inputs.json>");
+        process::exit(2);
+    };
+
+    let raw = match fs::read_to_string(&path) {
+        Ok(contents) => contents,
+        Err(error) => {
+            eprintln!("unable to read {path}: {error}");
+            process::exit(2);
+        }
+    };
+
+    let inputs: RunnerInputs = match serde_json::from_str(&raw) {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            eprintln!("inputs are not a valid stress-test document: {error}");
+            process::exit(2);
+        }
+    };
+
+    let outcome = evaluate_stress_test(
+        &inputs.buffer_policy,
+        &inputs.scenario,
+        inputs.reconciled_balance.as_ref(),
+    );
+
+    let evidence = serde_json::json!({
+        "service": "risk-compliance-core",
+        "evaluation": "treasury_settlement_outflow_surge",
+        "inputs_document": path,
+        "corridor": inputs.buffer_policy.corridor,
+        "currency": inputs.buffer_policy.currency,
+        "policy_version": inputs.buffer_policy.policy_version,
+        "outcome": outcome,
+        "authorises_execution": false,
+    });
+
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&evidence).expect("evidence serialises")
+    );
+
+    // A fail-closed classification is a valid, expected result, but it is not a
+    // completed computation, so the exit status distinguishes the two.
+    if outcome.status != StressTestStatus::Completed {
+        process::exit(3);
+    }
+}
+
+
+===== FILE: services/risk-compliance-core/src/counterparty_risk.rs =====
+//! Deterministic counterparty risk assessment.
+//!
+//! The score is a pure function of supplied, evidenced attributes. There is no
+//! statistical model, no learned weighting, and no historical inference, because
+//! none of those inputs exist without authorised provider data. Missing evidence
+//! yields `RiskBand::Undetermined`, never a favourable band.
+//!
+//! The output informs a human review decision. It does not authorise a
+//! counterparty, does not open an integration, and does not approve a payment.
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum RiskBand {
+    /// Required evidence is absent; no band may be asserted.
+    Undetermined,
+    Low,
+    Medium,
+    High,
+    /// A prohibitive finding: review cannot clear this counterparty as-is.
+    Prohibited,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum LicenceStatus {
+    Verified,
+    PendingReview,
+    Expired,
+    Suspended,
+    Rejected,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CounterpartyRiskInput {
+    /// Regulator licence status from the counterparty authorisation record.
+    pub licence_status: Option<LicenceStatus>,
+    /// True when the licence's validity window covers the assessment date.
+    pub licence_within_validity_window: Option<bool>,
+    /// True when a sanctions screening result exists and is clear.
+    pub sanctions_clear: Option<bool>,
+    /// True when adverse-media or enforcement findings were recorded.
+    pub adverse_findings_recorded: Option<bool>,
+    /// Days since the last completed review; `None` means never reviewed.
+    pub days_since_last_review: Option<u32>,
+    /// Maximum review age permitted by the approved policy, in days.
+    pub review_interval_days: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CounterpartyRiskAssessment {
+    pub band: RiskBand,
+    pub reason_codes: Vec<String>,
+    /// True when a human review must be scheduled or refreshed.
+    pub review_required: bool,
+}
+
+/// Assess counterparty risk from evidenced attributes only.
+pub fn assess_counterparty_risk(input: &CounterpartyRiskInput) -> CounterpartyRiskAssessment {
+    let mut reasons: Vec<String> = Vec::new();
+
+    // Absent evidence is never treated as favourable.
+    let mut missing = Vec::new();
+    if input.licence_status.is_none() {
+        missing.push("INPUT_UNAVAILABLE_LICENCE_STATUS");
+    }
+    if input.licence_within_validity_window.is_none() {
+        missing.push("INPUT_UNAVAILABLE_LICENCE_VALIDITY");
+    }
+    if input.sanctions_clear.is_none() {
+        missing.push("INPUT_UNAVAILABLE_SANCTIONS_RESULT");
+    }
+    if input.adverse_findings_recorded.is_none() {
+        missing.push("INPUT_UNAVAILABLE_ADVERSE_FINDINGS");
+    }
+    if input.review_interval_days.is_none() {
+        missing.push("INPUT_UNAVAILABLE_REVIEW_INTERVAL");
+    }
+    if !missing.is_empty() {
+        return CounterpartyRiskAssessment {
+            band: RiskBand::Undetermined,
+            reason_codes: missing.into_iter().map(str::to_string).collect(),
+            review_required: true,
+        };
+    }
+
+    let licence_status = input.licence_status.expect("checked above");
+    let within_window = input.licence_within_validity_window.expect("checked above");
+    let sanctions_clear = input.sanctions_clear.expect("checked above");
+    let adverse = input.adverse_findings_recorded.expect("checked above");
+    let interval = input.review_interval_days.expect("checked above");
+
+    // Prohibitive findings short-circuit: no combination of other evidence can
+    // downgrade these to an acceptable band.
+    if matches!(
+        licence_status,
+        LicenceStatus::Rejected | LicenceStatus::Suspended
+    ) {
+        reasons.push(format!("LICENCE_{licence_status:?}").to_uppercase());
+        return CounterpartyRiskAssessment {
+            band: RiskBand::Prohibited,
+            reason_codes: reasons,
+            review_required: true,
+        };
+    }
+    if !sanctions_clear {
+        reasons.push("SANCTIONS_NOT_CLEAR".to_string());
+        return CounterpartyRiskAssessment {
+            band: RiskBand::Prohibited,
+            reason_codes: reasons,
+            review_required: true,
+        };
+    }
+
+    // Additive, fully auditable point contributions.
+    let mut points: u32 = 0;
+    if licence_status == LicenceStatus::PendingReview {
+        points += 2;
+        reasons.push("LICENCE_PENDING_REVIEW".to_string());
+    }
+    if licence_status == LicenceStatus::Expired {
+        points += 3;
+        reasons.push("LICENCE_EXPIRED".to_string());
+    }
+    if !within_window {
+        points += 2;
+        reasons.push("LICENCE_OUTSIDE_VALIDITY_WINDOW".to_string());
+    }
+    if adverse {
+        points += 2;
+        reasons.push("ADVERSE_FINDINGS_RECORDED".to_string());
+    }
+
+    let review_overdue = match input.days_since_last_review {
+        None => {
+            points += 2;
+            reasons.push("NEVER_REVIEWED".to_string());
+            true
+        }
+        Some(days) if days > interval => {
+            points += 1;
+            reasons.push("REVIEW_OVERDUE".to_string());
+            true
+        }
+        Some(_) => false,
+    };
+
+    let band = match points {
+        0 => RiskBand::Low,
+        1..=2 => RiskBand::Medium,
+        _ => RiskBand::High,
+    };
+
+    CounterpartyRiskAssessment {
+        band,
+        reason_codes: reasons,
+        review_required: review_overdue || band != RiskBand::Low,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn clean() -> CounterpartyRiskInput {
+        CounterpartyRiskInput {
+            licence_status: Some(LicenceStatus::Verified),
+            licence_within_validity_window: Some(true),
+            sanctions_clear: Some(true),
+            adverse_findings_recorded: Some(false),
+            days_since_last_review: Some(30),
+            review_interval_days: Some(365),
+        }
+    }
+
+    #[test]
+    fn returns_low_band_only_on_complete_clean_evidence() {
+        let assessment = assess_counterparty_risk(&clean());
+        assert_eq!(assessment.band, RiskBand::Low);
+        assert!(!assessment.review_required);
+        assert!(assessment.reason_codes.is_empty());
+    }
+
+    #[test]
+    fn missing_evidence_yields_undetermined_never_low() {
+        for mutate in [
+            (|i: &mut CounterpartyRiskInput| i.licence_status = None)
+                as fn(&mut CounterpartyRiskInput),
+            |i: &mut CounterpartyRiskInput| i.sanctions_clear = None,
+            |i: &mut CounterpartyRiskInput| i.adverse_findings_recorded = None,
+            |i: &mut CounterpartyRiskInput| i.review_interval_days = None,
+            |i: &mut CounterpartyRiskInput| i.licence_within_validity_window = None,
+        ] {
+            let mut input = clean();
+            mutate(&mut input);
+            let assessment = assess_counterparty_risk(&input);
+            assert_eq!(assessment.band, RiskBand::Undetermined);
+            assert!(assessment.review_required);
+            assert!(assessment
+                .reason_codes
+                .iter()
+                .all(|code| code.starts_with("INPUT_UNAVAILABLE")));
+        }
+    }
+
+    #[test]
+    fn a_suspended_or_rejected_licence_is_prohibited() {
+        for status in [LicenceStatus::Suspended, LicenceStatus::Rejected] {
+            let mut input = clean();
+            input.licence_status = Some(status);
+            assert_eq!(assess_counterparty_risk(&input).band, RiskBand::Prohibited);
+        }
+    }
+
+    #[test]
+    fn a_non_clear_sanctions_result_is_prohibited_regardless_of_other_evidence() {
+        let mut input = clean();
+        input.sanctions_clear = Some(false);
+        input.licence_status = Some(LicenceStatus::Verified);
+        let assessment = assess_counterparty_risk(&input);
+        assert_eq!(assessment.band, RiskBand::Prohibited);
+        assert!(assessment
+            .reason_codes
+            .contains(&"SANCTIONS_NOT_CLEAR".to_string()));
+    }
+
+    #[test]
+    fn an_expired_licence_with_adverse_findings_scores_high() {
+        let mut input = clean();
+        input.licence_status = Some(LicenceStatus::Expired);
+        input.adverse_findings_recorded = Some(true);
+        let assessment = assess_counterparty_risk(&input);
+        assert_eq!(assessment.band, RiskBand::High);
+        assert!(assessment.review_required);
+    }
+
+    #[test]
+    fn a_never_reviewed_counterparty_always_requires_review() {
+        let mut input = clean();
+        input.days_since_last_review = None;
+        let assessment = assess_counterparty_risk(&input);
+        assert!(assessment.review_required);
+        assert!(assessment
+            .reason_codes
+            .contains(&"NEVER_REVIEWED".to_string()));
+        assert_ne!(assessment.band, RiskBand::Low);
+    }
+
+    #[test]
+    fn an_overdue_review_is_flagged_against_the_configured_interval() {
+        let mut input = clean();
+        input.days_since_last_review = Some(400);
+        let assessment = assess_counterparty_risk(&input);
+        assert!(assessment.review_required);
+        assert!(assessment
+            .reason_codes
+            .contains(&"REVIEW_OVERDUE".to_string()));
+    }
+
+    #[test]
+    fn scoring_is_deterministic_across_repeated_evaluations() {
+        let input = clean();
+        let first = assess_counterparty_risk(&input);
+        for _ in 0..25 {
+            assert_eq!(assess_counterparty_risk(&input), first);
+        }
+    }
+}
+
+
+===== FILE: services/risk-compliance-core/src/eventing.rs =====
+//! Event contracts and publishers for the Rust risk core.
+//!
+//! The publisher is intentionally a narrow Dapr pub/sub adapter. It carries a
+//! policy decision as evidence for downstream analysis; it cannot carry a
+//! provider credential, request a transfer, or turn a policy result into an
+//! execution instruction. The policy event itself pins
+//! `external_execution_authorized` to false and its test proves that guard.
+
+use crate::{Decision, PolicyResult};
+use fluvio::{
+    config::{FluvioClusterConfig, TlsPolicy},
+    Fluvio, RecordKey,
+};
+use reqwest::{Client, Url};
+use serde::{Deserialize, Serialize};
+use std::net::IpAddr;
+use std::time::Duration;
+
+pub const POLICY_DECISION_EVENT_V1: &str = "umojaflowos.policy.decision.v1";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PolicyDecisionEvent {
+    pub event_id: String,
+    pub correlation_id: String,
+    pub event_type: String,
+    pub schema_version: String,
+    pub decision: String,
+    pub reason_codes: Vec<String>,
+    pub external_execution_authorized: bool,
+}
+
+pub fn policy_event(
+    event_id: String,
+    correlation_id: String,
+    result: PolicyResult,
+) -> Result<PolicyDecisionEvent, &'static str> {
+    if event_id.trim().is_empty() || correlation_id.trim().is_empty() {
+        return Err("event identity is required");
+    }
+    let decision = match result.decision {
+        Decision::Allow => "ALLOW",
+        Decision::ManualReview => "MANUAL_REVIEW",
+        Decision::Block => "BLOCK",
+    };
+    Ok(PolicyDecisionEvent {
+        event_id,
+        correlation_id,
+        event_type: POLICY_DECISION_EVENT_V1.into(),
+        schema_version: "v1".into(),
+        decision: decision.into(),
+        reason_codes: result.reason_codes,
+        external_execution_authorized: false,
+    })
+}
+
+/// Deployment configuration for Dapr's HTTP pub/sub API.
+///
+/// A Dapr sidecar normally speaks plaintext HTTP on loopback; production
+/// routing is a separate mesh/sidecar trust boundary. This code nevertheless
+/// refuses plaintext to every non-loopback address, and it refuses a URL with
+/// embedded credentials. That makes the local exception narrow rather than a
+/// silent bypass for a remote endpoint.
+#[derive(Debug, Clone)]
+pub struct DaprConfig {
+    pub base_url: String,
+    pub pubsub_name: String,
+    pub timeout: Duration,
+    pub allow_insecure_loopback: bool,
+}
+
+fn loopback_host(host: &str) -> bool {
+    host == "localhost"
+        || host
+            .parse::<IpAddr>()
+            .is_ok_and(|address| address.is_loopback())
+}
+
+fn safe_path_segment(value: &str) -> bool {
+    !value.trim().is_empty()
+        && !value.contains('/')
+        && !value.contains('?')
+        && !value.contains('#')
+        && !value.contains("..")
+}
+
+/// Publisher that calls Dapr's documented `v1.0/publish` HTTP endpoint.
+#[derive(Clone)]
+pub struct DaprPublisher {
+    base_url: Url,
+    pubsub_name: String,
+    client: Client,
+}
+
+impl DaprPublisher {
+    pub fn new(config: DaprConfig) -> Result<Self, String> {
+        if !safe_path_segment(&config.pubsub_name) {
+            return Err("Dapr pubsub name must be a single non-empty path segment".to_string());
+        }
+        let base_url = Url::parse(&config.base_url)
+            .map_err(|error| format!("Dapr base URL is invalid: {error}"))?;
+        if base_url.username() != "" || base_url.password().is_some() {
+            return Err("Dapr base URL must not embed credentials".to_string());
+        }
+        match base_url.scheme() {
+            "https" => {}
+            "http"
+                if config.allow_insecure_loopback
+                    && base_url.host_str().is_some_and(loopback_host) => {}
+            "http" if !config.allow_insecure_loopback => {
+                return Err(
+                    "Dapr plaintext transport requires the explicit loopback exemption".to_string(),
+                )
+            }
+            "http" => {
+                return Err("Dapr plaintext transport is permitted on loopback only".to_string())
+            }
+            scheme => return Err(format!("unsupported Dapr URL scheme {scheme:?}")),
+        }
+
+        let timeout = if config.timeout.is_zero() {
+            Duration::from_secs(5)
+        } else {
+            config.timeout
+        };
+        let client = Client::builder()
+            .timeout(timeout)
+            .build()
+            .map_err(|error| format!("Dapr HTTP client could not be created: {error}"))?;
+
+        Ok(Self {
+            base_url,
+            pubsub_name: config.pubsub_name,
+            client,
+        })
+    }
+
+    /// Publish one policy event. Non-2xx, unreachable, timeout and malformed
+    /// endpoint cases are all errors; the caller must decide whether to fail its
+    /// operation closed rather than silently losing the event.
+    pub async fn publish_policy_event(
+        &self,
+        topic: &str,
+        event: &PolicyDecisionEvent,
+    ) -> Result<(), String> {
+        if !safe_path_segment(topic) {
+            return Err("Dapr event topic must be a single non-empty path segment".to_string());
+        }
+        if event.event_id.trim().is_empty()
+            || event.correlation_id.trim().is_empty()
+            || event.event_type != POLICY_DECISION_EVENT_V1
+            || event.schema_version != "v1"
+            || event.external_execution_authorized
+        {
+            return Err("policy event violates the immutable v1 event contract".to_string());
+        }
+        let endpoint = self
+            .base_url
+            .join(&format!("v1.0/publish/{}/{topic}", self.pubsub_name))
+            .map_err(|error| format!("Dapr publish endpoint could not be built: {error}"))?;
+        let response = self
+            .client
+            .post(endpoint)
+            .json(event)
+            .send()
+            .await
+            .map_err(|error| format!("Dapr publish failed: {error}"))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "Dapr publish returned status {}",
+                response.status()
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Configuration for the native Fluvio mirror.
+///
+/// Fluvio carries evidence-only policy decisions into a separate, compact
+/// compliance stream. It is not the payment-execution transport: even an
+/// ALLOW decision remains evidence for a separately authorised workflow. The
+/// profile points to an operator-managed Fluvio configuration file, keeping
+/// endpoints and certificates out of application source.
+#[derive(Debug, Clone)]
+pub struct FluvioPublisherConfig {
+    pub profile: String,
+    pub topic: String,
+    pub tls_required: bool,
+    pub allow_insecure_loopback: bool,
+}
+
+fn fluvio_endpoint_is_loopback(endpoint: &str) -> bool {
+    // Local Fluvio profiles are host:port. Do not resolve arbitrary DNS names:
+    // a name that looks local but resolves elsewhere is not enough to make
+    // plaintext acceptable.
+    let host = endpoint
+        .strip_prefix('[')
+        .and_then(|value| value.split_once(']').map(|(host, _)| host))
+        .or_else(|| endpoint.rsplit_once(':').map(|(host, _)| host))
+        .unwrap_or(endpoint);
+    loopback_host(host)
+}
+
+/// Publishes an immutable policy event to one configured Fluvio topic.
+#[derive(Debug, Clone)]
+pub struct FluvioPublisher {
+    config: FluvioPublisherConfig,
+}
+
+impl FluvioPublisher {
+    pub fn new(config: FluvioPublisherConfig) -> Result<Self, String> {
+        if config.profile.trim().is_empty() {
+            return Err("Fluvio profile is required".to_string());
+        }
+        if !safe_path_segment(&config.topic) {
+            return Err("Fluvio topic must be a single non-empty path segment".to_string());
+        }
+        Ok(Self { config })
+    }
+
+    fn validated_cluster_config(&self) -> Result<FluvioClusterConfig, String> {
+        let cluster = FluvioClusterConfig::load_with_profile(&self.config.profile)
+            .map_err(|error| format!("Fluvio profile could not be loaded: {error}"))?
+            .ok_or_else(|| format!("Fluvio profile {:?} does not exist", self.config.profile))?;
+        match cluster.tls {
+            TlsPolicy::Verified(_) => Ok(cluster),
+            TlsPolicy::Anonymous => {
+                Err("Fluvio TLS must verify certificates and domains".to_string())
+            }
+            TlsPolicy::Disabled
+                if !self.config.tls_required
+                    && self.config.allow_insecure_loopback
+                    && fluvio_endpoint_is_loopback(&cluster.endpoint) =>
+            {
+                Ok(cluster)
+            }
+            TlsPolicy::Disabled if self.config.tls_required => {
+                Err("Fluvio TLS is required but the selected profile disables TLS".to_string())
+            }
+            TlsPolicy::Disabled if !self.config.allow_insecure_loopback => Err(
+                "Fluvio plaintext transport requires the explicit loopback exemption".to_string(),
+            ),
+            TlsPolicy::Disabled => Err(format!(
+                "Fluvio plaintext transport is permitted on loopback only, got {:?}",
+                cluster.endpoint
+            )),
+        }
+    }
+
+    /// Connects using the selected profile, sends the full immutable event, and
+    /// flushes before returning. A completed future therefore means the local
+    /// Fluvio producer has accepted the evidence; any connection, metadata,
+    /// produce, or flush error remains a failure for the caller to handle.
+    pub async fn publish_policy_event(&self, event: &PolicyDecisionEvent) -> Result<(), String> {
+        if event.event_id.trim().is_empty()
+            || event.correlation_id.trim().is_empty()
+            || event.event_type != POLICY_DECISION_EVENT_V1
+            || event.schema_version != "v1"
+            || event.external_execution_authorized
+        {
+            return Err("policy event violates the immutable v1 event contract".to_string());
+        }
+        let cluster = self.validated_cluster_config()?;
+        let client = Fluvio::connect_with_config(&cluster)
+            .await
+            .map_err(|error| format!("Fluvio connection failed: {error}"))?;
+        let producer = client
+            .topic_producer(&self.config.topic)
+            .await
+            .map_err(|error| format!("Fluvio producer could not be opened: {error}"))?;
+        let encoded = serde_json::to_string(event)
+            .map_err(|error| format!("policy event could not be encoded: {error}"))?;
+        producer
+            .send(RecordKey::NULL, encoded)
+            .await
+            .map_err(|error| format!("Fluvio publish failed: {error}"))?;
+        producer
+            .flush()
+            .await
+            .map_err(|error| format!("Fluvio producer flush failed: {error}"))?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Decision, PolicyResult};
+    use std::env;
+
+    fn event() -> PolicyDecisionEvent {
+        policy_event(
+            "event-1".to_string(),
+            "order-1".to_string(),
+            PolicyResult {
+                decision: Decision::ManualReview,
+                reason_codes: vec!["SANCTIONS_POTENTIAL_MATCH".to_string()],
+            },
+        )
+        .expect("build a valid policy event")
+    }
+
+    #[test]
+    fn policy_events_are_evidence_not_execution_authority() {
+        let event = event();
+        assert!(!event.external_execution_authorized);
+        assert_eq!(event.event_type, POLICY_DECISION_EVENT_V1);
+        assert_eq!(event.schema_version, "v1");
+    }
+
+    #[test]
+    fn publisher_refuses_remote_or_credentialed_plaintext() {
+        for base_url in [
+            "http://dapr.example.com:3500",
+            "http://token@example.com:3500",
+            "ftp://127.0.0.1:3500",
+        ] {
+            let result = DaprPublisher::new(DaprConfig {
+                base_url: base_url.to_string(),
+                pubsub_name: "kafka".to_string(),
+                timeout: Duration::from_secs(1),
+                allow_insecure_loopback: true,
+            });
+            assert!(result.is_err(), "{base_url} must be refused");
+        }
+        let no_exemption = DaprPublisher::new(DaprConfig {
+            base_url: "http://127.0.0.1:3500".to_string(),
+            pubsub_name: "kafka".to_string(),
+            timeout: Duration::from_secs(1),
+            allow_insecure_loopback: false,
+        });
+        assert!(no_exemption.is_err());
+    }
+
+    #[tokio::test]
+    async fn unreachable_and_malformed_publish_attempts_fail_closed() {
+        let publisher = DaprPublisher::new(DaprConfig {
+            base_url: "http://127.0.0.1:1".to_string(),
+            pubsub_name: "kafka".to_string(),
+            timeout: Duration::from_millis(50),
+            allow_insecure_loopback: true,
+        })
+        .expect("local configuration is valid even if nothing listens");
+        let error = publisher
+            .publish_policy_event("compliance.events", &event())
+            .await
+            .expect_err("unreachable Dapr must fail closed");
+        assert!(error.contains("Dapr publish failed"));
+
+        let invalid_topic = publisher
+            .publish_policy_event("compliance/events", &event())
+            .await
+            .expect_err("path-shaped topics must be refused before a request");
+        assert!(invalid_topic.contains("single non-empty path segment"));
+
+        let mut authority = event();
+        authority.external_execution_authorized = true;
+        let invalid_event = publisher
+            .publish_policy_event("compliance.events", &authority)
+            .await
+            .expect_err("execution-shaped policy event must be refused");
+        assert!(invalid_event.contains("immutable v1 event contract"));
+    }
+
+    #[test]
+    fn fluvio_publisher_rejects_incomplete_configuration() {
+        assert!(FluvioPublisher::new(FluvioPublisherConfig {
+            profile: "".to_string(),
+            topic: "compliance-events".to_string(),
+            tls_required: true,
+            allow_insecure_loopback: false,
+        })
+        .is_err());
+        assert!(FluvioPublisher::new(FluvioPublisherConfig {
+            profile: "local".to_string(),
+            topic: "compliance/events".to_string(),
+            tls_required: true,
+            allow_insecure_loopback: false,
+        })
+        .is_err());
+        let missing_profile = FluvioPublisher::new(FluvioPublisherConfig {
+            profile: "this-profile-must-not-exist".to_string(),
+            topic: "compliance-events".to_string(),
+            tls_required: true,
+            allow_insecure_loopback: false,
+        })
+        .expect("shape is valid")
+        .validated_cluster_config();
+        assert!(missing_profile.is_err());
+    }
+
+    #[tokio::test]
+    async fn live_fluvio_publish_accepts_an_evidence_only_policy_event() {
+        let profile = match env::var("FLUVIO_LIVE_PROFILE") {
+            Ok(profile) => profile,
+            Err(_) => {
+                eprintln!("set FLUVIO_LIVE_PROFILE to run the live Fluvio regression");
+                return;
+            }
+        };
+        let publisher = FluvioPublisher::new(FluvioPublisherConfig {
+            profile,
+            topic: "compliance-events".to_string(),
+            tls_required: false,
+            allow_insecure_loopback: true,
+        })
+        .expect("local loopback profile configuration is valid");
+        let unique = format!(
+            "fluvio-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock after epoch")
+                .as_nanos()
+        );
+        let policy = policy_event(
+            format!("event-{unique}"),
+            unique,
+            PolicyResult {
+                decision: Decision::ManualReview,
+                reason_codes: vec!["SANCTIONS_POTENTIAL_MATCH".to_string()],
+            },
+        )
+        .expect("build policy event");
+        publisher
+            .publish_policy_event(&policy)
+            .await
+            .expect("live Fluvio accepted and flushed the evidence event");
+    }
+}
+
+
+===== FILE: services/risk-compliance-core/src/lib.rs =====
+use serde::{Deserialize, Serialize};
+pub mod counterparty_risk;
+pub mod eventing;
+pub mod monitoring;
+pub mod screening;
+pub mod treasury_stress;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum Corridor {
+    NigeriaNgn,
+    KenyaKes,
+    SouthAfricaZar,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ScreeningState {
+    Clear,
+    PotentialMatch,
+    ConfirmedMatch,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum Decision {
+    Allow,
+    ManualReview,
+    Block,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PolicyInput {
+    pub corridor: Corridor,
+    pub regulated_entity_authorized: bool,
+    pub counterparty_authorized: bool,
+    pub kyc_approved: bool,
+    pub sanctions: ScreeningState,
+    pub travel_rule_required: bool,
+    pub travel_rule_complete: bool,
+    pub velocity_within_limit: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PolicyResult {
+    pub decision: Decision,
+    pub reason_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ControlAssuranceRiskInput {
+    pub control_coverage_present: bool,
+    pub separation_of_duties_clear: bool,
+    pub evidence_fresh: bool,
+    pub counterparty_route_ready: bool,
+    pub reconciliation_reference_present: bool,
+    pub stablecoin_policy_covered: bool,
+    pub adapter_certification_state: String,
+    pub audit_packet_reference_present: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ControlAssuranceRiskDecision {
+    pub outcome: String,
+    pub reason_codes: Vec<String>,
+    pub provider_activation_initiated: bool,
+    pub external_execution_initiated: bool,
+    pub audit_packet_generated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VaspReadinessRiskInput {
+    pub supervisory_path_evidence_present: bool,
+    pub corporate_evidence_present: bool,
+    pub principal_officer_evidence_present: bool,
+    pub nfiu_evidence_present: bool,
+    pub aml_programme_present: bool,
+    pub cyber_controls_present: bool,
+    pub incident_plan_present: bool,
+    pub travel_rule_data_complete: bool,
+    pub counterparty_evidence_present: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VaspReadinessRiskDecision {
+    pub outcome: String,
+    pub reason_codes: Vec<String>,
+    pub external_submission_initiated: bool,
+    pub travel_rule_transmission: bool,
+    pub provider_activation_initiated: bool,
+    pub custody_initiated: bool,
+    pub value_movement_initiated: bool,
+}
+
+pub fn assess_vasp_readiness(input: VaspReadinessRiskInput) -> VaspReadinessRiskDecision {
+    let mut reasons = Vec::new();
+    if !input.supervisory_path_evidence_present {
+        reasons.push("SUPERVISORY_PATH_EVIDENCE_MISSING".to_owned());
+    }
+    if !input.corporate_evidence_present {
+        reasons.push("CORPORATE_EVIDENCE_MISSING".to_owned());
+    }
+    if !input.principal_officer_evidence_present {
+        reasons.push("PRINCIPAL_OFFICER_EVIDENCE_MISSING".to_owned());
+    }
+    if !input.nfiu_evidence_present {
+        reasons.push("NFIU_EVIDENCE_MISSING".to_owned());
+    }
+    if !input.aml_programme_present {
+        reasons.push("AML_CFT_CPF_PROGRAMME_MISSING".to_owned());
+    }
+    if !input.cyber_controls_present {
+        reasons.push("CYBER_CONTROLS_MISSING".to_owned());
+    }
+    if !input.incident_plan_present {
+        reasons.push("INCIDENT_REPORTING_PLAN_MISSING".to_owned());
+    }
+    if !input.travel_rule_data_complete {
+        reasons.push("TRAVEL_RULE_DATA_MISSING".to_owned());
+    }
+    if !input.counterparty_evidence_present {
+        reasons.push("COUNTERPARTY_EVIDENCE_MISSING".to_owned());
+    }
+    reasons.sort();
+    VaspReadinessRiskDecision {
+        outcome: if reasons.is_empty() {
+            "INTERNAL_RECORD_COMPLETE_PENDING_EXTERNAL_REVIEW".to_owned()
+        } else {
+            "INTERNAL_RECORD_INCOMPLETE".to_owned()
+        },
+        reason_codes: reasons,
+        external_submission_initiated: false,
+        travel_rule_transmission: false,
+        provider_activation_initiated: false,
+        custody_initiated: false,
+        value_movement_initiated: false,
+    }
+}
+
+pub fn assess_control_assurance(input: ControlAssuranceRiskInput) -> ControlAssuranceRiskDecision {
+    let mut reasons = Vec::new();
+    if !input.control_coverage_present {
+        reasons.push("control_coverage_missing".to_owned());
+    }
+    if !input.separation_of_duties_clear {
+        reasons.push("separation_of_duties_conflict".to_owned());
+    }
+    if !input.evidence_fresh {
+        reasons.push("evidence_freshness_missing".to_owned());
+    }
+    if !input.counterparty_route_ready {
+        reasons.push("counterparty_route_readiness_missing".to_owned());
+    }
+    if !input.reconciliation_reference_present {
+        reasons.push("reconciliation_reference_missing".to_owned());
+    }
+    if !input.stablecoin_policy_covered {
+        reasons.push("stablecoin_policy_coverage_missing".to_owned());
+    }
+    if input.adapter_certification_state != "ready_for_controlled_test" {
+        reasons.push("adapter_certification_not_ready".to_owned());
+    }
+    if !input.audit_packet_reference_present {
+        reasons.push("audit_packet_reference_missing".to_owned());
+    }
+    reasons.sort();
+
+    ControlAssuranceRiskDecision {
+        outcome: if reasons.is_empty() {
+            "assurance_ready_for_independent_review".to_owned()
+        } else {
+            "blocked".to_owned()
+        },
+        reason_codes: reasons,
+        provider_activation_initiated: false,
+        external_execution_initiated: false,
+        audit_packet_generated: false,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum EventStreamState {
+    Available,
+    InputUnavailable,
+}
+
+pub fn evaluate(input: &PolicyInput) -> PolicyResult {
+    let mut reasons = Vec::new();
+    if !input.regulated_entity_authorized {
+        reasons.push("REGULATED_ENTITY_NOT_AUTHORIZED".to_string());
+    }
+    if !input.counterparty_authorized {
+        reasons.push("COUNTERPARTY_NOT_AUTHORIZED".to_string());
+    }
+    if !input.kyc_approved {
+        reasons.push("KYC_NOT_APPROVED".to_string());
+    }
+    if input.sanctions == ScreeningState::ConfirmedMatch {
+        reasons.push("SANCTIONS_CONFIRMED_MATCH".to_string());
+    }
+    if input.sanctions == ScreeningState::Unavailable {
+        reasons.push("SANCTIONS_SOURCE_UNAVAILABLE".to_string());
+    }
+    if !input.velocity_within_limit {
+        reasons.push("VELOCITY_LIMIT_EXCEEDED".to_string());
+    }
+    if input.travel_rule_required && !input.travel_rule_complete {
+        reasons.push("TRAVEL_RULE_INCOMPLETE".to_string());
+    }
+    if !reasons.is_empty() {
+        return PolicyResult {
+            decision: Decision::Block,
+            reason_codes: reasons,
+        };
+    }
+    if input.sanctions == ScreeningState::PotentialMatch {
+        return PolicyResult {
+            decision: Decision::ManualReview,
+            reason_codes: vec!["SANCTIONS_POTENTIAL_MATCH".to_string()],
+        };
+    }
+    PolicyResult {
+        decision: Decision::Allow,
+        reason_codes: Vec::new(),
+    }
+}
+
+pub fn evaluate_event_stream_input(
+    input: &PolicyInput,
+    stream_state: EventStreamState,
+) -> PolicyResult {
+    if stream_state == EventStreamState::InputUnavailable {
+        return PolicyResult {
+            decision: Decision::Block,
+            reason_codes: vec!["INPUT_UNAVAILABLE_EVENT_STREAM".to_string()],
+        };
+    }
+    evaluate(input)
+}
+
+
+===== FILE: services/risk-compliance-core/src/main.rs =====
+//! HTTP interface for the Rust risk and compliance core.
+//!
+//! Every route is an evaluation. None of them settles a payment, files a
+//! report, or opens a provider integration: the service returns findings and
+//! bands, and disposition remains a human decision recorded in the control
+//! plane. Responses are emitted as versioned envelopes that carry the emitting
+//! service and contract version, because the TypeScript control plane parses
+//! them with strict schemas and rejects anything it does not recognise.
+
+use axum::{
+    extract::State,
+    http::StatusCode,
+    routing::{get, post},
+    Json, Router,
+};
+use risk_compliance_core::{
+    counterparty_risk::{assess_counterparty_risk, CounterpartyRiskInput},
+    evaluate,
+    monitoring::{evaluate_monitoring, MonitoringInput, MonitoringResult, RuleFinding},
+    screening::{ScreeningGateway, ScreeningRequest, ScreeningResult},
+    Decision, PolicyInput, PolicyResult, ScreeningState,
+};
+use serde::Serialize;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+/// Service identity carried on every envelope. Must match the value the control
+/// plane's contract pins with `z.literal`.
+const SERVICE_NAME: &str = "umojaflowos-risk-compliance-core";
+const CONTRACT_VERSION: &str = "v1";
+
+/// Counters the service observes while running.
+///
+/// Each is incremented where the corresponding evaluation completes, so the
+/// values are measurements rather than estimates. Nothing here is derived,
+/// smoothed, or back-filled: a counter this service cannot observe is not
+/// reported at all, because a fabricated zero reads as "healthy" and would be
+/// worse than an absent field.
+struct ServiceState {
+    started_at: Instant,
+    policy_evaluations: AtomicU64,
+    monitoring_evaluations: AtomicU64,
+    monitoring_review_required: AtomicU64,
+    counterparty_assessments: AtomicU64,
+    counterparty_review_required: AtomicU64,
+    screening_evaluations: AtomicU64,
+    screening_unavailable: AtomicU64,
+    screening_gateway: Option<ScreeningGateway>,
+}
+
+impl ServiceState {
+    fn new(screening_gateway: Option<ScreeningGateway>) -> Self {
+        Self {
+            started_at: Instant::now(),
+            policy_evaluations: AtomicU64::new(0),
+            monitoring_evaluations: AtomicU64::new(0),
+            monitoring_review_required: AtomicU64::new(0),
+            counterparty_assessments: AtomicU64::new(0),
+            counterparty_review_required: AtomicU64::new(0),
+            screening_evaluations: AtomicU64::new(0),
+            screening_unavailable: AtomicU64::new(0),
+            screening_gateway,
+        }
+    }
+
+    fn screening_provider(&self) -> &'static str {
+        if self.screening_gateway.is_some() {
+            "configured_screening_gateway"
+        } else {
+            "disabled_without_verified_provider"
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct MetricsSnapshot {
+    service: &'static str,
+    language: &'static str,
+    uptime_seconds: u64,
+    policy_evaluations: u64,
+    monitoring_evaluations: u64,
+    monitoring_review_required: u64,
+    counterparty_assessments: u64,
+    counterparty_review_required: u64,
+    screening_evaluations: u64,
+    screening_unavailable: u64,
+    observed_at: String,
+    screening_provider: &'static str,
+}
+
+/// RFC3339 observation time so the console can show how old a reading is.
+fn observed_at_now() -> String {
+    let elapsed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    // Formatted from epoch seconds without pulling in a date library, since the
+    // control plane only needs a parseable instant.
+    let secs = elapsed.as_secs() as i64;
+    let days = secs / 86_400;
+    let rem = secs % 86_400;
+    let (year, month, day) = civil_from_days(days);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        rem / 3600,
+        (rem % 3600) / 60,
+        rem % 60
+    )
+}
+
+/// Days-since-epoch to a civil date, using Howard Hinnant's algorithm.
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    (if m <= 2 { y + 1 } else { y }, m, d)
+}
+
+async fn health(State(state): State<Arc<ServiceState>>) -> Json<serde_json::Value> {
+    Json(
+        serde_json::json!({"service":"risk-compliance-core","status":"healthy","screening_provider":state.screening_provider()}),
+    )
+}
+
+async fn metrics(State(state): State<Arc<ServiceState>>) -> Json<MetricsSnapshot> {
+    Json(MetricsSnapshot {
+        service: "risk-compliance-core",
+        language: "rust",
+        uptime_seconds: state.started_at.elapsed().as_secs(),
+        policy_evaluations: state.policy_evaluations.load(Ordering::Relaxed),
+        monitoring_evaluations: state.monitoring_evaluations.load(Ordering::Relaxed),
+        monitoring_review_required: state.monitoring_review_required.load(Ordering::Relaxed),
+        counterparty_assessments: state.counterparty_assessments.load(Ordering::Relaxed),
+        counterparty_review_required: state.counterparty_review_required.load(Ordering::Relaxed),
+        screening_evaluations: state.screening_evaluations.load(Ordering::Relaxed),
+        screening_unavailable: state.screening_unavailable.load(Ordering::Relaxed),
+        observed_at: observed_at_now(),
+        screening_provider: state.screening_provider(),
+    })
+}
+
+async fn evaluate_policy(
+    State(state): State<Arc<ServiceState>>,
+    Json(input): Json<PolicyInput>,
+) -> Json<PolicyResult> {
+    state.policy_evaluations.fetch_add(1, Ordering::Relaxed);
+    Json(evaluate(&input))
+}
+
+/// Serialised form of a monitoring decision. The control plane's enum is
+/// `ALLOW | MANUAL_REVIEW | BLOCK`, so the wire value is spelled explicitly here
+/// rather than relying on an incidental derive.
+fn decision_wire_value(decision: Decision) -> &'static str {
+    match decision {
+        Decision::Allow => "ALLOW",
+        Decision::ManualReview => "MANUAL_REVIEW",
+        Decision::Block => "BLOCK",
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct MonitoringEnvelope {
+    service: &'static str,
+    contract_version: &'static str,
+    envelope_type: &'static str,
+    decision: &'static str,
+    findings: Vec<RuleFinding>,
+}
+
+impl MonitoringEnvelope {
+    fn from_result(result: MonitoringResult) -> Self {
+        Self {
+            service: SERVICE_NAME,
+            contract_version: CONTRACT_VERSION,
+            envelope_type: "umojaflowos.risk.monitoring_result.v1",
+            decision: decision_wire_value(result.decision),
+            findings: result.findings,
+        }
+    }
+}
+
+async fn evaluate_monitoring_route(
+    State(state): State<Arc<ServiceState>>,
+    Json(input): Json<MonitoringInput>,
+) -> Json<MonitoringEnvelope> {
+    let result = evaluate_monitoring(&input);
+    state.monitoring_evaluations.fetch_add(1, Ordering::Relaxed);
+    // Counted separately because "how many evaluations happened" and "how many
+    // needed a human" answer different operational questions.
+    if !matches!(result.decision, Decision::Allow) {
+        state
+            .monitoring_review_required
+            .fetch_add(1, Ordering::Relaxed);
+    }
+    Json(MonitoringEnvelope::from_result(result))
+}
+
+#[derive(Debug, Serialize)]
+struct CounterpartyEnvelope {
+    service: &'static str,
+    contract_version: &'static str,
+    envelope_type: &'static str,
+    band: String,
+    reason_codes: Vec<String>,
+    review_required: bool,
+}
+
+async fn assess_counterparty_route(
+    State(state): State<Arc<ServiceState>>,
+    Json(input): Json<CounterpartyRiskInput>,
+) -> Json<CounterpartyEnvelope> {
+    let assessment = assess_counterparty_risk(&input);
+    state
+        .counterparty_assessments
+        .fetch_add(1, Ordering::Relaxed);
+    if assessment.review_required {
+        state
+            .counterparty_review_required
+            .fetch_add(1, Ordering::Relaxed);
+    }
+    // `RiskBand` already serialises in SCREAMING_SNAKE_CASE; going through serde
+    // rather than a hand-written match keeps the wire value tied to the enum.
+    let band = serde_json::to_value(assessment.band)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_else(|| "UNDETERMINED".to_string());
+    Json(CounterpartyEnvelope {
+        service: SERVICE_NAME,
+        contract_version: CONTRACT_VERSION,
+        envelope_type: "umojaflowos.risk.counterparty_assessment.v1",
+        band,
+        reason_codes: assessment.reason_codes,
+        review_required: assessment.review_required,
+    })
+}
+
+#[derive(Debug, Serialize)]
+struct ScreeningEnvelope {
+    service: &'static str,
+    contract_version: &'static str,
+    envelope_type: &'static str,
+    state: ScreeningState,
+    provider_reference: String,
+    source_version: String,
+    evidence_sha256: String,
+    screened_at: String,
+}
+
+impl ScreeningEnvelope {
+    fn from_result(result: ScreeningResult) -> Self {
+        Self {
+            service: SERVICE_NAME,
+            contract_version: CONTRACT_VERSION,
+            envelope_type: "umojaflowos.risk.screening_result.v1",
+            state: result.state,
+            provider_reference: result.provider_reference,
+            source_version: result.source_version,
+            evidence_sha256: result.evidence_sha256,
+            screened_at: result.screened_at,
+        }
+    }
+}
+
+async fn screen_subject(
+    State(state): State<Arc<ServiceState>>,
+    Json(input): Json<ScreeningRequest>,
+) -> Result<Json<ScreeningEnvelope>, (StatusCode, String)> {
+    state.screening_evaluations.fetch_add(1, Ordering::Relaxed);
+    let gateway = match state.screening_gateway.as_ref() {
+        Some(gateway) => gateway,
+        None => {
+            state.screening_unavailable.fetch_add(1, Ordering::Relaxed);
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "screening provider is not configured".to_string(),
+            ));
+        }
+    };
+    match gateway.screen(input).await {
+        Ok(result) => Ok(Json(ScreeningEnvelope::from_result(result))),
+        Err(error) => {
+            state.screening_unavailable.fetch_add(1, Ordering::Relaxed);
+            Err((StatusCode::SERVICE_UNAVAILABLE, error))
+        }
+    }
+}
+
+fn router_with_screening(screening_gateway: Option<ScreeningGateway>) -> Router {
+    Router::new()
+        .route("/healthz", get(health))
+        .route("/v1/metrics", get(metrics))
+        .route("/v1/policy/evaluate", post(evaluate_policy))
+        .route("/v1/monitoring/evaluate", post(evaluate_monitoring_route))
+        .route("/v1/counterparty/assess", post(assess_counterparty_route))
+        .route("/v1/screening/check", post(screen_subject))
+        .with_state(Arc::new(ServiceState::new(screening_gateway)))
+}
+
+fn router() -> Router {
+    router_with_screening(None)
+}
+
+#[tokio::main]
+async fn main() {
+    let screening_gateway = ScreeningGateway::from_environment()
+        .expect("construct fail-closed screening gateway from deployment environment");
+    let port = std::env::var("PORT").unwrap_or_else(|_| "8082".to_string());
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
+        .await
+        .expect("bind risk-compliance-core listener");
+    let app = match screening_gateway {
+        Some(gateway) => router_with_screening(Some(gateway)),
+        None => router(),
+    };
+    axum::serve(listener, app)
+        .await
+        .expect("serve risk-compliance-core");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use risk_compliance_core::monitoring::MonitoringInput;
+    use risk_compliance_core::Corridor;
+
+    /// The control plane pins these three strings with `z.literal`, so a change
+    /// here is a breaking contract change and must fail this test first.
+    #[test]
+    fn monitoring_envelope_matches_the_published_contract_identity() {
+        let envelope = MonitoringEnvelope::from_result(evaluate_monitoring(&MonitoringInput {
+            corridor: Corridor::NigeriaNgn,
+            amount_minor_units: None,
+            reporting_threshold_minor_units: None,
+            customer_transactions_in_window: None,
+            max_transactions_per_window: None,
+            customer_value_in_window_minor_units: None,
+            max_value_per_window_minor_units: None,
+            counterparty_licence_verified: None,
+            beneficiary_jurisdiction_expected: None,
+        }));
+        assert_eq!(envelope.service, "umojaflowos-risk-compliance-core");
+        assert_eq!(envelope.contract_version, "v1");
+        assert_eq!(
+            envelope.envelope_type,
+            "umojaflowos.risk.monitoring_result.v1"
+        );
+    }
+
+    /// Wholly missing inputs must serialise as BLOCK, never as ALLOW. The
+    /// control plane rejects an ALLOW that carries INPUT_UNAVAILABLE findings,
+    /// so emitting one would take the service offline rather than pass through.
+    #[test]
+    fn absent_monitoring_inputs_serialise_as_block_with_unavailable_reasons() {
+        let envelope = MonitoringEnvelope::from_result(evaluate_monitoring(&MonitoringInput {
+            corridor: Corridor::SouthAfricaZar,
+            amount_minor_units: None,
+            reporting_threshold_minor_units: None,
+            customer_transactions_in_window: None,
+            max_transactions_per_window: None,
+            customer_value_in_window_minor_units: None,
+            max_value_per_window_minor_units: None,
+            counterparty_licence_verified: None,
+            beneficiary_jurisdiction_expected: None,
+        }));
+        assert_eq!(envelope.decision, "BLOCK");
+        assert!(envelope
+            .findings
+            .iter()
+            .any(|finding| finding.reason_code.starts_with("INPUT_UNAVAILABLE")));
+    }
+
+    /// Serialised JSON must contain no execution-shaped or credential-shaped
+    /// key. The control plane walks every payload and refuses such keys at any
+    /// depth, so this asserts the same property at the producing end.
+    #[test]
+    fn serialised_envelopes_carry_no_execution_or_credential_keys() {
+        let monitoring = serde_json::to_string(&MonitoringEnvelope::from_result(
+            evaluate_monitoring(&MonitoringInput {
+                corridor: Corridor::KenyaKes,
+                amount_minor_units: Some(10),
+                reporting_threshold_minor_units: Some(100),
+                customer_transactions_in_window: Some(1),
+                max_transactions_per_window: Some(5),
+                customer_value_in_window_minor_units: Some(10),
+                max_value_per_window_minor_units: Some(1_000),
+                counterparty_licence_verified: Some(true),
+                beneficiary_jurisdiction_expected: Some(true),
+            }),
+        ))
+        .expect("serialise monitoring envelope");
+        for forbidden in [
+            "\"execute\"",
+            "\"settle\"",
+            "\"submit\"",
+            "\"transfer\"",
+            "\"credential\"",
+            "\"api_key\"",
+        ] {
+            assert!(
+                !monitoring.contains(forbidden),
+                "monitoring envelope must not contain {forbidden}"
+            );
+        }
+    }
+
+    /// Every route the control-plane bridge calls must exist. A bridge pointing
+    /// at a missing route degrades to `unavailable`, which is safe but silently
+    /// disables monitoring, so the route set is asserted explicitly.
+    #[tokio::test]
+    async fn every_bridge_route_is_registered_and_answers() {
+        use axum::body::{to_bytes, Body};
+        use axum::http::{Request, StatusCode};
+        use tower::ServiceExt;
+
+        let app = router();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/counterparty/assess")
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .expect("build counterparty request"),
+            )
+            .await
+            .expect("counterparty route responds");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 64 * 1024)
+            .await
+            .expect("read counterparty body");
+        let parsed: serde_json::Value =
+            serde_json::from_slice(&body).expect("counterparty body is JSON");
+        // No evidence was supplied, so the band must be undetermined and review
+        // must be demanded; a favourable band here would be a fabrication.
+        assert_eq!(parsed["band"], "UNDETERMINED");
+        assert_eq!(parsed["review_required"], true);
+        assert_eq!(
+            parsed["envelope_type"],
+            "umojaflowos.risk.counterparty_assessment.v1"
+        );
+
+        let app = router();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/monitoring/evaluate")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::json!({"corridor":"NIGERIA_NGN"}).to_string(),
+                    ))
+                    .expect("build monitoring request"),
+            )
+            .await
+            .expect("monitoring route responds");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), 64 * 1024)
+            .await
+            .expect("read monitoring body");
+        let parsed: serde_json::Value =
+            serde_json::from_slice(&body).expect("monitoring body is JSON");
+        assert_eq!(parsed["decision"], "BLOCK");
+    }
+
+    /// Metrics must be measurements. An endpoint returning plausible constants
+    /// would satisfy a shape check, so these drive real requests through the
+    /// router and then require the counters to match exactly that traffic.
+    async fn read_metrics(app: &mut Router) -> serde_json::Value {
+        use axum::body::{to_bytes, Body};
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/metrics")
+                    .body(Body::empty())
+                    .expect("build metrics request"),
+            )
+            .await
+            .expect("metrics route responds");
+        let body = to_bytes(response.into_body(), 64 * 1024)
+            .await
+            .expect("read metrics body");
+        serde_json::from_slice(&body).expect("metrics body is JSON")
+    }
+
+    async fn post_monitoring(app: &mut Router, payload: serde_json::Value) {
+        use axum::body::Body;
+        use axum::http::Request;
+        use tower::ServiceExt;
+
+
+
+===== FILE: services/risk-compliance-core/src/monitoring.rs =====
+//! Rules-based transaction monitoring for the Nigeria (NGN), Kenya (KES), and
+//! South Africa (ZAR) corridors.
+//!
+//! Every rule is deterministic and evaluated only from supplied, reconciled
+//! inputs. There is no default, no assumed threshold, and no inferred history:
+//! when a required input is absent the evaluation fails closed with an explicit
+//! `INPUT_UNAVAILABLE_*` reason code rather than returning a permissive result.
+//!
+//! This module produces monitoring findings only. It never approves a payment,
+//! never files a report, and never resolves an alert; disposition remains a
+//! human compliance decision recorded in the control plane.
+
+use crate::{Corridor, Decision};
+use serde::{Deserialize, Serialize};
+
+/// A single rule outcome. `triggered` means the rule's condition was met on the
+/// supplied evidence, not that a violation has been established.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RuleFinding {
+    pub rule_id: String,
+    pub triggered: bool,
+    pub reason_code: String,
+}
+
+/// Reconciled monitoring inputs. Optional fields are genuinely optional inputs:
+/// `None` means "not supplied", which forces a fail-closed finding rather than a
+/// zero or a guess.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MonitoringInput {
+    pub corridor: Corridor,
+    /// Amount of the transaction under evaluation, in minor units.
+    pub amount_minor_units: Option<i128>,
+    /// Corridor reporting threshold in minor units, sourced from the approved
+    /// corridor policy record. Never defaulted.
+    pub reporting_threshold_minor_units: Option<i128>,
+    /// Count of transactions by the same customer inside the configured window.
+    pub customer_transactions_in_window: Option<u32>,
+    /// Configured maximum transactions per window from the approved policy.
+    pub max_transactions_per_window: Option<u32>,
+    /// Aggregate value by the same customer inside the window, in minor units.
+    pub customer_value_in_window_minor_units: Option<i128>,
+    /// Configured maximum aggregate value per window from the approved policy.
+    pub max_value_per_window_minor_units: Option<i128>,
+    /// True when the counterparty holds a verified regulator licence record.
+    pub counterparty_licence_verified: Option<bool>,
+    /// True when the beneficiary jurisdiction matches the corridor's expected
+    /// destination per the approved corridor policy.
+    pub beneficiary_jurisdiction_expected: Option<bool>,
+}
+
+/// Aggregate monitoring outcome.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MonitoringResult {
+    pub decision: Decision,
+    pub findings: Vec<RuleFinding>,
+}
+
+fn finding(rule_id: &str, triggered: bool, reason_code: &str) -> RuleFinding {
+    RuleFinding {
+        rule_id: rule_id.to_string(),
+        triggered,
+        reason_code: reason_code.to_string(),
+    }
+}
+
+/// Evaluate all monitoring rules.
+///
+/// Any missing input produces a `Block` with an `INPUT_UNAVAILABLE_*` reason.
+/// A triggered structuring, velocity, or unverified-counterparty rule escalates
+/// to `ManualReview`; nothing here can produce an automatic approval beyond
+/// "no rule triggered on complete inputs".
+pub fn evaluate_monitoring(input: &MonitoringInput) -> MonitoringResult {
+    let mut findings = Vec::new();
+    let mut unavailable = false;
+
+    // Rule TM-01: value at or above the corridor reporting threshold.
+    match (
+        input.amount_minor_units,
+        input.reporting_threshold_minor_units,
+    ) {
+        (Some(amount), Some(threshold)) => findings.push(finding(
+            "TM-01-REPORTING-THRESHOLD",
+            amount >= threshold,
+            "AMOUNT_AT_OR_ABOVE_REPORTING_THRESHOLD",
+        )),
+        _ => {
+            unavailable = true;
+            findings.push(finding(
+                "TM-01-REPORTING-THRESHOLD",
+                false,
+                "INPUT_UNAVAILABLE_REPORTING_THRESHOLD",
+            ));
+        }
+    }
+
+    // Rule TM-02: structuring, value just below the threshold within the window.
+    match (
+        input.amount_minor_units,
+        input.reporting_threshold_minor_units,
+        input.customer_transactions_in_window,
+    ) {
+        (Some(amount), Some(threshold), Some(count)) => {
+            // Deterministic band: within 10% below the threshold, repeated.
+            let band_floor = threshold - threshold / 10;
+            let triggered = amount < threshold && amount >= band_floor && count > 1;
+            findings.push(finding(
+                "TM-02-STRUCTURING-BAND",
+                triggered,
+                "REPEATED_VALUE_JUST_BELOW_THRESHOLD",
+            ));
+        }
+        _ => {
+            unavailable = true;
+            findings.push(finding(
+                "TM-02-STRUCTURING-BAND",
+                false,
+                "INPUT_UNAVAILABLE_STRUCTURING_INPUTS",
+            ));
+        }
+    }
+
+    // Rule TM-03: transaction-count velocity.
+    match (
+        input.customer_transactions_in_window,
+        input.max_transactions_per_window,
+    ) {
+        (Some(count), Some(max)) => findings.push(finding(
+            "TM-03-COUNT-VELOCITY",
+            count > max,
+            "TRANSACTION_COUNT_VELOCITY_EXCEEDED",
+        )),
+        _ => {
+            unavailable = true;
+            findings.push(finding(
+                "TM-03-COUNT-VELOCITY",
+                false,
+                "INPUT_UNAVAILABLE_COUNT_VELOCITY_LIMIT",
+            ));
+        }
+    }
+
+    // Rule TM-04: aggregate-value velocity.
+    match (
+        input.customer_value_in_window_minor_units,
+        input.max_value_per_window_minor_units,
+    ) {
+        (Some(value), Some(max)) => findings.push(finding(
+            "TM-04-VALUE-VELOCITY",
+            value > max,
+            "AGGREGATE_VALUE_VELOCITY_EXCEEDED",
+        )),
+        _ => {
+            unavailable = true;
+            findings.push(finding(
+                "TM-04-VALUE-VELOCITY",
+                false,
+                "INPUT_UNAVAILABLE_VALUE_VELOCITY_LIMIT",
+            ));
+        }
+    }
+
+    // Rule TM-05: counterparty licence verification.
+    match input.counterparty_licence_verified {
+        Some(verified) => findings.push(finding(
+            "TM-05-COUNTERPARTY-LICENCE",
+            !verified,
+            "COUNTERPARTY_LICENCE_NOT_VERIFIED",
+        )),
+        None => {
+            unavailable = true;
+            findings.push(finding(
+                "TM-05-COUNTERPARTY-LICENCE",
+                false,
+                "INPUT_UNAVAILABLE_COUNTERPARTY_LICENCE",
+            ));
+        }
+    }
+
+    // Rule TM-06: unexpected beneficiary jurisdiction for the corridor.
+    match input.beneficiary_jurisdiction_expected {
+        Some(expected) => findings.push(finding(
+            "TM-06-JURISDICTION",
+            !expected,
+            "BENEFICIARY_JURISDICTION_UNEXPECTED",
+        )),
+        None => {
+            unavailable = true;
+            findings.push(finding(
+                "TM-06-JURISDICTION",
+                false,
+                "INPUT_UNAVAILABLE_BENEFICIARY_JURISDICTION",
+            ));
+        }
+    }
+
+    if unavailable {
+        return MonitoringResult {
+            decision: Decision::Block,
+            findings,
+        };
+    }
+
+    let escalate = findings.iter().any(|f| f.triggered);
+    MonitoringResult {
+        decision: if escalate {
+            Decision::ManualReview
+        } else {
+            Decision::Allow
+        },
+        findings,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn complete() -> MonitoringInput {
+        MonitoringInput {
+            corridor: Corridor::KenyaKes,
+            amount_minor_units: Some(50_000),
+            reporting_threshold_minor_units: Some(1_000_000),
+            customer_transactions_in_window: Some(1),
+            max_transactions_per_window: Some(10),
+            customer_value_in_window_minor_units: Some(50_000),
+            max_value_per_window_minor_units: Some(5_000_000),
+            counterparty_licence_verified: Some(true),
+            beneficiary_jurisdiction_expected: Some(true),
+        }
+    }
+
+    #[test]
+    fn allows_when_all_inputs_present_and_no_rule_triggers() {
+        let result = evaluate_monitoring(&complete());
+        assert_eq!(result.decision, Decision::Allow);
+        assert!(result.findings.iter().all(|f| !f.triggered));
+        assert_eq!(result.findings.len(), 6);
+    }
+
+    #[test]
+    fn blocks_when_any_required_input_is_missing() {
+        let mut input = complete();
+        input.reporting_threshold_minor_units = None;
+        let result = evaluate_monitoring(&input);
+        assert_eq!(result.decision, Decision::Block);
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.reason_code == "INPUT_UNAVAILABLE_REPORTING_THRESHOLD"));
+    }
+
+    #[test]
+    fn blocks_when_every_limit_is_absent_rather_than_assuming_zero() {
+        let mut input = complete();
+        input.max_transactions_per_window = None;
+        input.max_value_per_window_minor_units = None;
+        let result = evaluate_monitoring(&input);
+        assert_eq!(result.decision, Decision::Block);
+        let unavailable = result
+            .findings
+            .iter()
+            .filter(|f| f.reason_code.starts_with("INPUT_UNAVAILABLE"))
+            .count();
+        assert_eq!(unavailable, 2);
+    }
+
+    #[test]
+    fn escalates_at_or_above_the_reporting_threshold() {
+        let mut input = complete();
+        input.amount_minor_units = Some(1_000_000);
+        let result = evaluate_monitoring(&input);
+        assert_eq!(result.decision, Decision::ManualReview);
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.rule_id == "TM-01-REPORTING-THRESHOLD" && f.triggered));
+    }
+
+    #[test]
+    fn detects_repeated_value_just_below_the_threshold() {
+        let mut input = complete();
+        input.amount_minor_units = Some(950_000);
+        input.customer_transactions_in_window = Some(3);
+        let result = evaluate_monitoring(&input);
+        assert_eq!(result.decision, Decision::ManualReview);
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.rule_id == "TM-02-STRUCTURING-BAND" && f.triggered));
+    }
+
+    #[test]
+    fn does_not_flag_a_single_transaction_in_the_structuring_band() {
+        let mut input = complete();
+        input.amount_minor_units = Some(950_000);
+        input.customer_transactions_in_window = Some(1);
+        let result = evaluate_monitoring(&input);
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.rule_id == "TM-02-STRUCTURING-BAND" && !f.triggered));
+    }
+
+    #[test]
+    fn escalates_on_count_and_value_velocity_breaches() {
+        let mut input = complete();
+        input.customer_transactions_in_window = Some(11);
+        input.customer_value_in_window_minor_units = Some(5_000_001);
+        let result = evaluate_monitoring(&input);
+        assert_eq!(result.decision, Decision::ManualReview);
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.rule_id == "TM-03-COUNT-VELOCITY" && f.triggered));
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.rule_id == "TM-04-VALUE-VELOCITY" && f.triggered));
+    }
+
+    #[test]
+    fn escalates_an_unverified_counterparty_and_unexpected_jurisdiction() {
+        let mut input = complete();
+        input.counterparty_licence_verified = Some(false);
+        input.beneficiary_jurisdiction_expected = Some(false);
+        let result = evaluate_monitoring(&input);
+        assert_eq!(result.decision, Decision::ManualReview);
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.rule_id == "TM-05-COUNTERPARTY-LICENCE" && f.triggered));
+        assert!(result
+            .findings
+            .iter()
+            .any(|f| f.rule_id == "TM-06-JURISDICTION" && f.triggered));
+    }
+
+    #[test]
+    fn never_returns_a_settlement_or_filing_instruction() {
+        // The result type carries a decision and findings only. This guards
+        // against a future field that could be read as an execution instruction.
+        let json = serde_json::to_string(&evaluate_monitoring(&complete())).expect("serialize");
+        for forbidden in ["execute", "settle", "submit", "file_report", "transfer"] {
+            assert!(
+                !json.contains(forbidden),
+                "monitoring result must not carry {forbidden}"
+            );
+        }
+    }
+}
+
+
+===== FILE: services/risk-compliance-core/src/screening.rs =====
+use crate::ScreeningState;
+use reqwest::{Client, Url};
+use serde::{Deserialize, Serialize};
+use std::env;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ScreeningRequest {
+    pub subject_reference: String,
+    pub legal_name: String,
+    pub country_code: String,
+    pub scope: String,
+    pub correlation_id: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ScreeningResult {
+    pub state: ScreeningState,
+    pub provider_reference: String,
+    pub source_version: String,
+    pub evidence_sha256: String,
+    pub screened_at: String,
+}
+
+#[derive(Clone)]
+pub struct ScreeningGateway {
+    endpoint: Url,
+    api_key: String,
+    client: Client,
+}
+
+fn required_non_blank(value: &str, field: &str, maximum: usize) -> Result<(), String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed.len() > maximum || !trimmed.is_char_boundary(trimmed.len()) {
+        return Err(format!("screening {field} is required"));
+    }
+    Ok(())
+}
+
+fn has_sha256(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn permitted_endpoint(raw: &str, allow_loopback: bool) -> Result<Url, String> {
+    let endpoint = Url::parse(raw.trim())
+        .map_err(|_| "screening endpoint must be an absolute URL".to_string())?;
+    if endpoint.username() != ""
+        || endpoint.password().is_some()
+        || endpoint.query().is_some()
+        || endpoint.fragment().is_some()
+    {
+        return Err(
+            "screening endpoint must not embed credentials, query parameters, or fragments"
+                .to_string(),
+        );
+    }
+    let host = endpoint.host_str().unwrap_or_default();
+    let loopback = host == "127.0.0.1" || host == "localhost" || host == "::1";
+    if endpoint.scheme() != "https" && !(endpoint.scheme() == "http" && allow_loopback && loopback)
+    {
+        return Err("screening endpoint must use HTTPS unless explicit loopback development transport is enabled".to_string());
+    }
+    Ok(endpoint)
+}
+
+fn resolve_file_secret(root: &Path, reference: &str) -> Result<String, String> {
+    let path = reference
+        .strip_prefix("file:///")
+        .ok_or_else(|| "screening API key reference must be a file:/// path".to_string())?;
+    let approved_root = root
+        .canonicalize()
+        .map_err(|_| "screening secret root is unavailable".to_string())?;
+    let candidate = PathBuf::from("/")
+        .join(path)
+        .canonicalize()
+        .map_err(|_| "screening secret reference is unavailable".to_string())?;
+    if !candidate.starts_with(&approved_root) {
+        return Err("screening secret reference escapes the approved root".to_string());
+    }
+    let value = fs::read_to_string(candidate)
+        .map_err(|_| "screening secret material cannot be read".to_string())?;
+    if value.len() < 12 {
+        return Err("screening API key material is unavailable".to_string());
+    }
+    Ok(value)
+}
+
+impl ScreeningGateway {
+    pub fn from_environment() -> Result<Option<Self>, String> {
+        let enabled = env::var("UMOJA_SCREENING_ENABLED").unwrap_or_else(|_| "false".to_string());
+        let enabled = enabled
+            .parse::<bool>()
+            .map_err(|_| "UMOJA_SCREENING_ENABLED must be true or false".to_string())?;
+        if !enabled {
+            return Ok(None);
+        }
+        let allow_loopback = env::var("UMOJA_SCREENING_ALLOW_INSECURE_LOOPBACK")
+            .unwrap_or_else(|_| "false".to_string())
+            .parse::<bool>()
+            .map_err(|_| {
+                "UMOJA_SCREENING_ALLOW_INSECURE_LOOPBACK must be true or false".to_string()
+            })?;
+        let endpoint = permitted_endpoint(
+            &env::var("UMOJA_SCREENING_ENDPOINT").unwrap_or_default(),
+            allow_loopback,
+        )?;
+        let root = env::var("UMOJA_SCREENING_MATERIAL_ROOT")
+            .unwrap_or_else(|_| "/run/umoja-secrets".to_string());
+        let api_key = resolve_file_secret(
+            Path::new(&root),
+            &env::var("UMOJA_SCREENING_API_KEY_SECRET_REFERENCE").unwrap_or_default(),
+        )?;
+        let client = Client::builder()
+            .timeout(Duration::from_secs(10))
+            .build()
+            .map_err(|_| "screening HTTP client could not be configured".to_string())?;
+        Ok(Some(Self {
+            endpoint,
+            api_key,
+            client,
+        }))
+    }
+
+    pub async fn screen(&self, request: ScreeningRequest) -> Result<ScreeningResult, String> {
+        required_non_blank(&request.subject_reference, "subject reference", 255)?;
+        required_non_blank(&request.legal_name, "legal name", 512)?;
+        if request.country_code.trim().len() != 2 {
+            return Err("screening country code must be ISO-3166 alpha-2".to_string());
+        }
+        required_non_blank(&request.scope, "scope", 128)?;
+        required_non_blank(&request.correlation_id, "correlation id", 255)?;
+        let response = self
+            .client
+            .post(self.endpoint.clone())
+            .header("authorization", format!("Bearer {}", self.api_key))
+            .header("x-umoja-correlation-id", request.correlation_id.clone())
+            .json(&request)
+            .send()
+            .await
+            .map_err(|_| "screening provider is unavailable".to_string())?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "screening provider returned HTTP {}",
+                response.status().as_u16()
+            ));
+        }
+        let result: ScreeningResult = response
+            .json()
+            .await
+            .map_err(|_| "screening provider returned an invalid response".to_string())?;
+        required_non_blank(&result.provider_reference, "provider reference", 255)?;
+        required_non_blank(&result.source_version, "source version", 128)?;
+        required_non_blank(&result.screened_at, "screened-at timestamp", 64)?;
+        if !has_sha256(&result.evidence_sha256) {
+            return Err("screening provider response requires an evidence SHA-256".to_string());
+        }
+        Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn endpoint_requires_https_except_explicit_loopback() {
+        assert!(permitted_endpoint("https://screening.example/v1/check", false).is_ok());
+        assert!(permitted_endpoint("http://screening.example/v1/check", true).is_err());
+        assert!(permitted_endpoint("http://127.0.0.1:8089/v1/check", true).is_ok());
+    }
+
+    #[test]
+    fn result_requires_a_non_fabricated_evidence_hash() {
+        assert!(has_sha256(&"a".repeat(64)));
+        assert!(!has_sha256("not-a-digest"));
+    }
+}
+
+
+===== FILE: services/risk-compliance-core/src/treasury_stress.rs =====
+//! Deterministic, fail-closed treasury stress-test evaluation.
+//!
+//! The evaluator is intentionally pure: it derives stressed buffer thresholds
+//! and a bounded recommendation amount from an approved buffer policy and a
+//! reconciled balance observation. It never invents a balance, never fetches
+//! market data, and never initiates a transfer. When any required input is
+//! missing, stale, or internally inconsistent, the run is classified as
+//! unavailable and no numeric result is produced, so downstream persistence
+//! cannot record a decision that was not actually computed.
+
+use serde::{Deserialize, Serialize};
+
+use crate::Corridor;
+
+/// Maximum age of a reconciled balance observation, in hours, before the
+/// evaluator refuses to use it. Treasury decisions must not be taken on a
+/// balance that is no longer representative of the account state.
+pub const MAX_BALANCE_AGE_HOURS: u32 = 24;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StressTestStatus {
+    Completed,
+    InputUnavailable,
+    InputStale,
+    InputInconsistent,
+}
+
+/// An approved treasury buffer policy. Percentages are expressed as fractions
+/// of the approved daily outflow (for example, 0.35 means 35 percent).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BufferPolicy {
+    pub corridor: Corridor,
+    pub currency: String,
+    pub policy_version: String,
+    pub approved_daily_outflow: f64,
+    pub minimum_buffer_pct: f64,
+    pub amber_buffer_pct: f64,
+    pub target_buffer_pct: f64,
+    pub max_recommendation_pct_of_target: f64,
+}
+
+/// A reconciled balance observation supplied by an authorised source.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReconciledBalance {
+    pub available_amount: f64,
+    pub age_hours: u32,
+    pub source_reference: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StressScenario {
+    pub scenario_code: String,
+    /// Multiplier applied to the approved daily outflow. A 50 percent surge is
+    /// expressed as 1.5 and must never be below 1.0.
+    pub outflow_multiplier: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct StressTestOutcome {
+    pub status: StressTestStatus,
+    pub scenario_code: String,
+    pub outflow_multiplier: f64,
+    pub reconciled_available_balance: Option<f64>,
+    pub stressed_daily_outflow: Option<f64>,
+    pub stressed_minimum_buffer: Option<f64>,
+    pub stressed_amber_buffer: Option<f64>,
+    pub stressed_target_buffer: Option<f64>,
+    pub computed_recommendation_amount: Option<f64>,
+    pub breaches_minimum_buffer: Option<bool>,
+    pub limitation: Option<String>,
+    pub reason_codes: Vec<String>,
+}
+
+impl StressTestOutcome {
+    fn fail_closed(
+        scenario: &StressScenario,
+        status: StressTestStatus,
+        limitation: &str,
+        reason_code: &str,
+    ) -> Self {
+        Self {
+            status,
+            scenario_code: scenario.scenario_code.clone(),
+            outflow_multiplier: scenario.outflow_multiplier,
+            reconciled_available_balance: None,
+            stressed_daily_outflow: None,
+            stressed_minimum_buffer: None,
+            stressed_amber_buffer: None,
+            stressed_target_buffer: None,
+            computed_recommendation_amount: None,
+            breaches_minimum_buffer: None,
+            limitation: Some(limitation.to_string()),
+            reason_codes: vec![reason_code.to_string()],
+        }
+    }
+}
+
+fn policy_is_consistent(policy: &BufferPolicy) -> bool {
+    let fractions_in_range = [
+        policy.minimum_buffer_pct,
+        policy.amber_buffer_pct,
+        policy.target_buffer_pct,
+        policy.max_recommendation_pct_of_target,
+    ]
+    .iter()
+    .all(|value| value.is_finite() && *value > 0.0 && *value <= 1.0);
+
+    fractions_in_range
+        && policy.approved_daily_outflow.is_finite()
+        && policy.approved_daily_outflow > 0.0
+        && policy.minimum_buffer_pct <= policy.amber_buffer_pct
+        && policy.amber_buffer_pct <= policy.target_buffer_pct
+        && !policy.currency.trim().is_empty()
+        && !policy.policy_version.trim().is_empty()
+}
+
+/// Evaluates a settlement-outflow surge scenario against an approved buffer
+/// policy. `balance` is optional precisely because the absence of a reconciled
+/// balance is a normal, expected state that must fail closed rather than be
+/// substituted with an assumed figure.
+pub fn evaluate_stress_test(
+    policy: &BufferPolicy,
+    scenario: &StressScenario,
+    balance: Option<&ReconciledBalance>,
+) -> StressTestOutcome {
+    if !scenario.outflow_multiplier.is_finite() || scenario.outflow_multiplier < 1.0 {
+        return StressTestOutcome::fail_closed(
+            scenario,
+            StressTestStatus::InputInconsistent,
+            "The scenario outflow multiplier must be a finite value of at least 1.0.",
+            "SCENARIO_MULTIPLIER_INVALID",
+        );
+    }
+
+    if !policy_is_consistent(policy) {
+        return StressTestOutcome::fail_closed(
+            scenario,
+            StressTestStatus::InputInconsistent,
+            "The approved buffer policy is internally inconsistent, so no stressed threshold can be derived.",
+            "BUFFER_POLICY_INCONSISTENT",
+        );
+    }
+
+    let Some(balance) = balance else {
+        return StressTestOutcome::fail_closed(
+            scenario,
+            StressTestStatus::InputUnavailable,
+            "No reconciled balance observation is available from an authorised source, so the stress test cannot be computed.",
+            "RECONCILED_BALANCE_UNAVAILABLE",
+        );
+    };
+
+    if balance.source_reference.trim().is_empty() {
+        return StressTestOutcome::fail_closed(
+            scenario,
+            StressTestStatus::InputInconsistent,
+            "The reconciled balance carries no source reference, so its provenance cannot be evidenced.",
+            "RECONCILED_BALANCE_UNSOURCED",
+        );
+    }
+
+    if !balance.available_amount.is_finite() || balance.available_amount < 0.0 {
+        return StressTestOutcome::fail_closed(
+            scenario,
+            StressTestStatus::InputInconsistent,
+            "The reconciled balance is not a finite non-negative amount.",
+            "RECONCILED_BALANCE_INVALID",
+        );
+    }
+
+    if balance.age_hours > MAX_BALANCE_AGE_HOURS {
+        return StressTestOutcome::fail_closed(
+            scenario,
+            StressTestStatus::InputStale,
+            "The reconciled balance observation is older than the permitted staleness window.",
+            "RECONCILED_BALANCE_STALE",
+        );
+    }
+
+    let stressed_daily_outflow = policy.approved_daily_outflow * scenario.outflow_multiplier;
+    let stressed_minimum_buffer = stressed_daily_outflow * policy.minimum_buffer_pct;
+    let stressed_amber_buffer = stressed_daily_outflow * policy.amber_buffer_pct;
+    let stressed_target_buffer = stressed_daily_outflow * policy.target_buffer_pct;
+
+    let shortfall_to_target = (stressed_target_buffer - balance.available_amount).max(0.0);
+    let recommendation_ceiling = stressed_target_buffer * policy.max_recommendation_pct_of_target;
+    let computed_recommendation_amount = shortfall_to_target.min(recommendation_ceiling);
+    let breaches_minimum_buffer = balance.available_amount < stressed_minimum_buffer;
+
+    let mut reason_codes = Vec::new();
+    if breaches_minimum_buffer {
+        reason_codes.push("STRESSED_MINIMUM_BUFFER_BREACHED".to_string());
+    } else if balance.available_amount < stressed_amber_buffer {
+        reason_codes.push("STRESSED_AMBER_BUFFER_BREACHED".to_string());
+    }
+    if computed_recommendation_amount > 0.0 {
+        reason_codes.push("REBALANCING_RECOMMENDATION_REQUIRED".to_string());
+    }
+    if computed_recommendation_amount >= recommendation_ceiling
+        && shortfall_to_target > recommendation_ceiling
+    {
+        reason_codes.push("RECOMMENDATION_CAPPED_BY_POLICY".to_string());
+    }
+
+    StressTestOutcome {
+        status: StressTestStatus::Completed,
+        scenario_code: scenario.scenario_code.clone(),
+        outflow_multiplier: scenario.outflow_multiplier,
+        reconciled_available_balance: Some(balance.available_amount),
+        stressed_daily_outflow: Some(stressed_daily_outflow),
+        stressed_minimum_buffer: Some(stressed_minimum_buffer),
+        stressed_amber_buffer: Some(stressed_amber_buffer),
+        stressed_target_buffer: Some(stressed_target_buffer),
+        computed_recommendation_amount: Some(computed_recommendation_amount),
+        breaches_minimum_buffer: Some(breaches_minimum_buffer),
+        limitation: None,
+        reason_codes,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn zar_policy() -> BufferPolicy {
+        BufferPolicy {
+            corridor: Corridor::SouthAfricaZar,
+            currency: "ZAR".to_string(),
+            policy_version: "test-only-not-approved".to_string(),
+            approved_daily_outflow: 1_000_000.0,
+            minimum_buffer_pct: 0.25,
+            amber_buffer_pct: 0.35,
+            target_buffer_pct: 0.50,
+            max_recommendation_pct_of_target: 0.40,
+        }
+    }
+
+    fn surge() -> StressScenario {
+        StressScenario {
+            scenario_code: "ZAR_SETTLEMENT_OUTFLOW_SURGE_50PCT".to_string(),
+            outflow_multiplier: 1.5,
+        }
+    }
+
+    #[test]
+    fn fails_closed_without_a_reconciled_balance() {
+        let outcome = evaluate_stress_test(&zar_policy(), &surge(), None);
+        assert_eq!(outcome.status, StressTestStatus::InputUnavailable);
+        assert!(outcome.stressed_minimum_buffer.is_none());
+        assert!(outcome.computed_recommendation_amount.is_none());
+        assert_eq!(outcome.reason_codes, vec!["RECONCILED_BALANCE_UNAVAILABLE"]);
+    }
+
+    #[test]
+    fn fails_closed_on_a_stale_balance() {
+        let balance = ReconciledBalance {
+            available_amount: 400_000.0,
+            age_hours: MAX_BALANCE_AGE_HOURS + 1,
+            source_reference: "custodian-statement-reference".to_string(),
+        };
+        let outcome = evaluate_stress_test(&zar_policy(), &surge(), Some(&balance));
+        assert_eq!(outcome.status, StressTestStatus::InputStale);
+        assert!(outcome.computed_recommendation_amount.is_none());
+    }
+
+    #[test]
+    fn fails_closed_on_an_unsourced_balance() {
+        let balance = ReconciledBalance {
+            available_amount: 400_000.0,
+            age_hours: 1,
+            source_reference: "   ".to_string(),
+        };
+        let outcome = evaluate_stress_test(&zar_policy(), &surge(), Some(&balance));
+        assert_eq!(outcome.status, StressTestStatus::InputInconsistent);
+        assert_eq!(outcome.reason_codes, vec!["RECONCILED_BALANCE_UNSOURCED"]);
+    }
+
+    #[test]
+    fn fails_closed_on_an_inconsistent_policy() {
+        let mut policy = zar_policy();
+        policy.minimum_buffer_pct = 0.60; // above the target buffer
+        let balance = ReconciledBalance {
+            available_amount: 400_000.0,
+            age_hours: 1,
+            source_reference: "custodian-statement-reference".to_string(),
+        };
+        let outcome = evaluate_stress_test(&policy, &surge(), Some(&balance));
+        assert_eq!(outcome.status, StressTestStatus::InputInconsistent);
+        assert_eq!(outcome.reason_codes, vec!["BUFFER_POLICY_INCONSISTENT"]);
+    }
+
+    #[test]
+    fn rejects_a_multiplier_below_one() {
+        let scenario = StressScenario {
+            scenario_code: "INVALID".to_string(),
+            outflow_multiplier: 0.9,
+        };
+        let outcome = evaluate_stress_test(&zar_policy(), &scenario, None);
+        assert_eq!(outcome.status, StressTestStatus::InputInconsistent);
+        assert_eq!(outcome.reason_codes, vec!["SCENARIO_MULTIPLIER_INVALID"]);
+    }
+
+    #[test]
+    fn derives_stressed_thresholds_deterministically() {
+        // 1,000,000 approved daily outflow with a 50 percent surge gives a
+        // stressed outflow of 1,500,000; the derived thresholds follow directly
+        // from the approved policy fractions.
+        let balance = ReconciledBalance {
+            available_amount: 300_000.0,
+            age_hours: 2,
+            source_reference: "custodian-statement-reference".to_string(),
+        };
+        let outcome = evaluate_stress_test(&zar_policy(), &surge(), Some(&balance));
+        assert_eq!(outcome.status, StressTestStatus::Completed);
+        assert_eq!(outcome.stressed_daily_outflow, Some(1_500_000.0));
+        assert_eq!(outcome.stressed_minimum_buffer, Some(375_000.0));
+        assert_eq!(outcome.stressed_amber_buffer, Some(525_000.0));
+        assert_eq!(outcome.stressed_target_buffer, Some(750_000.0));
+        assert_eq!(outcome.breaches_minimum_buffer, Some(true));
+        // Shortfall to target is 450,000 but the policy caps a single
+        // recommendation at 40 percent of the stressed target (300,000).
+        assert_eq!(outcome.computed_recommendation_amount, Some(300_000.0));
+        assert!(outcome
+            .reason_codes
+            .contains(&"STRESSED_MINIMUM_BUFFER_BREACHED".to_string()));
+        assert!(outcome
+            .reason_codes
+            .contains(&"RECOMMENDATION_CAPPED_BY_POLICY".to_string()));
+    }
+
+    #[test]
+    fn recommends_nothing_when_the_stressed_target_is_already_held() {
+        let balance = ReconciledBalance {
+            available_amount: 800_000.0,
+            age_hours: 1,
+            source_reference: "custodian-statement-reference".to_string(),
+        };
+        let outcome = evaluate_stress_test(&zar_policy(), &surge(), Some(&balance));
+        assert_eq!(outcome.status, StressTestStatus::Completed);
+        assert_eq!(outcome.computed_recommendation_amount, Some(0.0));
+        assert_eq!(outcome.breaches_minimum_buffer, Some(false));
+        assert!(outcome.reason_codes.is_empty());
+    }
+
+    #[test]
+    fn never_returns_a_transfer_instruction() {
+        // The outcome type carries thresholds and a bounded recommendation only.
+        // Serialising it must not produce any execution or settlement field.
+        let balance = ReconciledBalance {
+            available_amount: 300_000.0,
+            age_hours: 2,
+            source_reference: "custodian-statement-reference".to_string(),
+        };
+        let outcome = evaluate_stress_test(&zar_policy(), &surge(), Some(&balance));
+        let encoded = serde_json::to_string(&outcome).expect("outcome serialises");
+        for forbidden in ["execute", "transfer", "settle", "instruction"] {
+            assert!(
+                !encoded.contains(forbidden),
+                "outcome must not imply execution: {forbidden}"
+            );
+        }
+    }
+}
+
+
+===== FILE: services/risk-compliance-core/tests/control_assurance.rs =====
+use risk_compliance_core::{assess_control_assurance, ControlAssuranceRiskInput};
+
+#[test]
+fn incomplete_assurance_is_blocked_without_activation_or_execution_authority() {
+    let decision = assess_control_assurance(ControlAssuranceRiskInput {
+        control_coverage_present: false,
+        separation_of_duties_clear: false,
+        evidence_fresh: false,
+        counterparty_route_ready: false,
+        reconciliation_reference_present: false,
+        stablecoin_policy_covered: false,
+        adapter_certification_state: "evidence_pending".to_owned(),
+        audit_packet_reference_present: false,
+    });
+
+    assert_eq!(decision.outcome, "blocked");
+    assert!(!decision.provider_activation_initiated);
+    assert!(!decision.external_execution_initiated);
+    assert!(!decision.audit_packet_generated);
+    assert_eq!(decision.reason_codes.len(), 8);
+}
+
+
+===== FILE: services/risk-compliance-core/tests/event_stream_gate_tests.rs =====
+use risk_compliance_core::{
+    evaluate_event_stream_input, Corridor, Decision, EventStreamState, PolicyInput, ScreeningState,
+};
+
+fn otherwise_allowed_input() -> PolicyInput {
+    PolicyInput {
+        corridor: Corridor::NigeriaNgn,
+        regulated_entity_authorized: true,
+        counterparty_authorized: true,
+        kyc_approved: true,
+        sanctions: ScreeningState::Clear,
+        travel_rule_required: false,
+        travel_rule_complete: true,
+        velocity_within_limit: true,
+    }
+}
+
+#[test]
+fn missing_kafka_or_dapr_input_fails_closed_before_policy_allow() {
+    let result = evaluate_event_stream_input(
+        &otherwise_allowed_input(),
+        EventStreamState::InputUnavailable,
+    );
+    assert_eq!(result.decision, Decision::Block);
+    assert_eq!(result.reason_codes, vec!["INPUT_UNAVAILABLE_EVENT_STREAM"]);
+}
+
+#[test]
+fn available_event_stream_delegates_to_standard_policy_evaluation() {
+    let result =
+        evaluate_event_stream_input(&otherwise_allowed_input(), EventStreamState::Available);
+    assert_eq!(result.decision, Decision::Allow);
+}
+
+
+===== FILE: services/risk-compliance-core/tests/eventing_tests.rs =====
+use risk_compliance_core::{eventing::policy_event, Decision, PolicyResult};
+
+#[test]
+fn policy_events_never_authorize_external_execution() {
+    let event = policy_event(
+        "event-1".into(),
+        "order-1".into(),
+        PolicyResult {
+            decision: Decision::Allow,
+            reason_codes: vec![],
+        },
+    )
+    .unwrap();
+    assert!(!event.external_execution_authorized);
+}
+
+
+===== FILE: services/risk-compliance-core/tests/policy_tests.rs =====
+use risk_compliance_core::{evaluate, Corridor, Decision, PolicyInput, ScreeningState};
+
+fn eligible_input() -> PolicyInput {
+    PolicyInput {
+        corridor: Corridor::SouthAfricaZar,
+        regulated_entity_authorized: true,
+        counterparty_authorized: true,
+        kyc_approved: true,
+        sanctions: ScreeningState::Clear,
+        travel_rule_required: true,
+        travel_rule_complete: true,
+        velocity_within_limit: true,
+    }
+}
+
+#[test]
+fn south_africa_travel_rule_incompleteness_blocks_execution() {
+    let mut input = eligible_input();
+    input.travel_rule_complete = false;
+    let result = evaluate(&input);
+    assert_eq!(result.decision, Decision::Block);
+    assert!(result
+        .reason_codes
+        .contains(&"TRAVEL_RULE_INCOMPLETE".to_string()));
+}
+
+#[test]
+fn potential_sanctions_match_requires_manual_review() {
+    let mut input = eligible_input();
+    input.sanctions = ScreeningState::PotentialMatch;
+    let result = evaluate(&input);
+    assert_eq!(result.decision, Decision::ManualReview);
+}
+
+
+===== FILE: services/risk-compliance-core/tests/vasp_readiness.rs =====
+use risk_compliance_core::{assess_vasp_readiness, VaspReadinessRiskInput};
+
+#[test]
+fn vasp_readiness_reports_gaps_and_never_creates_authority() {
+    let decision = assess_vasp_readiness(VaspReadinessRiskInput {
+        supervisory_path_evidence_present: true,
+        corporate_evidence_present: true,
+        principal_officer_evidence_present: true,
+        nfiu_evidence_present: true,
+        aml_programme_present: true,
+        cyber_controls_present: true,
+        incident_plan_present: true,
+        travel_rule_data_complete: true,
+        counterparty_evidence_present: true,
+    });
+    assert_eq!(
+        decision.outcome,
+        "INTERNAL_RECORD_COMPLETE_PENDING_EXTERNAL_REVIEW"
+    );
+    assert!(!decision.external_submission_initiated);
+    assert!(!decision.travel_rule_transmission);
+    assert!(!decision.provider_activation_initiated);
+    assert!(!decision.custody_initiated);
+    assert!(!decision.value_movement_initiated);
+}

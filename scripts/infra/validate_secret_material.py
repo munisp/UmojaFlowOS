@@ -29,7 +29,7 @@ SENSITIVE_SOURCE_ASSIGNMENT = re.compile(
     (?:
         (?:const|let|var)\s+
         (?P<declaration>[a-z_$][\w$]*(?:token|password|secret|api[_-]?key|client[_-]?secret|sasl[_-]?pass)[\w$]*)
-        (?:\s*:\s*[^=;\n]+)?\s*= 
+        (?:\s*:\s*[^=;\n]+)?\s*=
       |
         (?P<property>["']?[a-z_$][\w$]*(?:token|password|secret|api[_-]?key|client[_-]?secret|sasl[_-]?pass)[\w$]*["']?)\s*:
     )
@@ -37,7 +37,7 @@ SENSITIVE_SOURCE_ASSIGNMENT = re.compile(
     """
 )
 SENSITIVE_ASSIGNMENT = re.compile(
-    r"""(?im)^
+    r"""(?m)^
         \s*(?P<key>[A-Z][A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|API_KEY|CLIENT_SECRET|SASL_PASS)[A-Z0-9_]*)
         \s*[:=]\s*
         (?P<value>[^\s#]+)

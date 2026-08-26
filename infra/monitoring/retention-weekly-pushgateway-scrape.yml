@@ -1,0 +1,15 @@
+scrape_configs:
+  - job_name: umoja-retention-weekly-report
+    honor_labels: true
+    scheme: https
+    metrics_path: /metrics
+    tls_config:
+      ca_file: /etc/prometheus/secrets/umoja-pushgateway-ca/ca.crt
+      server_name: prometheus-pushgateway.monitoring.svc.cluster.local
+    bearer_token_file: /etc/prometheus/secrets/umoja-pushgateway-token/token
+    static_configs:
+      - targets:
+          - prometheus-pushgateway.monitoring.svc.cluster.local:9091
+        labels:
+          service: retention-weekly-report
+          environment: staging

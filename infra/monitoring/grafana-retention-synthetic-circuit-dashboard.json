@@ -1,0 +1,136 @@
+{
+  "id": null,
+  "uid": "umoja-retention-synthetic-circuit",
+  "title": "UmojaFlowOS Retention — Synthetic Circuit Monitor",
+  "tags": ["umoja", "retention", "synthetic", "circuit-breaker", "postgresql"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "label": "Environment",
+        "type": "query",
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "definition": "label_values(umoja_retention_synthetic_probe_success, environment)",
+        "query": {"query": "label_values(umoja_retention_synthetic_probe_success, environment)", "refId": "Prometheus-environment"},
+        "includeAll": false,
+        "multi": false,
+        "current": {"text": "production", "value": "production"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Synthetic probe health",
+      "description": "One means the most recent read-only metrics probe succeeded; zero means monitoring blindness.",
+      "gridPos": {"h": 6, "w": 4, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "max(umoja_retention_synthetic_probe_success{environment=\"$environment\"})", "legendFormat": "probe"}],
+      "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "green", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Observed circuit state",
+      "description": "0 = closed, 1 = open, 2 = half-open.",
+      "gridPos": {"h": 6, "w": 4, "x": 4, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "max(umoja:retention_synthetic:circuit_state{environment=\"$environment\"})", "legendFormat": "state"}],
+      "fieldConfig": {"defaults": {"unit": "short", "mappings": [{"type": "value", "options": {"0": {"text": "closed", "color": "green"}, "1": {"text": "open", "color": "red"}, "2": {"text": "half-open", "color": "orange"}}}], "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Synthetic HTTP 503 rate — 5m",
+      "description": "Average delta-based proportion of observed worker requests that were 503-class outcomes.",
+      "gridPos": {"h": 6, "w": 4, "x": 8, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "max(umoja:retention_synthetic:http_503_rate:5m{environment=\"$environment\"})", "legendFormat": "503 rate"}],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "orange", "value": 0.01}, {"color": "red", "value": 0.05}]}}, "overrides": []}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Circuit opens — 15m",
+      "description": "Retention worker circuit-open transitions observed in the preceding fifteen minutes.",
+      "gridPos": {"h": 6, "w": 4, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "max(umoja:retention_synthetic:circuit_open_transitions:15m{environment=\"$environment\"})", "legendFormat": "transitions"}],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 1}]}}, "overrides": []}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Probe latency",
+      "gridPos": {"h": 6, "w": 4, "x": 16, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "max(umoja_retention_synthetic_probe_latency_seconds{environment=\"$environment\"})", "legendFormat": "latency"}],
+      "fieldConfig": {"defaults": {"unit": "s", "decimals": 3, "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "orange", "value": 1}, {"color": "red", "value": 5}]}}, "overrides": []}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Synthetic 503 rate and circuit state",
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "umoja:retention_synthetic:http_503_rate:5m{environment=\"$environment\"}", "legendFormat": "503 rate"},
+        {"expr": "umoja:retention_synthetic:circuit_state{environment=\"$environment\"}", "legendFormat": "circuit state"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineInterpolation": "stepAfter", "showPoints": "never"}}, "overrides": [{"matcher": {"id": "byName", "options": "503 rate"}, "properties": [{"id": "unit", "value": "percentunit"}]}]}
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Circuit transitions and fail-closed rejections",
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "increase(umoja_retention_worker_db_circuit_open_total{environment=\"$environment\"}[5m])", "legendFormat": "opens / 5m"},
+        {"expr": "increase(umoja_retention_worker_db_circuit_rejections_total{environment=\"$environment\"}[5m])", "legendFormat": "rejections / 5m"},
+        {"expr": "increase(umoja_retention_synthetic_probe_failures_total{environment=\"$environment\"}[5m])", "legendFormat": "probe failures / 5m"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "decimals": 0, "custom": {"drawStyle": "bars", "showPoints": "never"}}, "overrides": []}
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Worker outcomes: database protection path",
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 15},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum by (result) (rate(umoja_retention_worker_results_total{environment=\"$environment\",result=~\"database_connection_pool_saturated|database_claim_error|database_circuit_open\"}[5m]))", "legendFormat": "{{result}}"}],
+      "fieldConfig": {"defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "showPoints": "never"}}, "overrides": []}
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Synthetic probe availability",
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 15},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {"expr": "umoja_retention_synthetic_probe_success{environment=\"$environment\"}", "legendFormat": "probe success"},
+        {"expr": "rate(umoja_retention_synthetic_probe_failures_total{environment=\"$environment\"}[5m])", "legendFormat": "probe failures / sec"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "custom": {"drawStyle": "line", "lineInterpolation": "stepAfter", "showPoints": "never"}}, "overrides": []}
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "name": "Circuit alerts",
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "enable": true,
+        "expr": "ALERTS{alertname=~\"UmojaRetention(DatabaseCircuitOpen|DatabaseCircuitOpenTransition|SyntheticCircuitOpenObserved)\",environment=\"$environment\",alertstate=\"firing\"}",
+        "iconColor": "red",
+        "titleFormat": "{{alertname}}",
+        "textFormat": "{{summary}}"
+      }
+    ]
+  }
+}

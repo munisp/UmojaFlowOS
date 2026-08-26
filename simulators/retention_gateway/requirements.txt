@@ -1,0 +1,9 @@
+fastapi==0.115.6
+psycopg[binary]==3.2.3
+psycopg-pool==3.2.3
+requests==2.32.3
+prometheus-client==0.21.1
+uvicorn==0.34.0
+testcontainers==4.9.0
+pytest==8.3.5
+locust==2.37.2

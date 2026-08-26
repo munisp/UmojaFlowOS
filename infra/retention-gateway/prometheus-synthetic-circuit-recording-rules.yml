@@ -1,0 +1,33 @@
+groups:
+  - name: umoja-retention-synthetic-circuit-recording
+    interval: 30s
+    rules:
+      - record: umoja:retention_synthetic:http_503_rate:5m
+        expr: avg_over_time(umoja_retention_synthetic_http_503_rate[5m])
+        labels:
+          service: retention-delete-worker
+          monitoring_source: synthetic
+
+      - record: umoja:retention_synthetic:http_503_total
+        expr: max(umoja_retention_synthetic_http_503_total)
+        labels:
+          service: retention-delete-worker
+          monitoring_source: synthetic
+
+      - record: umoja:retention_synthetic:circuit_state
+        expr: max(umoja_retention_synthetic_observed_circuit_state)
+        labels:
+          service: retention-delete-worker
+          monitoring_source: synthetic
+
+      - record: umoja:retention_synthetic:circuit_open_transitions:15m
+        expr: increase(umoja_retention_worker_db_circuit_open_total[15m])
+        labels:
+          service: retention-delete-worker
+          monitoring_source: synthetic
+
+      - record: umoja:retention_synthetic:probe_success:5m
+        expr: min_over_time(umoja_retention_synthetic_probe_success[5m])
+        labels:
+          service: retention-delete-worker
+          monitoring_source: synthetic

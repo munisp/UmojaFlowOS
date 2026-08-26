@@ -1,0 +1,42 @@
+name: retention-monitoring-config-validate
+
+on:
+  pull_request:
+    paths:
+      - 'infra/retention-gateway/**/*.yml'
+      - 'infra/retention-gateway/**/*.yaml'
+      - 'infra/monitoring/**/*.yml'
+      - 'infra/monitoring/**/*.yaml'
+      - 'scripts/infra/validate_retention_monitoring_ci.sh'
+      - 'tests/infra/test_validate_retention_monitoring_ci.py'
+  push:
+    branches: [main]
+    paths:
+      - 'infra/retention-gateway/**/*.yml'
+      - 'infra/retention-gateway/**/*.yaml'
+      - 'infra/monitoring/**/*.yml'
+      - 'infra/monitoring/**/*.yaml'
+      - 'scripts/infra/validate_retention_monitoring_ci.sh'
+      - 'tests/infra/test_validate_retention_monitoring_ci.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Prometheus validation binaries
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes prometheus prometheus-alertmanager
+          promtool --version
+          amtool --version
+      - name: Validate all retention monitoring resources
+        run: |
+          chmod +x scripts/infra/validate_retention_monitoring_ci.sh
+          ./scripts/infra/validate_retention_monitoring_ci.sh
+      - name: Run hermetic validator coverage
+        run: python3 -m pytest -q tests/infra/test_validate_retention_monitoring_ci.py

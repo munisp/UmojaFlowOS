@@ -1,0 +1,10 @@
+# OpenSearch Security plugin roles_mapping.yml
+# The value must exactly match the authenticated client certificate subject
+# as exposed by the OpenSearch certificate-authentication backend.
+umoja_retention_delete_worker:
+  reserved: false
+  hidden: false
+  backend_roles: []
+  hosts: []
+  users:
+    - "CN=umoja-retention-delete-worker,OU=Platform Security,O=UmojaFlowOS,L=Lagos,ST=Lagos,C=NG"

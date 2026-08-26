@@ -1,0 +1,107 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: umoja-retention-synthetic-monitor
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: umoja-retention-synthetic-monitor
+    app.kubernetes.io/part-of: umojaflowos-retention
+spec:
+  namespaceSelector:
+    matchNames: [security]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: umoja-retention-synthetic-monitor
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 5s
+      relabelings:
+        - targetLabel: environment
+          replacement: production
+        - targetLabel: service
+          replacement: retention-delete-worker
+        - targetLabel: monitoring_source
+          replacement: synthetic
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: umoja-retention-synthetic-circuit-monitor
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: umoja-retention-synthetic-monitor
+    app.kubernetes.io/part-of: umojaflowos-retention
+spec:
+  groups:
+    - name: umoja-retention-synthetic-circuit-recording
+      interval: 30s
+      rules:
+        - record: umoja:retention_synthetic:http_503_rate:5m
+          expr: avg_over_time(umoja_retention_synthetic_http_503_rate{environment="production"}[5m])
+          labels:
+            service: retention-delete-worker
+            monitoring_source: synthetic
+        - record: umoja:retention_synthetic:http_503_total
+          expr: max(umoja_retention_synthetic_http_503_total{environment="production"})
+          labels:
+            service: retention-delete-worker
+            monitoring_source: synthetic
+        - record: umoja:retention_synthetic:circuit_state
+          expr: max(umoja_retention_synthetic_observed_circuit_state{environment="production"})
+          labels:
+            service: retention-delete-worker
+            monitoring_source: synthetic
+        - record: umoja:retention_synthetic:circuit_open_transitions:15m
+          expr: increase(umoja_retention_worker_db_circuit_open_total{environment="production"}[15m])
+          labels:
+            service: retention-delete-worker
+            monitoring_source: synthetic
+        - record: umoja:retention_synthetic:probe_success:5m
+          expr: min_over_time(umoja_retention_synthetic_probe_success{environment="production"}[5m])
+          labels:
+            service: retention-delete-worker
+            monitoring_source: synthetic
+    - name: umoja-retention-synthetic-circuit-alerts
+      rules:
+        - alert: UmojaRetentionSyntheticMonitorProbeFailed
+          expr: min_over_time(umoja_retention_synthetic_probe_success{environment="production"}[2m]) < 1
+          for: 2m
+          labels:
+            severity: warning
+            service: retention-delete-worker
+            team: engineering
+            environment: production
+            compliance_domain: audit_retention
+          annotations:
+            summary: Retention synthetic monitor cannot observe worker telemetry
+            description: The read-only synthetic monitor has failed or parsed no valid retention-worker metrics for at least two minutes.
+            runbook_url: https://docs.example.invalid/runbooks/retention-worker-postgres-circuit
+        - alert: UmojaRetentionSyntheticCircuitOpenObserved
+          expr: max(umoja_retention_synthetic_observed_circuit_state{environment="production"}) == 1
+          for: 30s
+          labels:
+            severity: critical
+            urgency: page
+            service: retention-delete-worker
+            team: engineering
+            environment: production
+            compliance_domain: audit_retention
+          annotations:
+            summary: Synthetic monitor observed an open retention PostgreSQL circuit
+            description: The independent read-only monitor observed the retention worker circuit breaker in the open state.
+            runbook_url: https://docs.example.invalid/runbooks/retention-worker-postgres-circuit
+        - alert: UmojaRetentionSynthetic503ErrorRateHigh
+          expr: avg_over_time(umoja_retention_synthetic_http_503_rate{environment="production"}[5m]) > 0.05
+          for: 2m
+          labels:
+            severity: warning
+            service: retention-delete-worker
+            team: engineering
+            environment: production
+            compliance_domain: audit_retention
+          annotations:
+            summary: Retention synthetic monitor observed elevated HTTP 503 rate
+            description: More than five percent of newly observed retention worker requests were HTTP-503-class outcomes for two minutes.
+            runbook_url: https://docs.example.invalid/runbooks/retention-worker-postgres-circuit

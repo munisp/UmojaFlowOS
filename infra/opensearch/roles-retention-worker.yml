@@ -1,0 +1,21 @@
+# OpenSearch Security plugin roles.yml
+# OpenSearch Security plugin 2.x syntax.
+# This role deliberately has no cluster_permissions and no access to
+# security, ISM, alias-management, or unrelated indexes.
+umoja_retention_delete_worker:
+  reserved: false
+  hidden: false
+  static: false
+  cluster_permissions: []
+  index_permissions:
+    - index_patterns:
+        - "umoja-security-audit-v1-*"
+      dls: ""
+      fls: []
+      masked_fields: []
+      allowed_actions:
+        # Required by GET /{index}/_settings/index.uuid,index.version.
+        - "indices:monitor/settings/get"
+        # Required only for DELETE /{exact-physical-index}.
+        - "indices:admin/delete"
+  tenant_permissions: []

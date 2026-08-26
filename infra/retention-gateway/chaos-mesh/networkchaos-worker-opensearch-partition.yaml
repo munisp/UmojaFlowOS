@@ -1,0 +1,25 @@
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: umoja-retention-worker-opensearch-partition
+  namespace: security
+  labels:
+    app.kubernetes.io/name: umoja-retention-worker
+    umoja.io/test: mtls-network-partition
+spec:
+  action: partition
+  mode: all
+  direction: both
+  duration: 90s
+  selector:
+    namespaces:
+      - security
+    labelSelectors:
+      app.kubernetes.io/name: umoja-retention-worker
+  target:
+    mode: all
+    selector:
+      namespaces:
+        - security
+      labelSelectors:
+        app.kubernetes.io/name: opensearch

@@ -1,0 +1,49 @@
+groups:
+  - name: umoja-retention-worker-production-circuit
+    rules:
+      - alert: UmojaRetentionDatabaseCircuitOpen
+        expr: max(umoja_retention_worker_db_circuit_state{environment="production"}) == 1
+        for: 30s
+        labels:
+          severity: critical
+          urgency: page
+          service: retention-delete-worker
+          team: engineering
+          compliance_domain: audit_retention
+          environment: production
+        annotations:
+          summary: Retention worker PostgreSQL circuit breaker is open
+          description: "The retention worker has opened its PostgreSQL pool circuit breaker. New authorization claims are failing closed to protect database availability and deletion integrity."
+          observed_value: "{{ $value }}"
+          runbook_url: https://docs.example.invalid/runbooks/retention-worker-postgres-circuit
+
+      - alert: UmojaRetentionDatabaseCircuitOpenTransition
+        expr: increase(umoja_retention_worker_db_circuit_open_total{environment="production"}[5m]) > 0
+        for: 0s
+        labels:
+          severity: critical
+          urgency: page
+          service: retention-delete-worker
+          team: engineering
+          compliance_domain: audit_retention
+          environment: production
+        annotations:
+          summary: Retention worker PostgreSQL circuit breaker opened
+          description: "The retention worker recorded a new PostgreSQL circuit-open transition in the last five minutes. Investigate pool exhaustion, lock waits, and PostgreSQL capacity before workload recovery."
+          observed_value: "{{ $value }} transition(s)"
+          runbook_url: https://docs.example.invalid/runbooks/retention-worker-postgres-circuit
+
+      - alert: UmojaRetentionDatabaseCircuitRejectingRequests
+        expr: increase(umoja_retention_worker_db_circuit_rejections_total{environment="production"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: retention-delete-worker
+          team: engineering
+          compliance_domain: audit_retention
+          environment: production
+        annotations:
+          summary: Retention worker is rejecting claims while PostgreSQL circuit is open
+          description: "The retention worker rejected one or more requests because the PostgreSQL circuit breaker remained open. Confirm recovery or escalate the active capacity incident."
+          observed_value: "{{ $value }} rejected request(s)"
+          runbook_url: https://docs.example.invalid/runbooks/retention-worker-postgres-circuit

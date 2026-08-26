@@ -1,0 +1,121 @@
+groups:
+  - name: umoja-retention-worker
+    rules:
+      - alert: UmojaRetentionWorkerDown
+        expr: up{job="umoja-retention-worker"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          urgency: page
+          service: retention-delete-worker
+          compliance_domain: audit_retention
+        annotations:
+          summary: Umoja retention delete worker is unreachable
+          description: Prometheus cannot scrape the delete worker metrics endpoint.
+          runbook_url: https://docs.example.invalid/runbooks/retention-worker
+
+      - alert: UmojaRetentionWorkerHealthFailed
+        expr: umoja_retention_worker_health{job="umoja-retention-worker"} != 1
+        for: 2m
+        labels:
+          severity: critical
+          urgency: page
+          service: retention-delete-worker
+          compliance_domain: audit_retention
+        annotations:
+          summary: Umoja retention delete worker health check failed
+          description: The worker health gauge is not reporting a healthy state.
+
+      - alert: UmojaRetentionWorkerFailureRateHigh
+        expr: |
+          (
+            sum(rate(umoja_retention_worker_failures_total{job="umoja-retention-worker"}[10m]))
+            /
+            clamp_min(sum(rate(umoja_retention_worker_requests_total{job="umoja-retention-worker",operation="delete"}[10m])), 0.001)
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          urgency: page
+          service: retention-delete-worker
+          compliance_domain: audit_retention
+        annotations:
+          summary: Retention delete worker failure rate is high
+          description: More than 5 percent of delete-worker requests failed during the last 10 minutes.
+
+      - alert: UmojaRetentionWorkerExecutionErrors
+        expr: increase(umoja_retention_worker_failures_total{job="umoja-retention-worker",result="delete_execution_error"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          urgency: page
+          service: retention-delete-worker
+          compliance_domain: audit_retention
+        annotations:
+          summary: Retention delete execution error
+          description: An authorization was consumed but the OpenSearch delete execution returned an error; reconcile before retrying.
+
+      - alert: UmojaRetentionWorkerVerificationDenialsSpike
+        expr: increase(umoja_retention_worker_results_total{job="umoja-retention-worker",result=~"denied_.*"}[10m]) >= 10
+        for: 5m
+        labels:
+          severity: warning
+          service: retention-delete-worker
+          compliance_domain: audit_retention
+        annotations:
+          summary: Retention worker verification denials increased
+          description: Ten or more token, replay, or scope denials occurred in ten minutes; investigate possible replay or integration faults.
+
+      - alert: UmojaRetentionWorkerP95LatencyHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(umoja_retention_worker_execution_seconds_bucket{job="umoja-retention-worker"}[10m]))) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: retention-delete-worker
+          compliance_domain: audit_retention
+        annotations:
+          summary: Retention delete worker p95 latency is high
+          description: The p95 authorization/deletion execution latency has exceeded five seconds.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: umoja-retention-prometheus-scrape
+  namespace: security
+data:
+  scrape-config.yaml: |
+    - job_name: umoja-retention-worker
+      metrics_path: /metrics
+      scheme: https
+      tls_config:
+        ca_file: /etc/prometheus/secrets/umoja-worker-ca/ca.crt
+        server_name: umoja-retention-worker.security.svc.cluster.local
+      bearer_token_file: /etc/prometheus/secrets/umoja-worker-metrics-token/token
+      static_configs:
+        - targets: ['umoja-retention-worker.security.svc.cluster.local:8443']
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: umoja-retention-alertmanager-route
+  namespace: monitoring
+data:
+  alertmanager.yml: |
+    route:
+      receiver: default
+      group_by: ['alertname', 'service', 'compliance_domain']
+      routes:
+        - matchers:
+            - service =~ "retention-(delete-worker|worker-loadtest)"
+            - urgency = "page"
+          receiver: pagerduty-retention-critical
+          group_wait: 0s
+          group_interval: 5m
+          repeat_interval: 30m
+    receivers:
+      - name: default
+      - name: pagerduty-retention-critical
+        pagerduty_configs:
+          - routing_key_file: /etc/alertmanager/secrets/retention-pagerduty/routing-key
+            severity: '{{ .CommonLabels.severity }}'
+            description: '{{ .CommonAnnotations.summary }}'

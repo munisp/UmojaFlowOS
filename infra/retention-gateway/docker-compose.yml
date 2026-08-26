@@ -1,0 +1,92 @@
+services:
+  postgres:
+    image: postgres:16.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - retention-postgres:/var/lib/postgresql/data
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/001-retention.sql:ro
+    networks: [retention]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  opensearch:
+    image: opensearchproject/opensearch:2.15.0
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "false"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${OPENSEARCH_INITIAL_ADMIN_PASSWORD:?set a strong dev-only password}
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+    volumes:
+      - retention-opensearch:/usr/share/opensearch/data
+    networks: [retention]
+    expose: [9200]
+    healthcheck:
+      test: [CMD-SHELL, "curl -skf https://localhost:9200/_cluster/health >/dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+
+  delete-worker:
+    build:
+      context: ../..
+      dockerfile: infra/retention-gateway/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres: {condition: service_healthy}
+      opensearch: {condition: service_healthy}
+    environment:
+      # Must resolve to the retention_worker_app login, not the gateway credential.
+      DATABASE_URL: ${RETENTION_WORKER_DATABASE_URL:?set private worker PostgreSQL URL}
+      OPENSEARCH_URL: https://opensearch:9200
+      OPENSEARCH_CA_FILE: /run/secrets/opensearch_ca
+      OPENSEARCH_CLIENT_CERT_FILE: /run/secrets/opensearch_client_cert
+      OPENSEARCH_CLIENT_KEY_FILE: /run/secrets/opensearch_client_key
+      RETENTION_GATEWAY_HMAC_SECRET_FILE: /run/secrets/retention_gateway_hmac_secret
+      RETENTION_MANIFEST_HMAC_SECRET_FILE: /run/secrets/retention_manifest_hmac_secret
+      RETENTION_WORKER_BEARER_TOKEN: ${RETENTION_WORKER_BEARER_TOKEN:?set internal worker bearer token}
+      WORKER_BIND: 0.0.0.0:8080
+    secrets:
+      - postgres_password
+      - opensearch_ca
+      - opensearch_client_cert
+      - opensearch_client_key
+      - retention_gateway_hmac_secret
+      - retention_manifest_hmac_secret
+    networks: [retention]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    expose: [8080]
+
+networks:
+  retention:
+    internal: true
+
+volumes:
+  retention-postgres:
+  retention-opensearch:
+
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password
+  opensearch_ca:
+    file: ./secrets/opensearch_ca.pem
+  opensearch_client_cert:
+    file: ./secrets/opensearch_client.crt
+  opensearch_client_key:
+    file: ./secrets/opensearch_client.key
+  retention_gateway_hmac_secret:
+    file: ./secrets/retention_gateway_hmac_secret
+  retention_manifest_hmac_secret:
+    file: ./secrets/retention_manifest_hmac_secret

@@ -1,0 +1,124 @@
+name: amp-retention-alerting-terraform
+
+on:
+  pull_request:
+    paths:
+      - 'infra/terraform/modules/amp-retention-circuit-alerting/**'
+      - 'infra/terraform/examples/amp-retention-circuit-alerting/**'
+      - 'infra/retention-gateway/prometheus-production-circuit-alerts.yml'
+      - 'infra/retention-gateway/prometheus-production-lockwait-alerts.yml'
+      - 'infra/retention-gateway/alertmanager-production-pagerduty-lockwait.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'infra/terraform/modules/amp-retention-circuit-alerting/**'
+      - 'infra/terraform/examples/amp-retention-circuit-alerting/**'
+      - 'infra/retention-gateway/prometheus-production-circuit-alerts.yml'
+      - 'infra/retention-gateway/prometheus-production-lockwait-alerts.yml'
+      - 'infra/retention-gateway/alertmanager-production-pagerduty-lockwait.yml'
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Apply approved AMP retention alerting changes
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: amp-retention-alerting-production
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: 'true'
+  TF_WORKING_DIR: infra/terraform/examples/amp-retention-circuit-alerting
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - name: Format and validate Terraform module source
+        run: |
+          terraform fmt -check -recursive infra/terraform/modules/amp-retention-circuit-alerting
+          terraform fmt -check "$TF_WORKING_DIR"
+          terraform -chdir="$TF_WORKING_DIR" init -backend=false
+          terraform -chdir="$TF_WORKING_DIR" validate
+      - name: Validate Prometheus and Alertmanager YAML structure
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import yaml
+          for path in [
+              Path('infra/retention-gateway/prometheus-production-circuit-alerts.yml'),
+              Path('infra/retention-gateway/prometheus-production-lockwait-alerts.yml'),
+              Path('infra/retention-gateway/alertmanager-production-pagerduty-lockwait.yml'),
+          ]:
+              list(yaml.safe_load_all(path.read_text()))
+          PY
+
+  plan:
+    needs: validate
+    if: ${{ github.event_name != 'push' || github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    environment: amp-alerting-plan
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - name: Configure AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Initialize and plan AMP alerting changes
+        env:
+          TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+          TF_VAR_amp_workspace_id: ${{ secrets.AMP_WORKSPACE_ID }}
+          TF_VAR_retention_pagerduty_routing_key: ${{ secrets.RETENTION_PAGERDUTY_ROUTING_KEY }}
+          TF_VAR_retention_engineering_webhook_url: ${{ secrets.RETENTION_ENGINEERING_WEBHOOK_URL }}
+          TF_VAR_runbook_url: ${{ secrets.RETENTION_RUNBOOK_URL }}
+        run: |
+          terraform -chdir="$TF_WORKING_DIR" init
+          set +e
+          terraform -chdir="$TF_WORKING_DIR" plan -detailed-exitcode -no-color
+          result=$?
+          set -e
+          if [ "$result" -ne 0 ] && [ "$result" -ne 2 ]; then
+            exit "$result"
+          fi
+          echo "Terraform plan completed with exit code $result (0=no changes, 2=changes)."
+
+  apply:
+    needs: [validate, plan]
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.apply)) }}
+    runs-on: ubuntu-latest
+    environment: production-amp-alerting
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - name: Configure AWS credentials through OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Apply reviewed AMP alerting configuration
+        env:
+          TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
+          TF_VAR_amp_workspace_id: ${{ secrets.AMP_WORKSPACE_ID }}
+          TF_VAR_retention_pagerduty_routing_key: ${{ secrets.RETENTION_PAGERDUTY_ROUTING_KEY }}
+          TF_VAR_retention_engineering_webhook_url: ${{ secrets.RETENTION_ENGINEERING_WEBHOOK_URL }}
+          TF_VAR_runbook_url: ${{ secrets.RETENTION_RUNBOOK_URL }}
+        run: |
+          terraform -chdir="$TF_WORKING_DIR" init
+          terraform -chdir="$TF_WORKING_DIR" plan -out=tfplan
+          terraform -chdir="$TF_WORKING_DIR" apply -auto-approve tfplan

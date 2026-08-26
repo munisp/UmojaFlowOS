@@ -1,0 +1,60 @@
+groups:
+  - name: umoja-retention-worker-security
+    rules:
+      - alert: UmojaRetentionWorkerOpenSearchAuthenticationFailure
+        expr: increase(umoja_retention_worker_failures_total{job="umoja-retention-worker",result="opensearch_authentication_failure"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          urgency: page
+          service: retention-delete-worker
+          compliance_domain: audit_retention
+          failure_class: authentication
+        annotations:
+          summary: Retention worker cannot authenticate to OpenSearch
+          description: The worker observed a TLS, certificate, connection, HTTP 401, or proxy-authentication failure while accessing OpenSearch.
+          runbook_url: https://docs.example.invalid/runbooks/retention-worker-mtls
+
+      - alert: UmojaRetentionWorkerOpenSearchAuthorizationFailure
+        expr: increase(umoja_retention_worker_failures_total{job="umoja-retention-worker",result="opensearch_authorization_failure"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          urgency: page
+          service: retention-delete-worker
+          compliance_domain: audit_retention
+          failure_class: authorization
+        annotations:
+          summary: Retention worker is denied by OpenSearch authorization
+          description: OpenSearch returned HTTP 403 for a worker metadata or exact-index deletion request. Do not broaden permissions automatically.
+          runbook_url: https://docs.example.invalid/runbooks/retention-worker-permissions
+
+      - alert: UmojaRetentionWorkerSecurityFailureBurst
+        expr: |
+          sum by (failure_class) (
+            increase(umoja_retention_worker_failures_total{
+              job="umoja-retention-worker",
+              result=~"opensearch_authentication_failure|opensearch_authorization_failure"
+            }[10m])
+          ) >= 3
+        for: 1m
+        labels:
+          severity: critical
+          urgency: page
+          service: retention-delete-worker
+          compliance_domain: audit_retention
+        annotations:
+          summary: Repeated retention-worker OpenSearch security failures
+          description: Three or more OpenSearch authentication or authorization failures occurred in ten minutes.
+          runbook_url: https://docs.example.invalid/runbooks/retention-worker-mtls
+
+      - alert: UmojaRetentionWorkerMetricsStale
+        expr: time() - process_start_time_seconds{job="umoja-retention-worker"} > 900 and absent(umoja_retention_worker_requests_total{job="umoja-retention-worker"})
+        for: 5m
+        labels:
+          severity: warning
+          service: retention-delete-worker
+          compliance_domain: audit_retention
+        annotations:
+          summary: Retention worker request metrics are absent
+          description: The worker process is present but no request counter is available; verify instrumentation and scrape configuration.
