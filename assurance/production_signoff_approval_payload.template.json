@@ -1,0 +1,26 @@
+[
+  {
+    "role": "release_manager",
+    "subject": "REPLACE_WITH_DISTINCT_RELEASE_MANAGER_IDENTITY",
+    "release_sha": "71b14909ec2cc9e373158120aab2c03953bb89fa",
+    "approved_at": "2026-08-26T00:00:00Z"
+  },
+  {
+    "role": "security_owner",
+    "subject": "REPLACE_WITH_DISTINCT_SECURITY_OWNER_IDENTITY",
+    "release_sha": "71b14909ec2cc9e373158120aab2c03953bb89fa",
+    "approved_at": "2026-08-26T00:00:00Z"
+  },
+  {
+    "role": "compliance_owner",
+    "subject": "REPLACE_WITH_DISTINCT_COMPLIANCE_OWNER_IDENTITY",
+    "release_sha": "71b14909ec2cc9e373158120aab2c03953bb89fa",
+    "approved_at": "2026-08-26T00:00:00Z"
+  },
+  {
+    "role": "operations_owner",
+    "subject": "REPLACE_WITH_DISTINCT_OPERATIONS_OWNER_IDENTITY",
+    "release_sha": "71b14909ec2cc9e373158120aab2c03953bb89fa",
+    "approved_at": "2026-08-26T00:00:00Z"
+  }
+]

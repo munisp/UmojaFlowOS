@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import { Pool } from "pg";
 import type { OperatingRole } from "./operatingRoles";
 import { createHash, randomUUID } from "node:crypto";
@@ -144,6 +145,109 @@ export async function createPostgresBeneficiary(actor: Actor, input: { customerI
     await client.query("INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1, $2, $3, $4, $5, $6::jsonb)", [actor.openId, actor.role, "beneficiary.created", "beneficiary", beneficiary.id, JSON.stringify({ customerId: beneficiary.customerId, countryCode: beneficiary.countryCode, source: "postgres-control-plane" })]);
     await client.query("COMMIT"); return beneficiary;
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+}
+
+export async function recordPostgresBeneficiaryScreening(
+  actor: Actor,
+  input: {
+    beneficiaryId: string;
+    integrationConnectionId: string;
+    correlationId: string;
+    screeningState: "clear" | "potential_match" | "confirmed_match" | "source_unavailable";
+    providerReference: string;
+    sourceVersion: string;
+    evidenceSha256: string;
+    screenedAt: Date;
+  },
+) {
+  const client = await getPool().connect();
+  try {
+    await client.query("BEGIN");
+    const beneficiary = await client.query<{ id: string }>(
+      "SELECT id FROM beneficiaries WHERE id=$1 FOR UPDATE",
+      [input.beneficiaryId],
+    );
+    if (!beneficiary.rows[0]) throw new Error("A canonical beneficiary record is required before recording screening");
+
+    const integration = await client.query<{ id: string }>(
+      `SELECT id
+         FROM integration_connections
+        WHERE id=$1
+          AND state='active'
+          AND category IN ('sanctions', 'kyc_kyb')
+        FOR KEY SHARE`,
+      [input.integrationConnectionId],
+    );
+    if (!integration.rows[0]) {
+      throw new Error("An active sanctions or KYC/KYB integration is required before recording beneficiary screening");
+    }
+
+    const latest = await client.query<{ screenedAt: Date }>(
+      `SELECT screened_at AS "screenedAt"
+         FROM aml_screening_checks
+        WHERE beneficiary_id=$1
+        ORDER BY screened_at DESC, recorded_at DESC
+        LIMIT 1
+        FOR UPDATE`,
+      [input.beneficiaryId],
+    );
+    if (latest.rows[0] && input.screenedAt < latest.rows[0].screenedAt) {
+      throw new Error("Stale beneficiary screening evidence cannot replace a newer screening decision");
+    }
+
+    const recorded = await client.query<{ id: string }>(
+      `INSERT INTO aml_screening_checks
+         (beneficiary_id, integration_connection_id, correlation_id, screening_scope, screening_state,
+          provider_reference, source_version, evidence_sha256, screened_at)
+       VALUES ($1,$2,$3,'beneficiary',$4::screening_state,$5,$6,$7,$8)
+       RETURNING id`,
+      [
+        input.beneficiaryId,
+        input.integrationConnectionId,
+        input.correlationId,
+        input.screeningState,
+        input.providerReference,
+        input.sourceVersion,
+        input.evidenceSha256,
+        input.screenedAt,
+      ],
+    );
+    const check = recorded.rows[0];
+    if (!check) throw new Error("Beneficiary screening evidence insert did not return a record");
+
+    await client.query(
+      "UPDATE beneficiaries SET screening_state=$1::screening_state WHERE id=$2",
+      [input.screeningState, input.beneficiaryId],
+    );
+    await client.query(
+      "INSERT INTO activity_events (actor_subject, actor_role, action, object_type, object_id, metadata) VALUES ($1,$2,$3,$4,$5,$6::jsonb)",
+      [
+        actor.openId,
+        actor.role,
+        "beneficiary.screening_recorded",
+        "beneficiary",
+        input.beneficiaryId,
+        JSON.stringify({
+          screeningCheckId: check.id,
+          integrationConnectionId: input.integrationConnectionId,
+          correlationId: input.correlationId,
+          screeningState: input.screeningState,
+          providerReference: input.providerReference,
+          sourceVersion: input.sourceVersion,
+          evidenceSha256: input.evidenceSha256,
+          screenedAt: input.screenedAt.toISOString(),
+          source: "postgres-control-plane",
+        }),
+      ],
+    );
+    await client.query("COMMIT");
+    return { id: check.id, beneficiaryId: input.beneficiaryId, screeningState: input.screeningState };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function createPostgresCounterparty(
@@ -1034,10 +1138,35 @@ export async function configurePostgresIntegrationCredential(
 }
 
 /**
- * A provider endpoint must be a plain absolute HTTPS URL carrying no credential.
- * A URL with embedded userinfo is a credential in a field that gets logged.
+ * Provider endpoints receive an integration credential during the activation
+ * probe. HTTPS is therefore necessary but insufficient: the destination must
+ * be a deployment-owned DNS name, explicitly allow-listed outside the request,
+ * and never an IP literal that could target loopback, RFC1918, link-local, or a
+ * metadata service.
  */
-export function normaliseProviderEndpoint(candidate: string): string {
+export function providerEndpointAllowedHosts(env: NodeJS.ProcessEnv = process.env): Set<string> {
+  const raw = env.UMOJA_PROVIDER_ENDPOINT_ALLOWED_HOSTS;
+  if (!raw || raw.trim() === "") {
+    throw new Error("UMOJA_PROVIDER_ENDPOINT_ALLOWED_HOSTS must list approved provider DNS hosts");
+  }
+  const hosts = new Set(
+    raw
+      .split(",")
+      .map(value => value.trim().toLowerCase())
+      .filter(Boolean),
+  );
+  if (hosts.size === 0) {
+    throw new Error("UMOJA_PROVIDER_ENDPOINT_ALLOWED_HOSTS must list approved provider DNS hosts");
+  }
+  for (const host of Array.from(hosts)) {
+    if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(host)) {
+      throw new Error("UMOJA_PROVIDER_ENDPOINT_ALLOWED_HOSTS contains an invalid DNS host");
+    }
+  }
+  return hosts;
+}
+
+export function normaliseProviderEndpoint(candidate: string, env: NodeJS.ProcessEnv = process.env): string {
   let url: URL;
   try {
     url = new URL(candidate.trim());
@@ -1046,6 +1175,13 @@ export function normaliseProviderEndpoint(candidate: string): string {
   }
   if (url.protocol !== "https:") throw new Error("provider endpoint must use https");
   if (url.username || url.password) throw new Error("provider endpoint must not embed credentials");
+  const hostname = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  if (!hostname || isIP(hostname) !== 0) {
+    throw new Error("provider endpoint must use an approved DNS host, not an IP literal");
+  }
+  if (!providerEndpointAllowedHosts(env).has(hostname)) {
+    throw new Error("provider endpoint host is not approved for credential-bearing probes");
+  }
   return url.toString();
 }
 

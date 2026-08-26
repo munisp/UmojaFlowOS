@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const migration = readFileSync(new URL("../database/postgresql/0015_cbn_sandbox_readiness.sql", import.meta.url), "utf8");
+const migration = readFileSync(new URL("../../../database/postgresql/0015_cbn_sandbox_readiness.sql", import.meta.url), "utf8");
 const repository = readFileSync(new URL("./cbnSandbox.ts", import.meta.url), "utf8");
 const routerSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
 

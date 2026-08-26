@@ -11,6 +11,7 @@ from simulators.production_dependencies.app import (
     REPLAY_CACHE,
     WEBHOOK_SECRET,
     app,
+    webhook_secret_from_environment,
 )
 
 
@@ -118,6 +119,24 @@ def test_p2_lakehouse_redaction_and_entity_resolution() -> None:
     assert rejected.status_code == 422
     assert resolved.status_code == 200
     assert any(set(cluster) == {"a", "b"} for cluster in resolved.json()["clusters"])
+
+
+def test_webhook_secret_must_be_explicit_and_long_enough(monkeypatch) -> None:
+    monkeypatch.delenv("SIMULATOR_WEBHOOK_SECRET", raising=False)
+    try:
+        webhook_secret_from_environment()
+    except RuntimeError as exc:
+        assert "supplied explicitly" in str(exc)
+    else:
+        raise AssertionError("missing simulator webhook secret must fail closed")
+
+    monkeypatch.setenv("SIMULATOR_WEBHOOK_SECRET", "short")
+    try:
+        webhook_secret_from_environment()
+    except RuntimeError as exc:
+        assert "at least 32 bytes" in str(exc)
+    else:
+        raise AssertionError("short simulator webhook secret must fail closed")
 
 
 def test_webhook_signature_replay_and_stale_guards() -> None:

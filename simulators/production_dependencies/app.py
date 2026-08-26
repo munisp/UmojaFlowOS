@@ -17,7 +17,19 @@ app = FastAPI(title="UmojaFlowOS production dependency simulator", version="1.0.
 LEDGER: dict[str, dict[str, Any]] = {}
 REPLAY_CACHE: OrderedDict[str, float] = OrderedDict()
 AML_BLOCKED = {"blocked@example.test", "sanctions@example.test"}
-WEBHOOK_SECRET = os.environ.get("SIMULATOR_WEBHOOK_SECRET", "ci-simulator-secret").encode()
+
+
+def webhook_secret_from_environment() -> bytes:
+    value = os.environ.get("SIMULATOR_WEBHOOK_SECRET")
+    if value is None or not value.strip():
+        raise RuntimeError("SIMULATOR_WEBHOOK_SECRET must be supplied explicitly")
+    secret = value.encode()
+    if len(secret) < 32:
+        raise RuntimeError("SIMULATOR_WEBHOOK_SECRET must contain at least 32 bytes")
+    return secret
+
+
+WEBHOOK_SECRET = webhook_secret_from_environment()
 REPLAY_WINDOW_SECONDS = int(os.environ.get("SIMULATOR_REPLAY_WINDOW_SECONDS", "300"))
 
 

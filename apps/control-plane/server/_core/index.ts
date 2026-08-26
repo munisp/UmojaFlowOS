@@ -68,10 +68,16 @@ async function startServer() {
   }
 
   const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
-
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+  if (!Number.isInteger(preferredPort) || preferredPort < 1 || preferredPort > 65_535) {
+    throw new Error("PORT must be an integer between 1 and 65535");
+  }
+  const development = process.env.NODE_ENV === "development";
+  const port = development ? await findAvailablePort(preferredPort) : preferredPort;
+  if (!development && !(await isPortAvailable(preferredPort))) {
+    throw new Error(`Configured production PORT ${preferredPort} is already in use; refusing an undiscoverable fallback port`);
+  }
+  if (development && port !== preferredPort) {
+    console.log(`Development port ${preferredPort} is busy, using ${port}`);
   }
 
   server.listen(port, () => {

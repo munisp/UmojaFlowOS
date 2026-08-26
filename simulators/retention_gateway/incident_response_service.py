@@ -5,12 +5,12 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-import psycopg
 from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -31,6 +31,22 @@ class AlertmanagerPayload(BaseModel):
     commonLabels: dict[str, str] = Field(default_factory=dict)
     commonAnnotations: dict[str, str] = Field(default_factory=dict)
     groupKey: str | None = None
+
+
+SAFE_INCIDENT_ID = re.compile(r"^(?=.{1,128}$)[A-Za-z0-9][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+)*$")
+
+
+def incident_evidence_directory(evidence_root: Path, fingerprint: str | None, body: bytes) -> tuple[str, Path]:
+    """Return a canonical incident ID and a path proven to remain under root."""
+    candidate = (fingerprint or "").strip()
+    incident_id = candidate if SAFE_INCIDENT_ID.fullmatch(candidate) else hashlib.sha256(body).hexdigest()
+    root = evidence_root.resolve()
+    evidence = (root / incident_id).resolve()
+    try:
+        evidence.relative_to(root)
+    except ValueError as exc:
+        raise RuntimeError("incident evidence path escaped configured root") from exc
+    return incident_id, evidence
 
 
 class HMACWebhookVerifier:
@@ -110,6 +126,8 @@ def safe_run(args: list[str], output: Path, timeout: int = 30) -> dict[str, Any]
 
 
 def create_app() -> FastAPI:
+    import psycopg
+
     app = FastAPI(title="Umoja retention incident response")
     secret = Path(os.environ["INCIDENT_WEBHOOK_SECRET_FILE"]).read_bytes().strip()
     evidence_root = Path(os.environ.get("INCIDENT_EVIDENCE_ROOT", "/var/lib/umoja/incidents"))
@@ -144,8 +162,7 @@ def create_app() -> FastAPI:
         if service != "retention-delete-worker":
             return {"status": "ignored", "reason": "service_not_in_scope"}
 
-        incident_id = alert.fingerprint or hashlib.sha256(body).hexdigest()
-        evidence = evidence_root / incident_id
+        incident_id, evidence = incident_evidence_directory(evidence_root, alert.fingerprint, body)
         evidence.mkdir(parents=True, exist_ok=True)
         (evidence / "alertmanager-payload.json").write_bytes(body)
         digest = hashlib.sha256(body).hexdigest()

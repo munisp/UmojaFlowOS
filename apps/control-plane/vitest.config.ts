@@ -14,6 +14,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    setupFiles: ["server/testEnvironment.ts"],
     fileParallelism: false,
     include: ["server/**/*.test.ts", "server/**/*.test.tsx", "server/**/*.spec.ts", "client/src/**/*.test.ts", "client/src/**/*.spec.ts", "client/src/**/*.test.tsx"],
     // Server-side tests that render console components need a DOM; they still

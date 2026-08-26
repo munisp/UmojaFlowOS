@@ -36,6 +36,20 @@ export type WorkflowActor = {
 
 type Client = PoolClient;
 
+/**
+ * A beneficiary may enter a payment workflow only after a current screening
+ * decision explicitly clears it.  Every other persisted state means a control
+ * is incomplete, unavailable, or adverse and must stop before any rate lock is
+ * consumed.
+ */
+export function assertBeneficiaryScreeningClear(screeningState: string): void {
+  if (screeningState !== "clear") {
+    throw new Error(
+      `Beneficiary screening must be clear before drafting a payment order; current state is ${screeningState}`,
+    );
+  }
+}
+
 async function recordEvent(
   client: Client,
   actor: WorkflowActor,
@@ -276,6 +290,7 @@ export async function createPostgresPaymentOrder(
     if (target.customerId !== input.customerId) {
       throw new Error("Beneficiary does not belong to the specified customer");
     }
+    assertBeneficiaryScreeningClear(target.screeningState);
 
     const derived = await client.query<{ targetAmount: string }>("SELECT round($1::numeric * $2::numeric, 8)::text AS \"targetAmount\"", [input.sourceAmount, lock.lockedRate]);
     const targetAmount = derived.rows[0]?.targetAmount;

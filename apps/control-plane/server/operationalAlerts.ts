@@ -190,34 +190,51 @@ export async function evaluatePostgresLiquidityThresholds(
         accountReference: string;
         availableAmount: string;
         sourceReference: string;
+        band: "amber" | "red" | null;
+        requiredMinimum: string | null;
       }>(
         `SELECT account_reference AS "accountReference",
                 available_amount::text AS "availableAmount",
-                source_reference AS "sourceReference"
+                source_reference AS "sourceReference",
+                CASE
+                  WHEN available_amount < ($5::numeric * $6::numeric) THEN 'red'
+                  WHEN available_amount < ($5::numeric * $7::numeric) THEN 'amber'
+                  ELSE NULL
+                END AS band,
+                CASE
+                  WHEN available_amount < ($5::numeric * $6::numeric)
+                    THEN ($5::numeric * $6::numeric)::text
+                  WHEN available_amount < ($5::numeric * $7::numeric)
+                    THEN ($5::numeric * $7::numeric)::text
+                  ELSE NULL
+                END AS "requiredMinimum"
            FROM liquidity_positions
           WHERE corridor::text = $1 AND currency = $2
             AND account_kind = ANY($3::text[])
             AND reconciled_at >= $4`,
-        [corridor, policy.currency, policy.permittedAccountKinds, freshnessFloor],
+        [
+          corridor,
+          policy.currency,
+          policy.permittedAccountKinds,
+          freshnessFloor,
+          policy.approvedDailyOutflow,
+          policy.minimumBufferPct,
+          policy.amberBufferPct,
+        ],
       );
       if (!positions.length) {
         indeterminate.push({ corridor, reason: "no_reconciled_position_within_freshness_window" });
         continue;
       }
-      const outflow = Number(policy.approvedDailyOutflow);
-      const redFloor = outflow * Number(policy.minimumBufferPct);
-      const amberFloor = outflow * Number(policy.amberBufferPct);
       for (const position of positions) {
-        const available = Number(position.availableAmount);
-        if (available >= amberFloor) continue;
-        const band: "amber" | "red" = available < redFloor ? "red" : "amber";
+        if (!position.band || !position.requiredMinimum) continue;
         breaches.push({
           corridor,
           currency: policy.currency,
           accountReference: position.accountReference,
           availableAmount: position.availableAmount,
-          requiredMinimum: (band === "red" ? redFloor : amberFloor).toString(),
-          band,
+          requiredMinimum: position.requiredMinimum,
+          band: position.band,
           policyVersion: policy.policyVersion,
           sourceReference: position.sourceReference,
         });

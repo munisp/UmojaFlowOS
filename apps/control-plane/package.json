@@ -12,7 +12,7 @@
     "test": "vitest run",
     "test:postgres": "POSTGRES_INTEGRATION_TEST=1 vitest run server/postgres.integration.test.ts",
     "postgres:boundary": "node scripts/postgres/validate-transitional-boundary.mjs",
-    "postgres:migrate": "psql \"$POSTGRES_DATABASE_URL\" -f ../../database/postgresql/0001_baseline.sql"
+    "postgres:migrate": "../../scripts/infra/apply_postgres_migrations.sh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
