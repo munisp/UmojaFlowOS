@@ -1,6 +1,6 @@
 # UmojaFlowOS E-01–E-09 Staging Readiness
 
-**Release under review:** `ad2722423a58d7e2d2ba883fb58d737159c51365`
+**Release under review:** `00bd19be931eb34c64522012b046fcb7c33098f6`
 
 **Run posture:** Local validation and contract checks only; real staging evidence remains fail-closed.
 
@@ -12,7 +12,7 @@
 
 > **Production decision: NO-GO pending controlled staging evidence and independent approvals.**
 
-The repository is at the reviewed `origin/main` revision `ad2722423a58d7e2d2ba883fb58d737159c51365`. The current E-01–E-09 harness completed its local checks, but it did not invent signed release artifacts, external-provider results, cluster results, deployment receipts, or recovery evidence.
+The repository is at the reviewed `origin/main` revision `00bd19be931eb34c64522012b046fcb7c33098f6`. The current E-01–E-09 harness completed its local checks, but it did not invent signed release artifacts, external-provider results, cluster results, deployment receipts, or recovery evidence.
 
 | Readiness category | Count | Interpretation |
 |---|---:|---|
@@ -37,7 +37,7 @@ The repository is at the reviewed `origin/main` revision `ad2722423a58d7e2d2ba88
 | E-08 | **BLOCKED** | No approved backup/restore target, Chaos window, or worker test endpoints supplied |
 | E-09 | **LOCAL PASS ONLY** | Secret scan and locked dependency audit passed locally; protected security review absent |
 
-The status source is the fail-closed run output at `assurance/evidence/staging-progress-ad2722423a58d7e2d2ba883fb58d737159c51365/status.tsv`.
+The status source is the fail-closed run output at `assurance/evidence/staging-progress-00bd19be931eb34c64522012b046fcb7c33098f6/status.tsv`.
 
 ---
 
@@ -174,7 +174,7 @@ Each approval object may contain only:
 {
   "role": "release_manager",
   "subject": "distinct-authorized-identity",
-  "release_sha": "ad2722423a58d7e2d2ba883fb58d737159c51365",
+  "release_sha": "00bd19be931eb34c64522012b046fcb7c33098f6",
   "approved_at": "2026-08-26T00:00:00Z"
 }
 ```
@@ -227,13 +227,48 @@ The next authorized action is to provision the controlled staging inputs, execut
 
 ---
 
+## Slide 10 — Manifest verification and signing
+
+A synthetic-format bundle was generated against the current SHA and passed the repository verifier with nine test artifacts and four distinct synthetic approvals. This proves the validator contract only; it is not staging evidence.
+
+```text
+current SHA
+    ↓
+E-01 signed tag + image digest + SBOM + provenance
+    ↓
+E-02–E-09 real controlled staging reports
+    ↓
+SHA-256 each explicit artifact
+    ↓
+four independent owner reviews
+    ↓
+final release.json
+    ↓
+verify_production_release_evidence.py
+```
+
+The approved release process signs the manifest only after the bundle is complete. Each key holder signs the same canonical manifest digest using the organization’s approved detached-signature mechanism; keys must remain in separate protected custody and no single operator may produce all four approvals.
+
+```bash
+sha256sum release.json
+# sign and verify using the organization-approved key-management procedure
+# verify every signature against the approved independent key fingerprints
+python3 scripts/infra/verify_production_release_evidence.py \
+  --manifest release.json \
+  --expected-sha "$RELEASE_SHA"
+```
+
+The verifier does not itself validate signature cryptography or enterprise identity provenance; those checks belong to E-01 and the independent review records. A synthetic signature or synthetic subject cannot authorize production.
+
+---
+
 ## Appendix — Source artifacts
 
 The deck is grounded in the following repository artifacts:
 
 | Artifact | Purpose |
 |---|---|
-| `assurance/evidence/staging-progress-ad2722423a58d7e2d2ba883fb58d737159c51365/status.tsv` | Current E-01–E-09 run output |
+| `assurance/evidence/staging-progress-00bd19be931eb34c64522012b046fcb7c33098f6/status.tsv` | Current E-01–E-09 run output |
 | `scripts/infra/verify_production_release_evidence.py` | Fail-closed manifest verifier |
 | `scripts/infra/verify_release_cryptography.sh` | Signed tag/provenance/image binding verifier |
 | `scripts/infra/apply_postgres_migrations.sh` | Locked canonical migration runner |
