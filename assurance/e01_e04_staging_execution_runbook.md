@@ -71,6 +71,22 @@ cosign verify-attestation \
 
 The exact certificate identity and issuer must match the protected organization policy. If the build is not signed or the attestations cannot be verified, stop and record E-01 as blocked.
 
+For a single fail-closed verification pass after installing the organization-approved `cosign` and `jq` binaries, run:
+
+```bash
+scripts/infra/verify_release_cryptography.sh \
+  --repo-dir . \
+  --release-sha "$RELEASE_SHA" \
+  --tag "$RELEASE_TAG" \
+  --image "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}" \
+  --certificate-identity-regexp 'approved-release-builder' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  --expected-gpg-fingerprint '<approved-release-key-fingerprint>' \
+  --output-dir "$BUNDLE_DIR/cryptography"
+```
+
+The verifier fetches the tag without force, requires an annotated tag, runs `git verify-tag`, checks that the tag resolves exactly to `RELEASE_SHA`, checks the signer fingerprint, verifies the SLSA provenance attestation for the immutable image digest, and requires the verified provenance payload to contain the expected source commit. It writes only tag/provenance verification output and binding metadata to the evidence directory. It intentionally exits nonzero when `cosign`, `jq`, the tag, the signer, the digest, the identity, the issuer, or the source-commit binding is unavailable.
+
 Create the release manifest only after every E-01 artifact has been copied into the controlled evidence directory and SHA256-hashed. The manifest must bind the evidence to the exact `RELEASE_SHA`, use the staging/production environment value required by the verifier, and contain four distinct approval objects with the only permitted fields: `role`, `subject`, `release_sha`, and `approved_at`.
 
 Dispatch the repository validator from GitHub Actions:
