@@ -17,7 +17,7 @@ export type Message = {
 export type AIChatBoxProps = {
   /**
    * Messages array to display in the chat.
-   * Should match the format used by invokeLLM on the server.
+   * Should match the format used by the platform's configured server-side model endpoint.
    */
   messages: Message[];
 
@@ -60,10 +60,10 @@ export type AIChatBoxProps = {
 };
 
 /**
- * A ready-to-use AI chat box component that integrates with the LLM system.
+ * A ready-to-use AI chat box component that integrates with a configured model endpoint.
  *
  * Features:
- * - Matches server-side Message interface for seamless integration
+ * - Matches the server-side message interface for seamless integration
  * - Markdown rendering with Streamdown
  * - Auto-scrolls to latest message
  * - Loading states
