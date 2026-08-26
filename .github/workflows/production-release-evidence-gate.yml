@@ -11,6 +11,26 @@ on:
         description: Repository-relative path to the reviewed evidence manifest JSON
         required: true
         type: string
+      release_tag:
+        description: Signed annotated release tag that resolves to the reviewed commit
+        required: true
+        type: string
+      image:
+        description: Immutable registry image reference ending in @sha256
+        required: true
+        type: string
+      certificate_identity_regexp:
+        description: Approved Sigstore provenance certificate identity regexp
+        required: true
+        type: string
+      certificate_oidc_issuer:
+        description: Approved Sigstore provenance OIDC issuer
+        required: true
+        type: string
+      expected_gpg_fingerprint:
+        description: Approved release-tag signer fingerprint
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -35,6 +55,33 @@ jobs:
           expected_sha=$(git rev-parse "${{ inputs.release_ref }}^{commit}")
           test "$expected_sha" = "$(git rev-parse HEAD)"
 
+      - name: Install cosign for provenance verification
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: v2.4.1
+
+      - name: Verify signed tag, image, and provenance binding
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          IMAGE_REF: ${{ inputs.image }}
+          CERT_IDENTITY_REGEXP: ${{ inputs.certificate_identity_regexp }}
+          CERT_OIDC_ISSUER: ${{ inputs.certificate_oidc_issuer }}
+          EXPECTED_GPG_FINGERPRINT: ${{ inputs.expected_gpg_fingerprint }}
+        run: |
+          set -euo pipefail
+          RELEASE_SHA="$(git rev-parse "${{ inputs.release_ref }}^{commit}")"
+          scripts/infra/verify_release_cryptography.sh \
+            --repo-dir . \
+            --release-sha "$RELEASE_SHA" \
+            --tag "$RELEASE_TAG" \
+            --image "$IMAGE_REF" \
+            --certificate-identity-regexp "$CERT_IDENTITY_REGEXP" \
+            --certificate-oidc-issuer "$CERT_OIDC_ISSUER" \
+            --expected-gpg-fingerprint "$EXPECTED_GPG_FINGERPRINT" \
+            --output-dir "${{ runner.temp }}/release-cryptography"
+
       - name: Validate complete evidence and independent approvals
         shell: bash
         run: |
@@ -42,6 +89,14 @@ jobs:
           python3 scripts/infra/verify_production_release_evidence.py \
             --manifest "${{ inputs.evidence_manifest }}" \
             --repo .
+
+      - name: Upload cryptographic verification outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-cryptography-${{ github.sha }}
+          path: ${{ runner.temp }}/release-cryptography
+          if-no-files-found: error
+          retention-days: 2555
 
       - name: Upload validated evidence manifest
         uses: actions/upload-artifact@v4

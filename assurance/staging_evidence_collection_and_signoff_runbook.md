@@ -111,7 +111,28 @@ scripts/infra/generate_signoff_approvals.py \
 
 The generator rejects an unauthorized record, SHA mismatch, missing role, duplicate role, duplicate subject, placeholder subject, future approval timestamp, malformed timestamp, or owner set other than the four required roles. It emits only the schema-permitted approval fields: `role`, `subject`, `release_sha`, and `approved_at`.
 
-## 6. Verify the completed manifest
+## 6. Run the protected GitHub Actions release gate
+
+The workflow now requires the signed tag, immutable image reference, approved provenance certificate identity and issuer, and approved release-tag signer fingerprint as explicit protected dispatch inputs. Dispatch it only after E-01 cryptographic artifacts and all nine staging reports exist:
+
+```bash
+gh workflow run production-release-evidence-gate.yml \
+  --repo munisp/UmojaFlowOS \
+  --ref "$RELEASE_TAG" \
+  -f release_ref="$RELEASE_TAG" \
+  -f evidence_manifest="assurance/evidence/release.json" \
+  -f release_tag="$RELEASE_TAG" \
+  -f image="$IMAGE_REF" \
+  -f certificate_identity_regexp="$CERT_IDENTITY_REGEXP" \
+  -f certificate_oidc_issuer="$CERT_OIDC_ISSUER" \
+  -f expected_gpg_fingerprint="$EXPECTED_GPG_FINGERPRINT"
+
+gh run watch --repo munisp/UmojaFlowOS
+```
+
+The GitHub environment `production-release-evidence` must be protected with required reviewers. The signing fingerprint, certificate identity policy, and issuer must come from repository/environment governance records; do not substitute arbitrary values from the command line. The workflow installs the pinned cosign release, verifies the signed tag and exact commit binding, verifies the immutable image provenance attestation, uploads cryptographic outputs, and only then validates the complete manifest.
+
+## 7. Verify the completed manifest
 
 The final manifest must contain all E-01 through E-09 artifacts, their exact relative paths, SHA256 values, run IDs, the staging environment, the exact release SHA, and the generated approvals:
 
