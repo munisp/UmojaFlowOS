@@ -61,6 +61,9 @@ expected = datetime.fromisoformat(sys.argv[2].replace('Z', '+00:00'))
 if actual < expected:
     raise SystemExit('WORM retention is shorter than the approved retain-until time')
 PY
+  tags=$(aws s3api get-object-tagging --bucket "$BUCKET" --key "$key")
+  immutable=$(jq -r '.TagSet[] | select(.Key == "umoja-immutable") | .Value' <<<"$tags")
+  [[ "$immutable" = "true" ]] || { echo "WORM immutable tag is missing: s3://$BUCKET/$key" >&2; exit 1; }
   metadata_sha=$(jq -r '.Metadata["release-sha"] // empty' "$head")
   metadata_run=$(jq -r '.Metadata["run-id"] // empty' "$head")
   [[ "$metadata_sha" = "$RELEASE_SHA" ]] || { echo "WORM release SHA metadata mismatch: s3://$BUCKET/$key" >&2; exit 1; }

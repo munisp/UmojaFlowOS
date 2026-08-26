@@ -67,6 +67,21 @@ resource "aws_s3_bucket_policy" "evidence" {
         Action    = "s3:PutObject"
         Resource  = "${aws_s3_bucket.evidence.arn}/*"
         Condition = { StringNotEquals = { "s3:x-amz-server-side-encryption" = "AES256" } }
+      },
+      {
+        Sid       = "DenyPublisherDestructiveActions"
+        Effect    = "Deny"
+        Principal = { AWS = aws_iam_role.publisher.arn }
+        Action    = ["s3:DeleteObject", "s3:DeleteObjectVersion", "s3:PutObjectRetention", "s3:PutObjectLegalHold", "s3:BypassGovernanceRetention", "s3:PutBucketObjectLockConfiguration", "s3:PutBucketPolicy", "s3:PutBucketVersioning", "s3:PutObjectAcl", "s3:PutObjectTagging", "s3:PutObjectVersionTagging"]
+        Resource  = [aws_s3_bucket.evidence.arn, "${aws_s3_bucket.evidence.arn}/*"]
+      },
+      {
+        Sid       = "DenyPublisherOverwriteOfImmutableEvidence"
+        Effect    = "Deny"
+        Principal = { AWS = aws_iam_role.publisher.arn }
+        Action    = "s3:PutObject"
+        Resource  = "${aws_s3_bucket.evidence.arn}/${var.prefix}/*"
+        Condition = { StringEquals = { "s3:ExistingObjectTag/umoja-immutable" = "true" } }
       }
     ]
   })
@@ -85,9 +100,31 @@ data "aws_iam_policy_document" "github_trust" {
   }
 }
 
+data "aws_iam_policy_document" "publisher_boundary" {
+  statement {
+    sid       = "AllowOnlyEvidencePublication"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket", "s3:PutObject", "s3:GetObject"]
+    resources = [aws_s3_bucket.evidence.arn, "${aws_s3_bucket.evidence.arn}/${var.prefix}/*"]
+  }
+  statement {
+    sid       = "DenyWormMutationAndDeletion"
+    effect    = "Deny"
+    actions   = ["s3:DeleteObject", "s3:DeleteObjectVersion", "s3:PutObjectRetention", "s3:PutObjectLegalHold", "s3:BypassGovernanceRetention", "s3:PutBucketObjectLockConfiguration", "s3:PutBucketPolicy", "s3:PutBucketVersioning", "iam:*", "sts:AssumeRole"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy" "publisher_boundary" {
+  name   = "${var.publisher_role_name}-permissions-boundary"
+  policy = data.aws_iam_policy_document.publisher_boundary.json
+  tags   = var.tags
+}
+
 resource "aws_iam_role" "publisher" {
   name                 = var.publisher_role_name
   assume_role_policy   = data.aws_iam_policy_document.github_trust.json
+  permissions_boundary = aws_iam_policy.publisher_boundary.arn
   max_session_duration = 3600
   tags                 = var.tags
 }
@@ -101,7 +138,7 @@ data "aws_iam_policy_document" "publisher" {
   }
   statement {
     effect    = "Allow"
-    actions   = ["s3:PutObject", "s3:GetObject", "s3:HeadObject"]
+    actions   = ["s3:PutObject", "s3:GetObject"]
     resources = ["${aws_s3_bucket.evidence.arn}/${var.prefix}/*"]
   }
 }

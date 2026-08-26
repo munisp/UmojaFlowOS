@@ -99,6 +99,7 @@ jobs:
               --body "$file" \
               --object-lock-mode COMPLIANCE \
               --object-lock-retain-until-date "$RETAIN_UNTIL" \
+              --tagging 'umoja-immutable=true' \
               --metadata "release-sha=${{ inputs.release_sha }},run-id=${{ inputs.run_id }}"
           done < <(find "$EVIDENCE_ROOT" -type f -print0 | sort -z)
 
