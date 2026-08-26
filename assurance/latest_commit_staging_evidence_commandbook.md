@@ -1,7 +1,7 @@
 # UmojaFlowOS Staging Evidence Commandbook
 
 **Author:** Manus AI
-**Target immutable release SHA:** `31b5cb2d83520029f315cf1f3b6ea5e59896013e`
+**Target immutable release SHA:** `0ef7a50d94b227c37f1bb66b8c4fb3c948472e70`
 **Scope:** Controlled staging only. Do not point any command at production data, customer accounts, production TigerBeetle, live regulatory recipients, or production PagerDuty.
 
 > Commands that need credentials reference environment variables populated by the approved secret manager or CI environment. Do not echo the values, redirect secret-bearing environment output to logs, or place secrets in the evidence bundle.
@@ -11,7 +11,7 @@
 Run from a clean detached checkout of the exact release:
 
 ```bash
-export RELEASE_SHA=31b5cb2d83520029f315cf1f3b6ea5e59896013e
+export RELEASE_SHA=0ef7a50d94b227c37f1bb66b8c4fb3c948472e70
 export RELEASE_TAG="REPLACE_WITH_SIGNED_TAG_FOR_${RELEASE_SHA}"
 export RUN_ID="staging-assurance-$(date -u +%Y%m%dT%H%M%SZ)"
 export BUNDLE_DIR="/secure-release-evidence/${RELEASE_SHA}/${RUN_ID}"
@@ -57,6 +57,27 @@ git status --porcelain | tee "$BUNDLE_DIR/ci/e01-clean-worktree.txt"
 E-01 passes only when the signed tag, protected review record, build provenance, SBOM, and immutable image digests are all bound to `RELEASE_SHA`.
 
 ## E-02 — Staging migration, schema, and grants evidence
+
+The repository now provides a single fail-closed staging gate. It requires an explicit staging approval marker, a release SHA, and an evidence directory; it never accepts an implicit environment or prints the database URL. The apply path uses the canonical root migration runner, session advisory locking, checksum/state tracking, schema validation, duplicate-version detection, reconciliation-column inspection, and database identity capture.
+
+```bash
+export RELEASE_SHA=0ef7a50d94b227c37f1bb66b8c4fb3c948472e70
+export STAGING_E02_APPROVED=STAGING_SCHEMA_MIGRATION
+export STAGING_EVIDENCE_DIR="/secure-release-evidence/${RELEASE_SHA}/${RUN_ID}/migrations"
+export POSTGRES_DATABASE_URL="$(secret_ref staging/umoja/schema-owner-postgres-url)"
+scripts/infra/run_staging_e02_schema_gate.sh
+```
+
+For a credential-free inventory check before entering the approved staging window:
+
+```bash
+RELEASE_SHA=0ef7a50d94b227c37f1bb66b8c4fb3c948472e70 \\
+STAGING_E02_APPROVED=STAGING_SCHEMA_MIGRATION \\
+STAGING_EVIDENCE_DIR=/tmp/umoja-e02-dry-run \\
+scripts/infra/run_staging_e02_schema_gate.sh --dry-run
+```
+
+The underlying commands remain available for review:
 
 ```bash
 POSTGRES_DATABASE_URL="$POSTGRES_DATABASE_URL" \

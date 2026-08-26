@@ -1,6 +1,6 @@
 # UmojaFlowOS Staging E-01–E-09 Validation Progress
 
-**Candidate SHA:** `31b5cb2d83520029f315cf1f3b6ea5e59896013e`
+**Candidate SHA:** `0ef7a50d94b227c37f1bb66b8c4fb3c948472e70`
 **Assessment date:** 26 August 2026
 **Environment:** Local disposable checks plus fail-closed staging prerequisite assessment. No production systems, customer data, or live payment destinations were accessed.
 
@@ -39,7 +39,7 @@ The following local checks passed for this candidate:
 
 ## Four independent production approvals
 
-The release manifest must contain exactly these distinct role classes, with each approval bound to candidate SHA `31b5cb2d83520029f315cf1f3b6ea5e59896013e`:
+The release manifest must contain exactly these distinct role classes, with each approval bound to candidate SHA `0ef7a50d94b227c37f1bb66b8c4fb3c948472e70`:
 
 | Required role | Required review responsibility | Current status |
 |---|---|---|
