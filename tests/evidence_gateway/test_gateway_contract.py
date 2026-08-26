@@ -9,8 +9,7 @@ GATEWAY_URL = os.getenv("EVIDENCE_GATEWAY_URL")
 KEYCLOAK_URL = os.getenv("KEYCLOAK_URL", "http://127.0.0.1:8180")
 CLIENT_ID = "umoja-evidence-publisher"
 CLIENT_SECRET = "local-only-evidence-secret"
-USERNAME = "evidence-test-owner"
-PASSWORD = "local-only-owner-password"
+
 RELEASE_SHA = "a" * 40
 RUN_ID = "local-contract-test"
 
@@ -21,11 +20,9 @@ def token() -> str:
     response = httpx.post(
         f"{KEYCLOAK_URL}/realms/umoja/protocol/openid-connect/token",
         data={
-            "grant_type": "password",
+            "grant_type": "client_credentials",
             "client_id": CLIENT_ID,
             "client_secret": CLIENT_SECRET,
-            "username": USERNAME,
-            "password": PASSWORD,
         },
         timeout=10,
     )
