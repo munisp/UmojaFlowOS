@@ -1,0 +1,84 @@
+name: Validate Release Evidence WORM IaC
+
+on:
+  pull_request:
+    paths:
+      - 'infra/terraform/modules/release-evidence-worm/**'
+      - 'scripts/infra/validate_release_evidence_worm_iac.sh'
+      - '.github/workflows/release-evidence-worm-iac.yml'
+  workflow_dispatch:
+    inputs:
+      apply_staging:
+        description: 'Apply the already-reviewed staging Terraform plan'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: release-evidence-worm-iac-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Terraform format, validate, plan, and policy checks
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Run WORM IaC preflight
+        run: scripts/infra/validate_release_evidence_worm_iac.sh
+
+
+  apply-staging:
+    name: Apply approved staging WORM infrastructure
+    if: github.event_name == 'workflow_dispatch' && inputs.apply_staging == true
+    needs: preflight
+    runs-on: ubuntu-24.04
+    environment: staging-release-evidence-infrastructure
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Configure AWS OIDC credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.UMOJA_IAC_ROLE_ARN }}
+          aws-region: ${{ vars.UMOJA_EVIDENCE_AWS_REGION }}
+          role-session-name: umoja-worm-iac-${{ github.run_id }}
+
+      - name: Require staging IaC approval marker
+        env:
+          APPROVAL: ${{ secrets.UMOJA_STAGING_IAC_APPROVED }}
+        run: test "$APPROVAL" = 'APPLY_APPROVED_STAGING_WORM_IAC'
+
+      - name: Apply the reviewed staging plan
+        working-directory: infra/terraform/environments/staging-release-evidence-worm
+        run: |
+          set -euo pipefail
+          terraform init -input=false
+          terraform plan -input=false -out=tfplan
+          terraform apply -input=false tfplan
+
+      - name: Verify Object Lock and versioning
+        env:
+          BUCKET: ${{ vars.UMOJA_EVIDENCE_WORM_BUCKET }}
+        run: |
+          set -euo pipefail
+          aws s3api get-bucket-versioning --bucket "$BUCKET" | jq -e '.Status == "Enabled"'
+          aws s3api get-object-lock-configuration --bucket "$BUCKET" \
+            | jq -e '.ObjectLockConfiguration.ObjectLockEnabled == "Enabled" and .ObjectLockConfiguration.Rule.DefaultRetention.Mode == "COMPLIANCE"'
