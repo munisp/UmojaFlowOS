@@ -1,0 +1,59 @@
+name: Release Evidence Contract Gate
+
+on:
+  pull_request:
+    paths:
+      - "assurance/**"
+      - "scripts/infra/verify_production_release_evidence.py"
+      - "tests/infra/**"
+      - ".github/workflows/release-evidence-pr-gate.yml"
+  push:
+    branches: [main]
+    paths:
+      - "assurance/**"
+      - "scripts/infra/verify_production_release_evidence.py"
+      - "tests/infra/**"
+      - ".github/workflows/release-evidence-pr-gate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-contract:
+    name: Verify release evidence contract
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out proposed revision
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Validate verifier and fixture syntax
+        run: python3 -m py_compile scripts/infra/verify_production_release_evidence.py tests/infra/build_ci_evidence_fixture.py
+
+      - name: Run verifier unit tests
+        run: pytest -q tests/infra/test_verify_production_release_evidence.py tests/infra/test_draft_approver_authorization.py
+
+      - name: Build CI-only contract fixture
+        run: python3 tests/infra/build_ci_evidence_fixture.py /tmp/umoja-ci-evidence
+
+      - name: Execute release verifier against CI-only fixture
+        run: |
+          set -euo pipefail
+          python3 scripts/infra/verify_production_release_evidence.py \
+            --manifest /tmp/umoja-ci-evidence/release.json \
+            --repo .
+
+      - name: Assert fixture is never in the repository
+        run: |
+          set -euo pipefail
+          if git ls-files assurance/evidence | grep -q .; then
+            echo "tracked assurance/evidence files are forbidden" >&2
+            exit 1
+          fi
+          test ! -e assurance/evidence/release.json
