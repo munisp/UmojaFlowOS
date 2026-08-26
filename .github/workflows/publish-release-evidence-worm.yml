@@ -1,0 +1,137 @@
+name: Publish Release Evidence to WORM Storage
+
+on:
+  workflow_call:
+    inputs:
+      release_sha:
+        required: true
+        type: string
+      evidence_artifact_name:
+        required: true
+        type: string
+      run_id:
+        required: true
+        type: string
+      retain_until:
+        required: true
+        type: string
+      bucket:
+        required: true
+        type: string
+      aws_region:
+        required: true
+        type: string
+      publish_role_arn:
+        required: true
+        type: string
+      evidence_root:
+        required: true
+        type: string
+      alert_webhook_url:
+        required: false
+        type: string
+    secrets:
+      RELEASE_ALERT_WEBHOOK_URL:
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish-and-verify:
+    runs-on: ubuntu-24.04
+    environment: production-release-evidence
+    steps:
+      - name: Check out immutable release
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+
+      - name: Check immutable checkout
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ inputs.release_sha }}"
+          test -z "$(git status --porcelain)"
+          [[ "${{ inputs.release_sha }}" =~ ^[a-f0-9]{40}$ ]]
+
+      - name: Download reviewed evidence bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.evidence_artifact_name }}
+          path: /tmp/umoja-evidence
+
+      - name: Configure short-lived AWS OIDC credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.publish_role_arn }}
+          aws-region: ${{ inputs.aws_region }}
+          role-session-name: umoja-worm-${{ github.run_id }}
+
+      - name: Validate manifest schema and semantic evidence contract
+        run: |
+          set -euo pipefail
+          python3 scripts/infra/validate_release_manifest_schema.py \
+            --manifest "/tmp/umoja-evidence/${{ inputs.evidence_root }}/release.json" \
+            --schema assurance/release_evidence_manifest.schema.json
+          python3 scripts/infra/verify_production_release_evidence.py \
+            --manifest "/tmp/umoja-evidence/${{ inputs.evidence_root }}/release.json" \
+            --expected-sha "${{ inputs.release_sha }}"
+
+      - name: Upload immutable evidence with COMPLIANCE retention
+        env:
+          BUCKET: ${{ inputs.bucket }}
+          PREFIX: umoja/releases/${{ inputs.release_sha }}/${{ inputs.run_id }}
+          RETAIN_UNTIL: ${{ inputs.retain_until }}
+          EVIDENCE_ROOT: /tmp/umoja-evidence/${{ inputs.evidence_root }}
+        run: |
+          set -euo pipefail
+          [[ "$PREFIX" != *..* ]]
+          test -d "$EVIDENCE_ROOT"
+          find "$EVIDENCE_ROOT" -type f -not -name '*.sha256' -print0 | sort -z | xargs -0 sha256sum > "$EVIDENCE_ROOT/SHA256SUMS"
+          sha256sum "$EVIDENCE_ROOT/SHA256SUMS" > "$EVIDENCE_ROOT/SHA256SUMS.sha256"
+          while IFS= read -r -d '' file; do
+            rel="${file#"$EVIDENCE_ROOT"/}"
+            aws s3api put-object \
+              --bucket "$BUCKET" \
+              --key "$PREFIX/$rel" \
+              --body "$file" \
+              --object-lock-mode COMPLIANCE \
+              --object-lock-retain-until-date "$RETAIN_UNTIL" \
+              --metadata "release-sha=${{ inputs.release_sha }},run-id=${{ inputs.run_id }}"
+          done < <(find "$EVIDENCE_ROOT" -type f -print0 | sort -z)
+
+      - name: Verify every WORM object
+        env:
+          BUCKET: ${{ inputs.bucket }}
+          PREFIX: umoja/releases/${{ inputs.release_sha }}/${{ inputs.run_id }}
+          RETAIN_UNTIL: ${{ inputs.retain_until }}
+          EVIDENCE_ROOT: /tmp/umoja-evidence/${{ inputs.evidence_root }}
+        run: |
+          scripts/infra/verify_worm_evidence_upload.sh \
+            --bucket "$BUCKET" \
+            --prefix "$PREFIX" \
+            --evidence-root "$EVIDENCE_ROOT" \
+            --retain-until "$RETAIN_UNTIL" \
+            --release-sha "${{ inputs.release_sha }}" \
+            --run-id "${{ inputs.run_id }}" \
+            > /tmp/worm-verification.tsv
+          cat /tmp/worm-verification.tsv
+
+      - name: Notify release incident on failure
+        if: failure()
+        env:
+          ALERT_URL: ${{ secrets.RELEASE_ALERT_WEBHOOK_URL || inputs.alert_webhook_url }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$ALERT_URL" ]]; then
+            echo 'WORM publication failed and no alert webhook is configured' >&2
+            exit 1
+          fi
+          curl --fail-with-body --silent --show-error --max-time 10 \
+            -H 'content-type: application/json' \
+            --data "{\"event\":\"umoja_release_evidence_worm_failure\",\"release_sha\":\"$RELEASE_SHA\",\"run_id\":\"$RUN_ID\",\"workflow_run\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" \
+            "$ALERT_URL"
