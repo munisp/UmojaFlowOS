@@ -49,6 +49,7 @@ SENSITIVE_ASSIGNMENT = re.compile(
 CONFIG_SUFFIXES = {".env", ".template", ".yaml", ".yml", ".json", ".md", ".toml", ".ini", ".conf"}
 SAFE_VALUE_PREFIXES = ("${", "$", "<", "REPLACE_WITH", "example", "test", "dummy")
 SAFE_REFERENCE_SUFFIXES = ("_REF", "_REFERENCE")
+SAFE_SECRET_FILE_PREFIXES = ("/run/secrets/", "/var/run/secrets/")
 
 
 def tracked_paths(repository: Path) -> list[Path]:
@@ -66,6 +67,7 @@ def is_safe_secret_assignment(key: str, value: str) -> bool:
     upper_value = value.upper()
     return (
         key.endswith(SAFE_REFERENCE_SUFFIXES)
+        or (key.endswith("_FILE") and value.startswith(SAFE_SECRET_FILE_PREFIXES))
         or not value
         or upper_value.startswith(SAFE_VALUE_PREFIXES)
     )

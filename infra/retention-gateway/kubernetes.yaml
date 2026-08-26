@@ -16,7 +16,7 @@ type: Opaque
 stringData:
   # Replace through an external-secrets controller; do not commit real values.
   RETENTION_WORKER_DATABASE_URL: postgresql://retention_worker_app@postgres.security.svc.cluster.local:5432/umoja?sslmode=verify-full
-  RETENTION_WORKER_BEARER_TOKEN: replace-via-external-secrets
+  RETENTION_WORKER_BEARER_TOKEN: REPLACE_WITH_EXTERNAL_SECRET
 ---
 apiVersion: v1
 kind: Secret

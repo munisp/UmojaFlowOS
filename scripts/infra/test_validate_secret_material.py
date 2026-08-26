@@ -65,6 +65,23 @@ class SecretMaterialGuardTests(unittest.TestCase):
         )
         self.assertEqual([], violations)
 
+    def test_allows_only_approved_mounted_secret_file_paths(self) -> None:
+        violations = self.scan(
+            {
+                "infra/workload.yaml": (
+                    "RETENTION_GATEWAY_HMAC_SECRET_FILE: /run/secrets/retention_gateway_hmac\n"
+                    "OPENSEARCH_CLIENT_KEY_FILE: /var/run/secrets/opensearch/tls.key\n"
+                )
+            }
+        )
+        self.assertEqual([], violations)
+
+        violations = self.scan(
+            {"infra/workload.yaml": "RETENTION_GATEWAY_HMAC_SECRET_FILE: /tmp/untrusted-secret\n"}
+        )
+        self.assertEqual(1, len(violations))
+        self.assertIn("deployment-secret reference", violations[0])
+
     def test_rejects_uppercase_literal_secret_in_kubernetes_environment(self) -> None:
         violations = self.scan({"infra/workload.yaml": "WEBHOOK_SECRET: literal-value\n"})
         self.assertEqual(1, len(violations))
