@@ -60,17 +60,17 @@ fi
 
 status=$(psql "$AUDIT_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 \
   -v run_reference="$RUN_REFERENCE" \
-  -c "SELECT status FROM ledger_reconciliation_runs WHERE run_reference = '$RUN_REFERENCE'" \
+  -c "SELECT status FROM ledger_reconciliation_runs WHERE run_reference = :'run_reference'" \
   | tail -n 1)
 
 case "$status" in
   reconciled)
-    discrepancy_count=$(psql "$AUDIT_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "SELECT discrepancy_count FROM ledger_reconciliation_runs WHERE run_reference = '$RUN_REFERENCE'" | tail -n 1)
+    discrepancy_count=$(psql "$AUDIT_DATABASE_URL" -X -At -v run_reference="$RUN_REFERENCE" -c "SELECT discrepancy_count FROM ledger_reconciliation_runs WHERE run_reference = :'run_reference'" | tail -n 1)
     write_metrics reconciled "${discrepancy_count:-0}"
     echo "reconciliation_status=reconciled"
     ;;
   discrepancy)
-    discrepancy_count=$(psql "$AUDIT_DATABASE_URL" -X -At -v ON_ERROR_STOP=1 -c "SELECT discrepancy_count FROM ledger_reconciliation_runs WHERE run_reference = '$RUN_REFERENCE'" | tail -n 1)
+    discrepancy_count=$(psql "$AUDIT_DATABASE_URL" -X -At -v run_reference="$RUN_REFERENCE" -c "SELECT discrepancy_count FROM ledger_reconciliation_runs WHERE run_reference = :'run_reference'" | tail -n 1)
     write_metrics discrepancy "${discrepancy_count:-0}"
     echo "reconciliation_status=discrepancy" >&2
     exit 1
