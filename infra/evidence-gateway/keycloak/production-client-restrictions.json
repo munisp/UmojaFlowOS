@@ -1,0 +1,21 @@
+{
+  "clientId": "umoja-evidence-publisher",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "clientAuthenticatorType": "client-secret",
+  "serviceAccountsEnabled": true,
+  "directAccessGrantsEnabled": false,
+  "standardFlowEnabled": false,
+  "implicitFlowEnabled": false,
+  "frontchannelLogout": true,
+  "attributes": {
+    "access.token.lifespan": "300",
+    "use.refresh.tokens": "false",
+    "client_credentials.use_refresh_token": "false"
+  },
+  "defaultClientScopes": ["umoja-evidence-audience"],
+  "optionalClientScopes": [],
+  "serviceAccountRoles": ["evidence.publish"],
+  "forbiddenRoles": ["realm-admin", "manage-realm", "manage-clients", "view-realm", "offline_access"]
+}
