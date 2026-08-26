@@ -5,7 +5,7 @@ This runbook targets one immutable release SHA and never promotes local, simulat
 ## 1. Prepare the immutable release
 
 ```bash
-export RELEASE_SHA=ad2722423a58d7e2d2ba883fb58d737159c51365
+export RELEASE_SHA=c21cbb7b023a20ad1dde0293b46a96a67b1fe6d6
 export RUN_ID="staging-evidence-$(date -u +%Y%m%dT%H%M%SZ)"
 export EVIDENCE_DIR="/secure-release-evidence/${RELEASE_SHA}/${RUN_ID}"
 
