@@ -39,7 +39,7 @@ func NewTigerBeetleClient(config ClusterConfig) (*TigerBeetleClient, error) {
 		}
 		_ = connection.Close()
 	}
-	client, err := tb.NewClient(tb.ToUint128(uint64(config.ClusterID)), config.Addresses)
+	client, err := tb.NewClient(config.ClusterID, config.Addresses)
 	if err != nil {
 		return nil, fmt.Errorf("create TigerBeetle client: %w", err)
 	}

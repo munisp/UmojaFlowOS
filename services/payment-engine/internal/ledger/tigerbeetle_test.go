@@ -5,12 +5,14 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	tb "github.com/tigerbeetle/tigerbeetle-go"
 )
 
 func testTigerConfig(address string, plaintext bool) ClusterConfig {
 	return ClusterConfig{
 		Addresses:             []string{address},
-		ClusterID:             42,
+		ClusterID:             tb.ToUint128(42),
 		TLSRequired:           !plaintext,
 		AllowInsecureLoopback: plaintext,
 		CurrencyLedgers:       map[string]uint32{"NGN": 1, "KES": 2, "ZAR": 3},

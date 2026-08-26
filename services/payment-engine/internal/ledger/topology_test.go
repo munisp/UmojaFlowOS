@@ -3,6 +3,8 @@ package ledger
 import (
 	"context"
 	"testing"
+
+	tb "github.com/tigerbeetle/tigerbeetle-go"
 )
 
 func TestDisabledTigerBeetleClientNeverWrites(t *testing.T) {
@@ -12,10 +14,10 @@ func TestDisabledTigerBeetleClientNeverWrites(t *testing.T) {
 }
 
 func TestTigerBeetleClusterConfigFailsClosed(t *testing.T) {
-	if err := (ClusterConfig{ClusterID: 1, Addresses: []string{"ledger-0:3000"}}).Validate(); err == nil {
+	if err := (ClusterConfig{ClusterID: tb.ToUint128(1), Addresses: []string{"ledger-0:3000"}}).Validate(); err == nil {
 		t.Fatal("plaintext TigerBeetle configuration was accepted")
 	}
-	if err := (ClusterConfig{ClusterID: 1, TLSRequired: true, Addresses: []string{"ledger-0:3000"}}).Validate(); err != nil {
+	if err := (ClusterConfig{ClusterID: tb.ToUint128(1), TLSRequired: true, Addresses: []string{"ledger-0:3000"}}).Validate(); err != nil {
 		t.Fatalf("valid deployment configuration rejected: %v", err)
 	}
 }

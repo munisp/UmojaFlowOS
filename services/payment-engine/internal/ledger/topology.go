@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net"
 	"strings"
+
+	tb "github.com/tigerbeetle/tigerbeetle-go"
 )
 
 type AccountKind string
@@ -48,7 +50,7 @@ func (DisabledClient) CreateTransfers(context.Context, []Transfer) error {
 
 type ClusterConfig struct {
 	Addresses   []string
-	ClusterID   uint32
+	ClusterID   tb.Uint128
 	TLSRequired bool
 	// TigerBeetle's native protocol is TCP. Production addresses must terminate
 	// an authenticated encrypted transport (for example, a service-mesh proxy).
@@ -60,7 +62,7 @@ type ClusterConfig struct {
 }
 
 func (c ClusterConfig) Validate() error {
-	if c.ClusterID == 0 {
+	if c.ClusterID.Bytes() == [16]byte{} {
 		return errors.New("tigerbeetle cluster id is required")
 	}
 	if len(c.Addresses) == 0 {

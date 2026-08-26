@@ -2,9 +2,12 @@ package ledger
 
 import (
 	"fmt"
+	"math/big"
 	"os"
 	"strconv"
 	"strings"
+
+	tb "github.com/tigerbeetle/tigerbeetle-go"
 )
 
 // Runtime holds the payment engine's activated ledger boundary. It is created
@@ -37,7 +40,7 @@ func RuntimeFromEnv(getenv func(string) string) (Runtime, error) {
 		return Runtime{Client: DisabledClient{}, Backend: "disabled_without_deployed_tigerbeetle"}, nil
 	}
 
-	clusterID, err := requiredUint32(getenv, "UMOJA_TIGERBEETLE_CLUSTER_ID")
+	clusterID, err := requiredClusterID(getenv, "UMOJA_TIGERBEETLE_CLUSTER_ID")
 	if err != nil {
 		return Runtime{}, err
 	}
@@ -116,6 +119,32 @@ func requiredBool(getenv func(string) string, key string, defaultValue bool) (bo
 		return false, fmt.Errorf("%s must be true or false", key)
 	}
 	return parsed, nil
+}
+
+func requiredClusterID(getenv func(string) string, key string) (tb.Uint128, error) {
+	value := strings.TrimSpace(getenv(key))
+	if value == "" {
+		return tb.Uint128{}, fmt.Errorf("%s is required when TigerBeetle is enabled", key)
+	}
+	parsed, err := parseClusterID(value)
+	if err != nil {
+		return tb.Uint128{}, fmt.Errorf("%s: %w", key, err)
+	}
+	return parsed, nil
+}
+
+func parseClusterID(value string) (tb.Uint128, error) {
+	base := 10
+	digits := value
+	if strings.HasPrefix(strings.ToLower(value), "0x") {
+		base = 16
+		digits = value[2:]
+	}
+	parsed, ok := new(big.Int).SetString(digits, base)
+	if !ok || parsed.Sign() <= 0 || parsed.BitLen() > 128 {
+		return tb.Uint128{}, fmt.Errorf("must be a non-zero unsigned 128-bit integer")
+	}
+	return tb.BigIntToUint128(parsed), nil
 }
 
 func requiredUint32(getenv func(string) string, key string) (uint32, error) {

@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"os"
 	"strconv"
 	"strings"
+
+	tb "github.com/tigerbeetle/tigerbeetle-go"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -17,7 +20,7 @@ import (
 
 type config struct {
 	address      string
-	clusterID    uint32
+	clusterID    tb.Uint128
 	ledgerID     uint32
 	accountCode  uint16
 	transferCode uint16
@@ -142,7 +145,7 @@ func readConfig() (config, error) {
 	if address == "" {
 		return config{}, errors.New("TIGERBEETLE_LOADTEST_ADDRESS is required")
 	}
-	clusterID, err := requiredUint32("TIGERBEETLE_LOADTEST_CLUSTER_ID")
+	clusterID, err := requiredClusterID("TIGERBEETLE_LOADTEST_CLUSTER_ID")
 	if err != nil {
 		return config{}, err
 	}
@@ -173,6 +176,24 @@ func readConfig() (config, error) {
 	workers := boundedInt("TIGERBEETLE_LOADTEST_WORKERS", 4, 1, 64)
 	seconds := boundedInt("TIGERBEETLE_LOADTEST_DURATION_SECONDS", 60, 1, 300)
 	return config{address, clusterID, ledgerID, accountCode, transferCode, debitID, creditID, batchSize, workers, time.Duration(seconds) * time.Second}, nil
+}
+
+func requiredClusterID(key string) (tb.Uint128, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return tb.Uint128{}, fmt.Errorf("%s is required", key)
+	}
+	base := 10
+	digits := value
+	if strings.HasPrefix(strings.ToLower(value), "0x") {
+		base = 16
+		digits = value[2:]
+	}
+	parsed, ok := new(big.Int).SetString(digits, base)
+	if !ok || parsed.Sign() <= 0 || parsed.BitLen() > 128 {
+		return tb.Uint128{}, fmt.Errorf("%s must be a non-zero unsigned 128-bit integer", key)
+	}
+	return tb.BigIntToUint128(parsed), nil
 }
 
 func requiredUint32(key string) (uint32, error) {

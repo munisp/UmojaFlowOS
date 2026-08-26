@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	tb "github.com/tigerbeetle/tigerbeetle-go"
 )
 
 func TestStagingOfficialTigerBeetleBatchPrimitives(t *testing.T) {
@@ -20,7 +22,7 @@ func TestStagingOfficialTigerBeetleBatchPrimitives(t *testing.T) {
 	if address == "" {
 		t.Fatal("TIGERBEETLE_STAGING_ADDRESS is required")
 	}
-	clusterID := parseStagingUint32(t, "TIGERBEETLE_STAGING_CLUSTER_ID")
+	clusterID := parseStagingClusterID(t, "TIGERBEETLE_STAGING_CLUSTER_ID")
 	accountCode := parseStagingUint16(t, "TIGERBEETLE_STAGING_ACCOUNT_CODE")
 	transferCode := parseStagingUint16(t, "TIGERBEETLE_STAGING_TRANSFER_CODE")
 	ngnLedger := parseStagingUint32(t, "TIGERBEETLE_STAGING_NGN_LEDGER")
@@ -36,7 +38,7 @@ func TestStagingOfficialTigerBeetleBatchPrimitives(t *testing.T) {
 	if err := config.Validate(); err != nil {
 		t.Fatalf("staging TigerBeetle configuration rejected: %v", err)
 	}
-	if clusterID == 0 || ngnLedger == 0 {
+	if clusterID.Bytes() == [16]byte{} || ngnLedger == 0 {
 		t.Fatal("staging cluster and ledger IDs must be nonzero")
 	}
 	client, err := NewTigerBeetleClient(config)
@@ -70,6 +72,16 @@ func TestStagingOfficialTigerBeetleBatchPrimitives(t *testing.T) {
 	}
 }
 
+func parseStagingClusterID(t *testing.T, key string) tb.Uint128 {
+	t.Helper()
+	value := strings.TrimSpace(os.Getenv(key))
+	parsed, err := parseClusterID(value)
+	if err != nil {
+		t.Fatalf("%s: %v", key, err)
+	}
+	return parsed
+}
+
 func parseStagingUint32(t *testing.T, key string) uint32 {
 	t.Helper()
 	value := strings.TrimSpace(os.Getenv(key))
@@ -89,4 +101,3 @@ func parseStagingUint16(t *testing.T, key string) uint16 {
 	}
 	return uint16(parsed)
 }
-
