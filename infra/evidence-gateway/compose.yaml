@@ -3,8 +3,8 @@ services:
     image: quay.io/keycloak/keycloak:26.1
     command: start-dev --http-port=8080 --import-realm
     environment:
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: local-only-admin
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_BOOTSTRAP_ADMIN_USERNAME:?KEYCLOAK_BOOTSTRAP_ADMIN_USERNAME must be supplied by the deployment secret store}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD:?KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD must be supplied by the deployment secret store}
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     ports:
@@ -19,8 +19,8 @@ services:
     image: minio/minio:RELEASE.2025-02-18T16-25-55Z
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: local-only-minio-admin
-      MINIO_ROOT_PASSWORD: local-only-minio-password
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be supplied by the deployment secret store}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be supplied by the deployment secret store}
     volumes:
       - minio-data:/data
     ports:
@@ -51,8 +51,8 @@ services:
       S3_RETENTION_DAYS: 1
       ENSURE_BUCKET_CONFIG: "true"
       AWS_DEFAULT_REGION: us-east-1
-      AWS_ACCESS_KEY_ID: local-only-minio-admin
-      AWS_SECRET_ACCESS_KEY: local-only-minio-password
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be supplied by the deployment secret store}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be supplied by the deployment secret store}
       RELEASE_MAPPING_FILE: /config/release-mapping.json
     volumes:
       - ./release-mapping.json:/config/release-mapping.json:ro

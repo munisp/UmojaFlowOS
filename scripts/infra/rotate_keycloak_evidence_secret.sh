@@ -17,6 +17,14 @@ umask 077
 
 vault_path="${VAULT_SECRET_PATH:-secret/data/umoja/keycloak/evidence-publisher}"
 rotation_active=0
+
+record_metric() {
+  local event="$1"
+  if [ -n "${ROTATION_METRICS_STATE_FILE:-}" ] && [ -n "${ROTATION_METRICS_FILE:-}" ]; then
+    python3 "${ROTATION_METRICS_RECORDER:-scripts/infra/record_keycloak_rotation_metric.py}" \
+      "$event" --state-file "$ROTATION_METRICS_STATE_FILE" --metrics-file "$ROTATION_METRICS_FILE" >/dev/null
+  fi
+}
 admin_token=""
 client_uuid=""
 new_secret=""
@@ -93,11 +101,11 @@ canary() {
 rollback() {
   local recovery_secret recovery_version
   if [ "$rotation_active" -ne 1 ]; then return 0; fi
-  recovery_secret="$(generate_secret)" || { echo 'ROLLBACK_FAILED: Keycloak recovery rotation failed' >&2; return 1; }
+  recovery_secret="$(generate_secret)" || { record_metric rollback_failure || true; echo 'ROLLBACK_FAILED: Keycloak recovery rotation failed' >&2; return 1; }
   echo '::add-mask::'"$recovery_secret"
   recovery_version="$(date -u +%Y%m%dT%H%M%SZ)-rollback-${GITHUB_RUN_ID:-manual}"
-  vault_write "$recovery_secret" "$recovery_version" compensating_rollback || { echo 'ROLLBACK_FAILED: Vault recovery write failed' >&2; return 1; }
-  canary "$recovery_secret" || { echo 'ROLLBACK_FAILED: recovery canary failed' >&2; return 1; }
+  vault_write "$recovery_secret" "$recovery_version" compensating_rollback || { record_metric rollback_failure || true; echo 'ROLLBACK_FAILED: Vault recovery write failed' >&2; return 1; }
+  canary "$recovery_secret" || { record_metric rollback_failure || true; echo 'ROLLBACK_FAILED: recovery canary failed' >&2; return 1; }
   printf 'rollback_version=%s\n' "$recovery_version" >> "${GITHUB_OUTPUT:-/dev/null}"
   echo 'ROTATION_ROLLED_BACK: recovery secret installed and canary passed' >&2
   rotation_active=0
@@ -105,6 +113,9 @@ rollback() {
 
 on_error() {
   local status=$?
+  if [ "$status" -ne 0 ]; then
+    record_metric rotation_failure || true
+  fi
   if [ "$status" -ne 0 ] && [ "$rotation_active" -eq 1 ]; then
     rollback || status=1
   fi
