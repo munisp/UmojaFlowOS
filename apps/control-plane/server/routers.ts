@@ -1,4 +1,3 @@
-import { COOKIE_NAME } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { probeProviderEndpoint } from "./providerHealthCheck";
 import { collectAllServiceStatuses } from "./serviceHealth";
@@ -13,7 +12,6 @@ import {
 } from "./postgres";
 import { evaluatePostgresLiquidityThresholds, evaluatePostgresPaymentFailures, evaluatePostgresComplianceFlags, computePostgresFxSpread } from "./operationalAlerts";
 import { raisePostgresComplianceAlert, acknowledgePostgresComplianceAlert, escalatePostgresComplianceAlert, dismissPostgresComplianceAlert, listPostgresComplianceAlerts } from "./complianceAlerts";
-import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, assuranceVerifierProcedure, auditorProcedure, cbnLiaisonProcedure, complianceOnlyProcedure, complianceProcedure, providerContactProcedure, publicProcedure, router, treasuryProcedure } from "./_core/trpc";
 import { listPostgresActiveVerificationConsents, listPostgresAnalysisReadyDocuments } from "./analysisSubmission";
@@ -62,13 +60,6 @@ export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
-    }),
   }),
   postgres: router({
     readiness: auditorProcedure.query(() => getPostgresReadiness()),

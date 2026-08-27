@@ -48,12 +48,23 @@ async function verify<T extends Record<string, unknown>>(token: string | undefin
 }
 function safeReturnTo(value: string | undefined): string { return value?.startsWith("/") && !value.startsWith("//") ? value : "/console"; }
 
+type SessionClaims = { openId?: string; name?: string; email?: string; loginMethod?: string; idToken?: string };
+
 export async function authenticateSession(request: Request): Promise<PlatformIdentity | null> {
   const token = parseCookieHeader(request.headers.cookie ?? "")[COOKIE_NAME];
-  const claims = await verify<{ openId?: string; name?: string; email?: string; loginMethod?: string }>(token);
+  const claims = await verify<SessionClaims>(token);
   if (!claims?.openId) return null;
   const now = new Date();
   return { id: 0, openId: claims.openId, name: typeof claims.name === "string" ? claims.name : null, email: typeof claims.email === "string" ? claims.email : null, loginMethod: typeof claims.loginMethod === "string" ? claims.loginMethod : "keycloak", role: "auditor", createdAt: now, updatedAt: now, lastSignedIn: now };
+}
+
+// Kept separate from authenticateSession/PlatformIdentity so the raw identity-
+// provider token never flows into the tRPC context or application code — its
+// only legitimate use is the id_token_hint on RP-initiated logout below.
+async function sessionIdToken(request: Request): Promise<string | null> {
+  const token = parseCookieHeader(request.headers.cookie ?? "")[COOKIE_NAME];
+  const claims = await verify<SessionClaims>(token);
+  return typeof claims?.idToken === "string" ? claims.idToken : null;
 }
 
 export function registerOidcRoutes(app: Express) {
@@ -94,9 +105,25 @@ export function registerOidcRoutes(app: Express) {
       const { payload } = await jwtVerify(tokens.id_token, jwks, { issuer: config.issuer.toString().replace(/\/$/, ""), audience: config.audience });
       if (payload.nonce !== transaction.nonce || typeof payload.sub !== "string" || !payload.sub) throw new Error("identity token validation failed");
       const user = platformUser(payload.sub, payload.name, payload.email);
-      res.cookie(COOKIE_NAME, await sign({ openId: user.openId, name: user.name ?? "", email: user.email ?? "", loginMethod: "keycloak" }, SESSION_TTL_SECONDS), { ...cookieOptions(config.publicBaseUrl.protocol === "https:"), maxAge: SESSION_TTL_SECONDS * 1000 });
+      res.cookie(COOKIE_NAME, await sign({ openId: user.openId, name: user.name ?? "", email: user.email ?? "", loginMethod: "keycloak", idToken: tokens.id_token }, SESSION_TTL_SECONDS), { ...cookieOptions(config.publicBaseUrl.protocol === "https:"), maxAge: SESSION_TTL_SECONDS * 1000 });
       res.redirect(302, transaction.returnTo);
     } catch { res.status(401).json({ error: "identity verification failed" }); }
   });
-  app.post("/auth/logout", (_req, res) => { res.clearCookie(COOKIE_NAME, cookieOptions(process.env.NODE_ENV === "production")); res.status(204).end(); });
+  app.get("/auth/logout", async (req, res) => {
+    const config = configuration();
+    const idToken = await sessionIdToken(req);
+    res.clearCookie(COOKIE_NAME, cookieOptions(config?.publicBaseUrl.protocol === "https:"));
+    if (!config) return res.redirect(302, "/");
+    // Clearing the local session cookie ends this app's session, but the
+    // identity provider's own SSO session survives it; without this redirect
+    // a later /auth/login silently re-authenticates the same user instead of
+    // prompting for credentials. Passing id_token_hint lets Keycloak confirm
+    // the request came from this session's own client and skip its logout
+    // confirmation prompt.
+    const endSession = new URL("protocol/openid-connect/logout", `${config.issuer.toString().replace(/\/$/, "")}/`);
+    if (idToken) endSession.searchParams.set("id_token_hint", idToken);
+    else endSession.searchParams.set("client_id", config.clientId);
+    endSession.searchParams.set("post_logout_redirect_uri", config.publicBaseUrl.toString());
+    res.redirect(302, endSession.toString());
+  });
 }
