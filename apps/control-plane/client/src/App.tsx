@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
@@ -16,6 +16,12 @@ function Router() {
       <Route path={"/enroll"} component={StakeholderOnboarding} />
       <Route path={"/console"} component={Home} />
       <Route path={"/console/:module"} component={Home} />
+      {/* Bare module paths (e.g. bookmarked or shared links) redirect into the console shell */}
+      {(["overview", "registry", "integrations", "governance", "treasury", "markets", "payments", "compliance", "reports", "alerts"] as const).map((module) => (
+        <Route key={module} path={`/${module}`}>
+          <Redirect to={module === "overview" ? "/console" : `/console/${module}`} />
+        </Route>
+      ))}
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
