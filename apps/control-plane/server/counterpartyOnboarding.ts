@@ -60,7 +60,15 @@ async function readOnboarding(onboardingId: string): Promise<OnboardingRow | und
             counterparty.legal_name AS "legalName",
             counterparty.counterparty_type AS "counterpartyType",
             counterparty.jurisdiction,
-            onboarding.country_overlays AS "countryOverlays",
+            -- node-postgres has no built-in type parser for arrays of a
+            -- custom enum (corridor_code[] here), so it falls back to the
+            -- raw wire-format string ("{NIGERIA_NGN}") instead of a JS
+            -- array - confirmed live, crashed the client's .map() calls in
+            -- CounterpartyOnboardingControls.tsx. Casting to the built-in
+            -- text[] here makes the driver parse it correctly; the values
+            -- are still valid Corridor strings, just no longer typed as the
+            -- enum at the wire level.
+            onboarding.country_overlays::text[] AS "countryOverlays",
             onboarding.stage::text AS stage,
             onboarding.cycle_number AS "cycleNumber",
             onboarding.legal_evidence_uri AS "legalEvidenceUri",
