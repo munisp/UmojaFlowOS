@@ -60,7 +60,9 @@ GRANT INSERT ON TABLE
   counterparty_evidence_items,
   counterparty_financial_soundness_decisions,
   bank_evidence_items,
-  counterparty_crypto_posture_decisions
+  counterparty_crypto_posture_decisions,
+  psp_evidence_items,
+  psp_gate_decisions
 TO :"app_role_ident";
 
 -- Records with a governed, reviewable lifecycle require in-place transitions.

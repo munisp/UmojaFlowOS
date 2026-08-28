@@ -26,6 +26,7 @@ import { assignExternalStakeholder, listCbnLiaisonAssignments, listProviderConta
 import { decideCustomerUseCaseGate, getCustomerWorkspace, recordCustomerDestinationCounterparty, updatePostgresCustomerProfile } from "./customerUseCase";
 import { decideFinancialSoundnessGate, getLiquidityProviderWorkspace, listLiquidityProviders, recordCounterpartyEvidenceItem, updateCounterpartyLpArchetype } from "./liquidityProviderEvidence";
 import { decideCryptoPostureGate, getBankingPartnerWorkspace, listBankingPartners, recordBankEvidenceItem, updateCounterpartyBankArchetype } from "./bankingPartnerEvidence";
+import { decidePspGate, getPayoutPspWorkspace, listPayoutPsps, recordPspEvidenceItem, updateCounterpartyPspArchetype } from "./payoutPspEvidence";
 import { changeOperatorRole, deactivateOperator, listOperators } from "./operatorDirectory";
 import { listOperatorAccessRequests } from "./operatorAccessRequests";
 import { grantOperatingRole } from "./operatorRoleGrants";
@@ -359,6 +360,18 @@ export const appRouter = router({
     updateCounterpartyBankArchetype: complianceProcedure.input(z.object({ counterpartyId: z.string().uuid(), archetype: z.enum(["correspondent_bank", "receiving_bank", "settlement_bank", "custodian_bank", "issuing_bank"]) })).mutation(({ ctx, input }) => updateCounterpartyBankArchetype({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     recordBankEvidenceItem: complianceProcedure.input(z.object({ counterpartyId: z.string().uuid(), evidenceType: z.enum(["banking_licence", "aml_cft_attestation", "correspondent_agreement_template", "nostro_account_confirmation", "sanctions_policy", "travel_rule_readiness_attestation", "swift_message_support_confirmation", "fee_schedule", "audit_reports", "regulator_no_objection_letter", "cyber_bcm_evidence", "settlement_cutoff_calendar"]), evidenceUri: z.string().url(), note: z.string().trim().min(1).max(2000).optional() })).mutation(({ ctx, input }) => recordBankEvidenceItem({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     decideCryptoPostureGate: complianceProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decideCryptoPostureGate({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    payoutPsps: auditorProcedure.query(() => listPayoutPsps()),
+    payoutPspWorkspace: auditorProcedure.input(z.object({ counterpartyId: z.string().uuid() })).query(async ({ input }) => {
+      const workspace = await getPayoutPspWorkspace(input.counterpartyId);
+      if (!workspace) throw new TRPCError({ code: "NOT_FOUND", message: "counterparty record was not found" });
+      return workspace;
+    }),
+    updateCounterpartyPspArchetype: complianceProcedure.input(z.object({ counterpartyId: z.string().uuid(), archetype: z.enum(["bank_instant_rail", "mobile_money", "virtual_card_issuer", "otc_cash_pickup", "aggregator_psp"]) })).mutation(({ ctx, input }) => updateCounterpartyPspArchetype({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordPspEvidenceItem: complianceProcedure.input(z.object({ counterpartyId: z.string().uuid(), evidenceType: z.enum(["psp_licence", "mobile_money_authorisation", "aggregator_licence", "sanctions_pep_attestation", "aml_cft_policy", "beneficial_ownership_disclosure", "cutoff_settlement_calendar", "fee_schedule_fx_margin", "reconciliation_file_format_spec", "dispute_recall_channel_sla", "audited_financials", "cyber_bcp_attestation"]), evidenceUri: z.string().url(), note: z.string().trim().min(1).max(2000).optional() })).mutation(({ ctx, input }) => recordPspEvidenceItem({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    decidePspLicenceRailGate: complianceProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decidePspGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "licence_rail_coverage" })),
+    decidePspSettlementCutoffGate: treasuryProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decidePspGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "settlement_cutoff_validation" })),
+    decidePspBoundedLiveGate: complianceProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decidePspGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "bounded_live" })),
+    decidePspFailoverGate: adminProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decidePspGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "failover_rail" })),
     createCounterpartyAuthorization: adminProcedure.input(z.object({
       counterpartyId: z.string().uuid(),
       regulator: z.enum(["CBN", "CBK", "SARB", "SEC", "CMA", "FSCA", "FIC"]),
