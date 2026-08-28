@@ -28,6 +28,7 @@ import { decideFinancialSoundnessGate, getLiquidityProviderWorkspace, listLiquid
 import { decideCryptoPostureGate, getBankingPartnerWorkspace, listBankingPartners, recordBankEvidenceItem, updateCounterpartyBankArchetype } from "./bankingPartnerEvidence";
 import { decidePspGate, getPayoutPspWorkspace, listPayoutPsps, recordPspEvidenceItem, updateCounterpartyPspArchetype } from "./payoutPspEvidence";
 import { decideStablecoinIssuerGate, getStablecoinIssuerWorkspace, listStablecoinIssuers, recordStablecoinIssuerEvidenceItem, updateCounterpartyStablecoinIssuerArchetype } from "./stablecoinIssuerEvidence";
+import { decideComplianceVendorGate, getComplianceVendorWorkspace, listComplianceVendors, recordComplianceVendorEvidenceItem, updateCounterpartyComplianceVendorArchetype } from "./complianceVendorEvidence";
 import { changeOperatorRole, deactivateOperator, listOperators } from "./operatorDirectory";
 import { listOperatorAccessRequests } from "./operatorAccessRequests";
 import { grantOperatingRole } from "./operatorRoleGrants";
@@ -340,7 +341,7 @@ export const appRouter = router({
     escalateCounterpartyRiskAssessment: adminProcedure.input(z.object({ assessmentId: z.string().uuid(), reason: z.string().trim().min(4).max(4000) })).mutation(({ ctx, input }) => escalatePostgresCounterpartyRiskAssessment({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     createCounterparty: adminProcedure.input(z.object({
       legalName: z.string().trim().min(2).max(255),
-      counterpartyType: z.enum(["licensed_psp", "correspondent_bank", "stablecoin_provider", "fx_liquidity_provider", "custody_provider", "kyc_provider", "sanctions_provider", "chain_analytics_provider", "notification_provider", "regulatory_submission_provider"]),
+      counterpartyType: z.enum(["licensed_psp", "correspondent_bank", "stablecoin_provider", "fx_liquidity_provider", "custody_provider", "kyc_provider", "sanctions_provider", "chain_analytics_provider", "notification_provider", "regulatory_submission_provider", "travel_rule_provider", "adverse_media_provider"]),
       jurisdiction: z.string().trim().min(2).max(64),
     })).mutation(({ ctx, input }) => createPostgresCounterparty({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     liquidityProviders: auditorProcedure.query(() => listLiquidityProviders()),
@@ -385,6 +386,18 @@ export const appRouter = router({
     decideStablecoinIssuerMintRedeemGate: treasuryProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decideStablecoinIssuerGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "mint_redeem_technical_proof" })),
     decideStablecoinIssuerChainReadinessGate: adminProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decideStablecoinIssuerGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "chain_readiness" })),
     decideStablecoinIssuerOperatingPostureGate: complianceOrTreasuryProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decideStablecoinIssuerGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "operating_posture" })),
+    complianceVendors: auditorProcedure.query(() => listComplianceVendors()),
+    complianceVendorWorkspace: auditorProcedure.input(z.object({ counterpartyId: z.string().uuid() })).query(async ({ input }) => {
+      const workspace = await getComplianceVendorWorkspace(input.counterpartyId);
+      if (!workspace) throw new TRPCError({ code: "NOT_FOUND", message: "counterparty record was not found" });
+      return workspace;
+    }),
+    updateCounterpartyComplianceVendorArchetype: complianceProcedure.input(z.object({ counterpartyId: z.string().uuid(), archetype: z.enum(["kyc_kyb_platform", "sanctions_screening", "chain_analytics", "travel_rule_vendor", "adverse_media"]) })).mutation(({ ctx, input }) => updateCounterpartyComplianceVendorArchetype({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordComplianceVendorEvidenceItem: complianceProcedure.input(z.object({ counterpartyId: z.string().uuid(), evidenceType: z.enum(["soc2_or_iso27001_report", "information_security_policy", "privacy_policy_dpa_template", "penetration_test_summary", "insurance_certificate", "beneficial_ownership_disclosure", "vendor_sanctions_compliance_posture", "list_data_sourcing_summary", "sub_processor_list", "sla_template_uptime_commitment"]), evidenceUri: z.string().url(), note: z.string().trim().min(1).max(2000).optional() })).mutation(({ ctx, input }) => recordComplianceVendorEvidenceItem({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    decideComplianceVendorSecurityPostureGate: complianceProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decideComplianceVendorGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "security_posture" })),
+    decideComplianceVendorCoverageFeasibilityGate: complianceProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decideComplianceVendorGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "coverage_feasibility" })),
+    decideComplianceVendorFalsePositiveCeilingGate: complianceProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decideComplianceVendorGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "false_positive_ceiling" })),
+    decideComplianceVendorAnnualReviewGate: complianceProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decideComplianceVendorGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "annual_review" })),
     createCounterpartyAuthorization: adminProcedure.input(z.object({
       counterpartyId: z.string().uuid(),
       regulator: z.enum(["CBN", "CBK", "SARB", "SEC", "CMA", "FSCA", "FIC"]),
