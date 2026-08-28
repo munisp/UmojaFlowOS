@@ -76,7 +76,7 @@ export async function getPostgresDashboardSnapshot() {
 }
 
 const canonicalTables = [
-  "activity_events", "alert_policies", "beneficiaries", "compliance_cases", "corridor_policies", "counterparties", "counterparty_authorizations", "counterparty_onboardings", "counterparty_onboarding_gate_decisions", "counterparty_risk_assessments", "customers", "document_analysis_evidence", "document_analysis_jobs", "integration_connections", "kyc_documents", "kyc_document_upload_intents", "legal_entities", "liquidity_positions", "market_observations", "notification_deliveries", "payment_legs", "payment_orders", "policy_decisions", "rate_locks", "regulatory_deadlines", "regulatory_reports", "sar_str_filings", "scheduled_jobs", "treasury_buffer_policies", "treasury_rebalancing_recommendations", "treasury_stress_test_runs", "user_role_assignments", "verification_consents", "verification_reviewer_decisions",
+  "activity_events", "alert_policies", "beneficiaries", "compliance_cases", "corridor_policies", "counterparties", "counterparty_authorizations", "counterparty_onboardings", "counterparty_onboarding_gate_decisions", "counterparty_evidence_items", "counterparty_financial_soundness_decisions", "counterparty_risk_assessments", "customers", "customer_destination_counterparties", "customer_use_case_gate_decisions", "document_analysis_evidence", "document_analysis_jobs", "integration_connections", "kyc_documents", "kyc_document_upload_intents", "legal_entities", "liquidity_positions", "market_observations", "notification_deliveries", "payment_legs", "payment_orders", "policy_decisions", "rate_locks", "regulatory_deadlines", "regulatory_reports", "sar_str_filings", "scheduled_jobs", "treasury_buffer_policies", "treasury_rebalancing_recommendations", "treasury_stress_test_runs", "user_role_assignments", "verification_consents", "verification_reviewer_decisions",
 ] as const;
 
 export async function getPostgresCutoverReadiness() {
@@ -114,7 +114,20 @@ export async function listPostgresCounterparties() {
 }
 
 export async function listPostgresCustomers() {
-  const { rows } = await getPool().query<{ id: string; legalName: string; registrationIdentifier: string; kycStatus: string; createdAt: Date }>("SELECT id, legal_name AS \"legalName\", registration_identifier AS \"registrationIdentifier\", kyc_status AS \"kycStatus\", created_at AS \"createdAt\" FROM customers ORDER BY created_at DESC LIMIT 200");
+  // documentCount/approvedDocumentCount are a real aggregate over kyc_documents,
+  // not a stored or inferred status: they are what "evidence progress" derives
+  // from on the enterprise-customer list, since customers.kyc_status itself is
+  // never transitioned by any code path and would misrepresent progress.
+  const { rows } = await getPool().query<{ id: string; legalName: string; registrationIdentifier: string; kycStatus: string; archetype: string | null; tier: string | null; documentCount: string; approvedDocumentCount: string; createdAt: Date }>(
+    `SELECT customer.id, customer.legal_name AS "legalName", customer.registration_identifier AS "registrationIdentifier", customer.kyc_status AS "kycStatus", customer.archetype, customer.tier,
+            count(document.id)::text AS "documentCount",
+            count(document.id) FILTER (WHERE document.review_status = 'approved')::text AS "approvedDocumentCount",
+            customer.created_at AS "createdAt"
+       FROM customers customer
+       LEFT JOIN kyc_documents document ON document.customer_id = customer.id
+      GROUP BY customer.id
+      ORDER BY customer.created_at DESC LIMIT 200`,
+  );
   return rows;
 }
 

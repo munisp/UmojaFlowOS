@@ -39,10 +39,14 @@ describe("submission feedback coverage", () => {
 
   it("supplies each form's error from its own mutation in the console", () => {
     const home = readFileSync(join(process.cwd(), "client/src/pages/Home.tsx"), "utf8");
+    // PostgresCustomerOnboardingForm's rendering site moved into its own
+    // workspace component; every candidate site is checked so a form isn't
+    // marked uncovered just because it no longer lives in Home.tsx.
+    const workspace = readFileSync(join(DIR, "EnterpriseCustomersWorkspace.tsx"), "utf8");
     for (const [component] of FORMS) {
       if (component === "IntegrationCredentialForm") continue; // wired through its own panel props
       const usage = new RegExp(`<${component}[^>]*error=\\{`);
-      expect(usage.test(home), `${component} is rendered without an error prop`).toBe(true);
+      expect(usage.test(home) || usage.test(workspace), `${component} is rendered without an error prop`).toBe(true);
     }
   });
 });

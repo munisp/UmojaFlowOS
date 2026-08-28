@@ -14,7 +14,9 @@ import { PostgresReportDraftForm } from "@/components/PostgresReportDraftForm";
 import { SarStrFilingForm, SarStrFilingTable } from "@/components/SarStrFilingControls";
 import { KycDocumentReviewTable } from "@/components/KycDocumentReviewControls";
 import { KycDocumentUploadForm } from "@/components/KycDocumentUploadControls";
-import { PostgresCustomerOnboardingForm } from "@/components/PostgresCustomerOnboardingForm";
+import { EnterpriseCustomersWorkspace } from "@/components/EnterpriseCustomersWorkspace";
+import { LiquidityProviderWorkspace } from "@/components/LiquidityProviderWorkspace";
+import { OperatorsWorkspace } from "@/components/OperatorsWorkspace";
 import { LegalEntityRegistrationForm } from "@/components/LegalEntityRegistrationForm";
 import { canConfigureCredentials, CredentialAuditTrail, IntegrationCredentialForm, IntegrationCredentialTable } from "@/components/IntegrationCredentialControls";
 import { ServiceTrendCharts } from "@/components/ServiceTrendCharts";
@@ -25,6 +27,7 @@ import { StakeholderPortal, StakeholderPortalGallery } from "@/components/Stakeh
 import { CounterpartyOnboardingControls } from "@/components/CounterpartyOnboardingControls";
 import { CbnSandboxWorkspace } from "@/components/CbnSandboxWorkspace";
 import { OperatorOnboardingControls } from "@/components/OperatorOnboardingControls";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +43,7 @@ import { FormEvent, ReactNode, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
-type ModuleKey = "overview" | "payments" | "treasury" | "markets" | "compliance" | "reports" | "sandbox" | "registry" | "integrations" | "governance" | "alerts";
+type ModuleKey = "overview" | "payments" | "treasury" | "markets" | "compliance" | "reports" | "sandbox" | "registry" | "integrations" | "governance" | "alerts" | "admins";
 
 const moduleMeta: Record<ModuleKey, { number: string; title: string; subtitle: string }> = {
   overview: { number: "00", title: "Operating posture", subtitle: "A source-honest view of configured control-plane records across Nigeria (NGN), Kenya (KES), and South Africa (ZAR)." },
@@ -54,6 +57,7 @@ const moduleMeta: Record<ModuleKey, { number: string; title: string; subtitle: s
   integrations: { number: "08", title: "Integration control", subtitle: "Register documented provider connections. Activation is reserved for verified secret-backed health checks, not a manual dashboard toggle." },
   governance: { number: "09", title: "Corridor governance", subtitle: "Version explicit Nigeria (NGN), Kenya (KES), and South Africa (ZAR) policy controls for CBN, CBK, and SARB review." },
   alerts: { number: "10", title: "Alert policy", subtitle: "Define owner-facing threshold, payment failure, compliance flag, and regulatory deadline alert policies without asserting delivery before the relevant channel is active." },
+  admins: { number: "11", title: "Admins & operators", subtitle: "Every identity-provider account cross-referenced with its current role. Change a role or deactivate an account; nothing here is ever hard-deleted." },
 };
 
 function moduleFromPath(path: string): ModuleKey {
@@ -86,6 +90,17 @@ function Empty({ title, detail }: { title: string; detail: string }) {
 }
 
 function TableShell({ children }: { children: ReactNode }) { return <div className="overflow-x-auto">{children}</div>; }
+
+const moduleTabTrigger = "rounded-none border border-black/20 px-4 py-2 text-xs font-black uppercase tracking-wide data-[state=active]:bg-black data-[state=active]:text-white";
+
+const roleDisplayLabels: Record<OperatorRole, string> = {
+  admin: "Admin",
+  compliance_officer: "Compliance officer",
+  treasury_operator: "Treasury operator",
+  auditor: "Auditor",
+  provider_contact: "Provider contact",
+  cbn_liaison: "CBN liaison",
+};
 
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="grid gap-1.5"><span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">{label}</span>{children}</label>; }
 
@@ -206,7 +221,6 @@ export default function Home() {
   const transitionPaymentLeg = trpc.postgres.transitionPaymentLeg.useMutation({ onSuccess: () => { onSuccess("Payment leg control transition recorded"); void utils.postgres.paymentLegs.invalidate(); }, onError: error => toast.error(error.message) });
   const createRateLock = trpc.postgres.createRateLock.useMutation({ onSuccess: () => onSuccess("Rate lock created from the selected source observation"), onError: error => toast.error(error.message) });
   const cancelRateLock = trpc.postgres.cancelRateLock.useMutation({ onSuccess: () => onSuccess("Rate lock cancelled with immutable activity evidence"), onError: error => toast.error(error.message) });
-  const createPostgresCustomer = trpc.postgres.createCustomer.useMutation({ onSuccess: () => onSuccess("Canonical PostgreSQL customer record created"), onError: error => toast.error(error.message) });
   const registerLegalEntity = trpc.postgres.registerLegalEntity.useMutation({ onSuccess: () => { void utils.postgres.legalEntities.invalidate(); onSuccess("Legal entity registered; it is now selectable in CBN dossier, IMTO readiness, and regulatory report forms"); }, onError: error => toast.error(error.message) });
   const activeVerificationConsents = trpc.postgres.activeVerificationConsents.useQuery();
   const analysisReadyDocuments = trpc.postgres.analysisReadyDocuments.useQuery();
@@ -258,7 +272,7 @@ export default function Home() {
 
   return <DashboardLayout><div className="min-h-full">
     <header className="border-b border-black/20 bg-white px-5 py-4 sm:px-8">
-      <div className="mx-auto flex max-w-[1600px] items-end justify-between gap-6"><div className="flex items-end gap-4"><span className="flex h-12 w-12 items-center justify-center bg-[#e11919] text-2xl font-black text-white">{meta.number}</span><div><p className="uf-kicker">UmojaFlowOS / Africa-linked cross-border payments</p><h1 className="uf-title text-3xl sm:text-4xl">{meta.title}</h1></div></div><div className="hidden text-right md:block"><p className="uf-kicker">System claim status</p><p className="mt-1 text-sm font-bold">Source-honest / provider-gated</p></div></div>
+      <div className="mx-auto flex max-w-[1600px] items-end justify-between gap-6"><div className="flex items-end gap-4"><span className="flex h-12 w-12 items-center justify-center bg-[#e11919] text-2xl font-black text-white">{meta.number}</span><div><p className="uf-kicker">UmojaFlowOS / Africa-linked cross-border payments</p><h1 className="uf-title text-3xl sm:text-4xl">{meta.title}</h1></div></div><div className="flex items-end gap-6"><div className="text-right"><p className="uf-kicker">Signed in as</p><p className="mt-1 text-sm font-bold">{roleDisplayLabels[user?.role as OperatorRole] ?? user?.role ?? "—"}</p></div><div className="hidden text-right md:block"><p className="uf-kicker">System claim status</p><p className="mt-1 text-sm font-bold">Source-honest / provider-gated</p></div></div></div>
     </header>
     <main className="mx-auto max-w-[1600px] px-5 py-6 sm:px-8"><p className="mb-6 max-w-4xl text-sm leading-6 text-black/65">{meta.subtitle}</p>
       {module === "overview" && <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
@@ -269,97 +283,174 @@ export default function Home() {
         <div className="xl:col-span-2"><StakeholderOnboardingWorkspace role={user?.role as OperatorRole | undefined} signals={onboardingSignals} onNavigate={target => setLocation(`/${target}`)} /></div>
         <Panel eyebrow="Audit trail" title="Latest attributable activity"><ActivityList events={overview.data?.latestEvents ?? []} loading={overview.isLoading} /></Panel>
       </div>}
-      {module === "registry" && <div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><Panel eyebrow="Action" title="Counterparty and licence evidence" action={moduleActions("registry")}>{composer === "counterparty" ? <CounterpartyForm pending={createCounterparty.isPending} submit={createCounterparty.mutate} /> : composer === "authorization" ? <CounterpartyAuthorizationForm pending={createCounterpartyAuthorization.isPending} counterparties={postgresCounterparties.data ?? []} submit={createCounterpartyAuthorization.mutate} error={createCounterpartyAuthorization.error?.message ?? null} /> : <Empty title="Licence evidence requires administrator access" detail="Administrators may register a licensed PSP, correspondent bank, stablecoin provider, FX liquidity provider, custody provider, KYC provider, sanctions provider, chain analytics provider, notification provider, or regulatory-submission provider and attach source-backed licence evidence." />}</Panel><div className="grid gap-5"><Panel eyebrow="Lifecycle" title="Counterparty onboarding and recertification"><CounterpartyOnboardingControls role={user?.role as OperatorRole | undefined} counterparties={postgresCounterparties.data ?? []} rows={postgresCounterpartyOnboardings.data ?? []} loading={postgresCounterpartyOnboardings.isLoading} createPending={createCounterpartyOnboarding.isPending} decisionPending={decideCounterpartyOnboarding.isPending || decideTechnicalOnboarding.isPending || decideTreasuryPilotOnboarding.isPending} recertificationPending={beginCounterpartyRecertification.isPending} error={createCounterpartyOnboarding.error?.message ?? decideCounterpartyOnboarding.error?.message ?? decideTechnicalOnboarding.error?.message ?? decideTreasuryPilotOnboarding.error?.message ?? beginCounterpartyRecertification.error?.message ?? null} create={createCounterpartyOnboarding.mutate} decideLegal={decideCounterpartyOnboarding.mutate} decideTechnical={decideTechnicalOnboarding.mutate} decidePilot={decideTreasuryPilotOnboarding.mutate} beginRecertification={beginCounterpartyRecertification.mutate} /></Panel><Panel eyebrow="Registry" title="Registered counterparties"><CounterpartyTable rows={postgresCounterparties.data ?? []} loading={postgresCounterparties.isLoading} /></Panel><Panel eyebrow="Licence register" title="Counterparty licence authorisations"><CounterpartyAuthorizationTable rows={postgresCounterpartyAuthorizations.data ?? []} loading={postgresCounterpartyAuthorizations.isLoading} canManage={canAdmin} pending={transitionCounterpartyAuthorization.isPending} transition={(authorizationId, status) => transitionCounterpartyAuthorization.mutate({ authorizationId, status })} /></Panel><Panel eyebrow="PostgreSQL control ledger" title="Counterparty risk reviews"><CounterpartyRiskTable rows={postgresCounterpartyRisks.data ?? []} loading={postgresCounterpartyRisks.isLoading} /></Panel></div></div>}
-      {module === "registry" && <Panel eyebrow="Foundational registry" title="Legal entities" action={canAdmin ? <Button className="rounded-none bg-[#e11919] text-xs font-black uppercase hover:bg-black" onClick={() => setComposer("legal-entity")}>New legal entity</Button> : null}>{composer === "legal-entity" ? <LegalEntityRegistrationForm pending={registerLegalEntity.isPending} submit={registerLegalEntity.mutate} error={registerLegalEntity.error?.message ?? null} /> : <div className="grid gap-2 p-5">{postgresLegalEntities.isLoading ? <p className="text-sm text-black/55">Loading legal entities…</p> : (postgresLegalEntities.data ?? []).length === 0 ? <Empty title="No legal entity registered" detail="CBN Cohort 2 dossiers, IMTO readiness profiles, and regulatory reports all attach to a canonical legal entity. Register one to unblock those forms." /> : <div className="grid gap-2">{(postgresLegalEntities.data ?? []).map(entity => <div key={entity.id} className="grid grid-cols-[1fr_auto] items-center gap-3 border border-black/10 px-3 py-2 text-sm"><span className="font-bold">{entity.legalName}</span><span className="text-xs uppercase tracking-wide text-black/50">{entity.jurisdiction}</span></div>)}</div>}</div>}</Panel>}
-      {module === "integrations" && <div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><Panel eyebrow="Action" title="Document provider connection" action={moduleActions("integrations")}>{composer === "integration" ? <IntegrationForm pending={createIntegration.isPending} counterparties={postgresCounterparties.data ?? []} submit={createIntegration.mutate} /> : <Empty title="No live connection represented" detail="Provider credentials must be supplied through protected deployment configuration. Creating this record does not activate a payment rail, FX rate, stablecoin market-data feed, KYC/KYB, sanctions, chain-analysis, notification, or reporting integration." />}</Panel><Panel eyebrow="Control register" title="Connection state"><IntegrationTable rows={integrations.data ?? []} loading={integrations.isLoading} /></Panel></div>}
-      {module === "integrations" && <div className="mt-5 grid gap-5">
-        <Panel eyebrow="Service health" title="Go, Rust, and Python runtime status">
-          <ServiceStatusDashboard
-            data={serviceStatus.data?.services}
-            loading={serviceStatus.isLoading}
-            isFetching={serviceStatus.isFetching}
-            error={serviceStatus.error?.message ?? null}
-            observedAt={serviceStatus.data?.observedAt}
-            onRefresh={() => { void utils.postgres.serviceStatus.invalidate(); }}
-          />
-        </Panel>
-        <Panel eyebrow="Trends" title="Service response and availability over time">
-          <ServiceTrendCharts
-            samples={serviceTrendSamples.data ?? []}
-            availability={serviceAvailability.data ?? []}
-            loading={serviceTrendSamples.isLoading || serviceAvailability.isLoading}
-            windowMinutes={trendWindow}
-            onWindowChange={setTrendWindow}
-          />
-        </Panel>
-        <Panel eyebrow="Measured resilience" title="Availability SLO evidence">
-          {serviceHealthSlo.isLoading ? <p className="text-sm text-black/60">Calculating from persisted samples.</p> : serviceHealthSlo.error ? <p className="text-sm text-red-700">SLO evidence could not be read: {serviceHealthSlo.error.message}</p> : <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{(serviceHealthSlo.data ?? []).map(row => <div key={row.service} className="border border-black/15 bg-[#f7f6f2] p-4"><p className="uf-kicker">{row.service}</p><p className={`mt-2 text-sm font-black ${row.status === "within_target" ? "text-emerald-700" : row.status === "breach" ? "text-red-700" : "text-amber-700"}`}>{row.status.replaceAll("_", " ")}</p><p className="mt-2 text-xs leading-5 text-black/65">{row.observedAvailability === null ? "No observed availability" : `${(row.observedAvailability * 100).toFixed(3)}% observed`} · {row.samples}/{row.minimumSamples} samples</p><p className="mt-2 text-xs leading-5 text-black/55">{row.reason}</p></div>)}</div>}
-        </Panel>
-        {canConfigureCredentials(user?.role) ? <>
-          <Panel eyebrow="Administrator action" title="Configure provider credential">
-            <IntegrationCredentialForm
-              connections={credentialStatus.data ?? []}
-              pending={configureCredential.isPending}
-              error={configureCredential.error?.message ?? null}
-              submit={configureCredential.mutate}
+      {module === "registry" && <Tabs defaultValue="liquidity-providers" className="gap-5">
+        <TabsList className="h-auto flex-wrap justify-start gap-1.5 rounded-none bg-transparent p-0">
+          <TabsTrigger className={moduleTabTrigger} value="liquidity-providers">Liquidity Providers</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="counterparties">Counterparties &amp; Licences</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="lifecycle">Onboarding Lifecycle</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="legal-entities">Legal Entities</TabsTrigger>
+        </TabsList>
+        <TabsContent value="liquidity-providers"><LiquidityProviderWorkspace role={user?.role as OperatorRole | undefined} /></TabsContent>
+        <TabsContent value="counterparties"><div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><Panel eyebrow="Action" title="Counterparty and licence evidence" action={moduleActions("registry")}>{composer === "counterparty" ? <CounterpartyForm pending={createCounterparty.isPending} submit={createCounterparty.mutate} /> : composer === "authorization" ? <CounterpartyAuthorizationForm pending={createCounterpartyAuthorization.isPending} counterparties={postgresCounterparties.data ?? []} submit={createCounterpartyAuthorization.mutate} error={createCounterpartyAuthorization.error?.message ?? null} /> : <Empty title="Licence evidence requires administrator access" detail="Administrators may register a licensed PSP, correspondent bank, stablecoin provider, FX liquidity provider, custody provider, KYC provider, sanctions provider, chain analytics provider, notification provider, or regulatory-submission provider and attach source-backed licence evidence." />}</Panel><div className="grid gap-5"><Panel eyebrow="Registry" title="Registered counterparties"><CounterpartyTable rows={postgresCounterparties.data ?? []} loading={postgresCounterparties.isLoading} /></Panel><Panel eyebrow="Licence register" title="Counterparty licence authorisations"><CounterpartyAuthorizationTable rows={postgresCounterpartyAuthorizations.data ?? []} loading={postgresCounterpartyAuthorizations.isLoading} canManage={canAdmin} pending={transitionCounterpartyAuthorization.isPending} transition={(authorizationId, status) => transitionCounterpartyAuthorization.mutate({ authorizationId, status })} /></Panel></div></div></TabsContent>
+        <TabsContent value="lifecycle"><div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><Panel eyebrow="Lifecycle" title="Counterparty onboarding and recertification"><CounterpartyOnboardingControls role={user?.role as OperatorRole | undefined} counterparties={postgresCounterparties.data ?? []} rows={postgresCounterpartyOnboardings.data ?? []} loading={postgresCounterpartyOnboardings.isLoading} createPending={createCounterpartyOnboarding.isPending} decisionPending={decideCounterpartyOnboarding.isPending || decideTechnicalOnboarding.isPending || decideTreasuryPilotOnboarding.isPending} recertificationPending={beginCounterpartyRecertification.isPending} error={createCounterpartyOnboarding.error?.message ?? decideCounterpartyOnboarding.error?.message ?? decideTechnicalOnboarding.error?.message ?? decideTreasuryPilotOnboarding.error?.message ?? beginCounterpartyRecertification.error?.message ?? null} create={createCounterpartyOnboarding.mutate} decideLegal={decideCounterpartyOnboarding.mutate} decideTechnical={decideTechnicalOnboarding.mutate} decidePilot={decideTreasuryPilotOnboarding.mutate} beginRecertification={beginCounterpartyRecertification.mutate} /></Panel><Panel eyebrow="PostgreSQL control ledger" title="Counterparty risk reviews"><CounterpartyRiskTable rows={postgresCounterpartyRisks.data ?? []} loading={postgresCounterpartyRisks.isLoading} /></Panel></div></TabsContent>
+        <TabsContent value="legal-entities"><Panel eyebrow="Foundational registry" title="Legal entities" action={canAdmin ? <Button className="rounded-none bg-[#e11919] text-xs font-black uppercase hover:bg-black" onClick={() => setComposer("legal-entity")}>New legal entity</Button> : null}>{composer === "legal-entity" ? <LegalEntityRegistrationForm pending={registerLegalEntity.isPending} submit={registerLegalEntity.mutate} error={registerLegalEntity.error?.message ?? null} /> : <div className="grid gap-2 p-5">{postgresLegalEntities.isLoading ? <p className="text-sm text-black/55">Loading legal entities…</p> : (postgresLegalEntities.data ?? []).length === 0 ? <Empty title="No legal entity registered" detail="CBN Cohort 2 dossiers, IMTO readiness profiles, and regulatory reports all attach to a canonical legal entity. Register one to unblock those forms." /> : <div className="grid gap-2">{(postgresLegalEntities.data ?? []).map(entity => <div key={entity.id} className="grid grid-cols-[1fr_auto] items-center gap-3 border border-black/10 px-3 py-2 text-sm"><span className="font-bold">{entity.legalName}</span><span className="text-xs uppercase tracking-wide text-black/50">{entity.jurisdiction}</span></div>)}</div>}</div>}</Panel></TabsContent>
+      </Tabs>}
+      {module === "integrations" && <Tabs defaultValue="connections" className="gap-5">
+        <TabsList className="h-auto flex-wrap justify-start gap-1.5 rounded-none bg-transparent p-0">
+          <TabsTrigger className={moduleTabTrigger} value="connections">Connections</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="health">Service Health</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="credentials">Credentials</TabsTrigger>
+        </TabsList>
+        <TabsContent value="connections"><div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><Panel eyebrow="Action" title="Document provider connection" action={moduleActions("integrations")}>{composer === "integration" ? <IntegrationForm pending={createIntegration.isPending} counterparties={postgresCounterparties.data ?? []} submit={createIntegration.mutate} /> : <Empty title="No live connection represented" detail="Provider credentials must be supplied through protected deployment configuration. Creating this record does not activate a payment rail, FX rate, stablecoin market-data feed, KYC/KYB, sanctions, chain-analysis, notification, or reporting integration." />}</Panel><Panel eyebrow="Control register" title="Connection state"><IntegrationTable rows={integrations.data ?? []} loading={integrations.isLoading} /></Panel></div></TabsContent>
+        <TabsContent value="health"><div className="grid gap-5">
+          <Panel eyebrow="Service health" title="Go, Rust, and Python runtime status">
+            <ServiceStatusDashboard
+              data={serviceStatus.data?.services}
+              loading={serviceStatus.isLoading}
+              isFetching={serviceStatus.isFetching}
+              error={serviceStatus.error?.message ?? null}
+              observedAt={serviceStatus.data?.observedAt}
+              onRefresh={() => { void utils.postgres.serviceStatus.invalidate(); }}
             />
           </Panel>
-          <Panel eyebrow="Activation" title="Credential state and verified activation">
-            <div className="border-b border-black/10 px-5 py-3 text-xs leading-5 text-black/55">
-              Activation contacts the provider with the credential named by the configured deployment secret. An integration
-              becomes active only if that request succeeds; a rejected credential, an error response, a redirect, or an
-              unreachable endpoint records an explicit failure and leaves the integration inactive.
-            </div>
-            <IntegrationCredentialTable
-              rows={credentialStatus.data ?? []}
-              loading={credentialStatus.isLoading}
-              canManage
-              activatePending={activateIntegration.isPending}
-              suspendPending={suspendIntegration.isPending}
-              activate={activateIntegration.mutate}
-              suspend={suspendIntegration.mutate}
-              activatingId={activateIntegration.variables?.integrationConnectionId ?? null}
+          <Panel eyebrow="Trends" title="Service response and availability over time">
+            <ServiceTrendCharts
+              samples={serviceTrendSamples.data ?? []}
+              availability={serviceAvailability.data ?? []}
+              loading={serviceTrendSamples.isLoading || serviceAvailability.isLoading}
+              windowMinutes={trendWindow}
+              onWindowChange={setTrendWindow}
             />
           </Panel>
-          <Panel eyebrow="Audit" title="Credential change history">
-            <div className="border-b border-black/10 px-5 py-3">
-              <label className="grid gap-1.5">
-                <span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Connection</span>
-                <select
-                  className="h-9 rounded-none border border-black/25 bg-white px-2 text-sm"
-                  aria-label="Audit trail connection"
-                  value={auditConnectionId}
-                  onChange={event => setAuditConnectionId(event.target.value)}
-                >
-                  <option value="">Select a connection</option>
-                  {(credentialStatus.data ?? []).map(row => (
-                    <option key={row.id} value={row.id}>
-                      {row.counterpartyLegalName} · {row.category}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <CredentialAuditTrail
-              entries={credentialAuditTrail.data ?? []}
-              loading={credentialAuditTrail.isLoading}
-              connectionSelected={auditConnectionId !== ""}
-            />
+          <Panel eyebrow="Measured resilience" title="Availability SLO evidence">
+            {serviceHealthSlo.isLoading ? <p className="text-sm text-black/60">Calculating from persisted samples.</p> : serviceHealthSlo.error ? <p className="text-sm text-red-700">SLO evidence could not be read: {serviceHealthSlo.error.message}</p> : <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{(serviceHealthSlo.data ?? []).map(row => <div key={row.service} className="border border-black/15 bg-[#f7f6f2] p-4"><p className="uf-kicker">{row.service}</p><p className={`mt-2 text-sm font-black ${row.status === "within_target" ? "text-emerald-700" : row.status === "breach" ? "text-red-700" : "text-amber-700"}`}>{row.status.replaceAll("_", " ")}</p><p className="mt-2 text-xs leading-5 text-black/65">{row.observedAvailability === null ? "No observed availability" : `${(row.observedAvailability * 100).toFixed(3)}% observed`} · {row.samples}/{row.minimumSamples} samples</p><p className="mt-2 text-xs leading-5 text-black/55">{row.reason}</p></div>)}</div>}
           </Panel>
-        </> : <Panel eyebrow="Administrator action" title="Configure provider credential">
-          <Empty title="Credential configuration is an administrator control" detail="Supplying the deployment secret that activates a provider adapter is restricted to administrators. This role may review connection state and service health." />
-        </Panel>}
-      </div>}
-      {module === "governance" && <div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><Panel eyebrow="Action" title="Version corridor policy" action={moduleActions("governance")}>{composer === "policy" ? <PolicyForm pending={createPolicy.isPending} submit={createPolicy.mutate} /> : <Empty title="Policy is a runtime gate" detail="A policy version must name the corridor, relevant regulator—CBN, CBK, or SARB—and source document. It is created pending review and cannot itself authorise a payment execution." />}</Panel><Panel eyebrow="Policy ledger" title="Corridor policy versions"><PolicyTable rows={policies.data ?? []} loading={policies.isLoading} /></Panel></div>}
-      {module === "governance" && <div className="mt-5"><OperatorOnboardingControls role={user?.role as OperatorRole | undefined} /></div>}
-      {module === "treasury" && <div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><Panel eyebrow="Action" title="Record reconciled position" action={moduleActions("treasury")}>{composer === "liquidity" ? <LiquidityForm pending={recordLiquidity.isPending} submit={recordLiquidity.mutate} /> : <Empty title="No automatic balance is claimed" detail="Record a position only after reconciliation against its actual nostro, vostro, pre-funding, liquidity pool, or custody-wallet source reference." />}</Panel><div className="grid gap-5"><Panel eyebrow="Evidence ledger" title="Liquidity positions"><LiquidityTable rows={liquidity.data ?? []} loading={liquidity.isLoading} /></Panel><Panel eyebrow="Approved thresholds" title="Treasury buffer policies"><TreasuryBufferPolicyTable policies={treasuryBufferPolicies.data ?? []} loading={treasuryBufferPolicies.isLoading} /></Panel><Panel eyebrow="Rebalancing" title="Recommendations and independent approval">{canProposeRebalancing(user?.role) ? <TreasuryRecommendationForm policies={treasuryBufferPolicies.data ?? []} pending={createTreasuryRecommendation.isPending} submit={createTreasuryRecommendation.mutate} /> : <div className="px-5 py-6 text-sm leading-6 text-black/55">Only treasury operators may propose a rebalancing recommendation. This role may review recommendations and their approval evidence.</div>}<TreasuryRecommendationTable recommendations={treasuryRecommendations.data ?? []} loading={treasuryRecommendations.isLoading} role={user?.role} currentSubject={user?.openId} pending={decideTreasuryRecommendation.isPending} decide={decideTreasuryRecommendation.mutate} /></Panel></div></div>}
-      {module === "markets" && <div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><div className="grid gap-5"><Panel eyebrow="Action" title="Rate evidence and lock" action={moduleActions("markets", ["market", "rate-lock"])}>{canManageRateLocks(user?.role) ? <RateLockForm observations={markets.data ?? []} pending={createRateLock.isPending} submit={createRateLock.mutate} error={createRateLock.error?.message ?? null} /> : <p className="px-5 py-6 text-sm leading-6 text-black/55">Rate-lock creation is a treasury control. This role may review locks and their control evidence.</p>}</Panel></div><div className="grid gap-5"><Panel eyebrow="Rate evidence" title="Latest observations"><MarketTable rows={markets.data ?? []} loading={markets.isLoading} /></Panel><Panel eyebrow="Lock ledger" title="Source-derived rate locks"><RateLockTable rows={rateLocks.data ?? []} loading={rateLocks.isLoading} role={user?.role} pending={cancelRateLock.isPending} cancel={cancelRateLock.mutate} /></Panel></div></div>}
-      {module === "payments" && <div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><div className="grid gap-5"><Panel eyebrow="Controlled intake" title="Draft payment order">{canOperatePayments(user?.role) ? <PaymentOrderForm customers={postgresCustomers.data ?? []} beneficiaries={postgresBeneficiaries.data ?? []} rateLocks={rateLocks.data ?? []} pending={createPaymentOrder.isPending} submit={createPaymentOrder.mutate} /> : <div className="px-5 py-6 text-sm leading-6 text-black/55">Payment drafting is a treasury control. This role may review orders, legs, and their control evidence.</div>}</Panel><Panel eyebrow="Settlement path" title="Add payment leg">{canOperatePayments(user?.role) ? <PaymentLegForm orders={pgPaymentOrders.data ?? []} counterparties={postgresCounterparties.data ?? []} pending={createPaymentLeg.isPending} submit={createPaymentLeg.mutate} /> : <div className="px-5 py-6 text-sm leading-6 text-black/55">Payment-leg composition is a treasury control. This role may review legs and their control evidence.</div>}</Panel><Panel eyebrow="Rate discipline" title="Rate-lock expiry"><RateLockExpiryControl role={user?.role} pending={expireRateLocks.isPending} expire={() => expireRateLocks.mutate()} /></Panel></div><div className="grid gap-5"><Panel eyebrow="Workflow" title="Payment orders"><PaymentOrderLedger orders={pgPaymentOrders.data ?? []} loading={pgPaymentOrders.isLoading} role={user?.role} pending={transitionPaymentOrder.isPending} transition={transitionPaymentOrder.mutate} /></Panel><Panel eyebrow="Leg ledger" title="Payment legs"><PaymentLegLedger legs={pgPaymentLegs.data ?? []} loading={pgPaymentLegs.isLoading} role={user?.role} pending={transitionPaymentLeg.isPending} transition={transitionPaymentLeg.mutate} /></Panel></div></div>}
-      {module === "compliance" && <div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><div className="grid gap-5"><Panel eyebrow="Action" title="Evidence-based casework" action={moduleActions("compliance")}>{composer === "consent" ? <VerificationConsentForm canCapture={user?.role === "compliance_officer"} pending={createVerificationConsent.isPending} submit={createVerificationConsent.mutate} error={createVerificationConsent.error?.message ?? null} /> : composer === "analysis" ? <AnalysisJobSubmissionForm consents={activeVerificationConsents.data ?? []} documents={analysisReadyDocuments.data ?? []} canSubmit={user?.role === "compliance_officer"} pending={createDocumentAnalysisJob.isPending} submit={createDocumentAnalysisJob.mutate} error={createDocumentAnalysisJob.error?.message ?? null} /> : composer === "case" ? <ComplianceForm pending={createCase.isPending} submit={createCase.mutate} /> : composer === "kyc-document" ? <KycDocumentUploadForm customers={postgresCustomers.data ?? []} createIntent={createKycDocumentUploadIntent.mutateAsync} finalize={finalizeKycDocumentUpload.mutateAsync} onComplete={() => onSuccess("KYC document stored in protected object storage and recorded as canonical metadata")} /> : composer === "sar-str" ? <SarStrFilingForm pending={createSarStrFiling.isPending} cases={postgresComplianceCases.data ?? []} submit={createSarStrFiling.mutate} error={createSarStrFiling.error?.message ?? null} /> : <Empty title="Screening results are never invented" detail="Create a canonical case from a verified source reference, store authorised KYC evidence directly in protected object storage, or initiate a SAR/STR draft against a canonical case. Official filing submission remains unavailable unless a verified authorised channel produces an attributable submission reference." />}</Panel><Panel eyebrow="Lawful basis" title="Verification consent precedes analysis"><VerificationConsentForm canCapture={user?.role === "compliance_officer"} pending={createVerificationConsent.isPending} submit={createVerificationConsent.mutate} error={createVerificationConsent.error?.message ?? null} /></Panel><Panel eyebrow="KYC / KYB evidence boundary" title="Authorised document workflow"><KycEvidenceWorkspace role={user?.role} jobs={documentAnalysisJobs.data ?? []} evidence={documentAnalysisEvidence.data ?? []} decisions={reviewerDecisions.data ?? []} loadingEvidence={documentAnalysisEvidence.isLoading} loadingDecisions={reviewerDecisions.isLoading} pendingDecision={createReviewerDecision.isPending} submitDecision={createReviewerDecision.mutate} /></Panel></div><div className="grid gap-5"><Panel eyebrow="Casework" title="Compliance cases">{postgresComplianceCases.isLoading ? <div className="px-5 py-8 text-sm text-black/55">Loading compliance cases…</div> : <ComplianceCaseDispositionControls cases={postgresComplianceCases.data ?? []} canDispose={user?.role === "compliance_officer"} pending={disposeComplianceCase.isPending} dispose={disposeComplianceCase.mutate} />}</Panel><Panel eyebrow="SAR/STR ledger" title="SAR/STR filings"><SarStrFilingTable rows={postgresSarStrFilings.data ?? []} loading={postgresSarStrFilings.isLoading} canManage={canPerformConsoleAction(user?.role, "sar-str")} pending={transitionSarStrFiling.isPending} transition={transitionSarStrFiling.mutate} /></Panel><Panel eyebrow="KYC document review" title="Manual review lifecycle"><KycDocumentReviewTable rows={postgresKycDocuments.data ?? []} loading={postgresKycDocuments.isLoading} canReview={canPerformConsoleAction(user?.role, "case")} pending={updateKycDocumentReview.isPending} submit={updateKycDocumentReview.mutate} /></Panel><Panel eyebrow="Evidence register" title="KYC and KYB analysis jobs"><KycAnalysisJobTable jobs={documentAnalysisJobs.data ?? []} loading={documentAnalysisJobs.isLoading} /></Panel></div></div>}
-      {module === "compliance" && (user?.role === "compliance_officer" || user?.role === "admin") && <Panel eyebrow="Canonical onboarding" title="Customer required for KYC/KYB evidence" action={<Button className="rounded-none bg-[#e11919] text-xs font-black uppercase hover:bg-black" onClick={() => setComposer("postgres-customer")}>New customer</Button>}>{composer === "postgres-customer" ? <PostgresCustomerOnboardingForm pending={createPostgresCustomer.isPending} submit={createPostgresCustomer.mutate} error={createPostgresCustomer.error?.message ?? null} /> : <Empty title="Create an evidence subject" detail="KYC/KYB document intake requires an existing canonical PostgreSQL customer. Recording this subject does not create a payment instruction or automated compliance disposition." />}</Panel>}
-      {module === "reports" && <div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><Panel eyebrow="Action" title="Report pack and deadline" action={<div className="flex flex-wrap justify-end gap-2">{moduleActions("reports")}{canPerformConsoleAction(user?.role, "report") ? <Button className="rounded-none bg-black text-xs font-black uppercase hover:bg-[#e11919]" onClick={() => setComposer("report-draft")}>Report draft</Button> : null}{canPerformConsoleAction(user?.role, "report") && postgresReports.data?.length ? <Button className="rounded-none bg-black text-xs font-black uppercase hover:bg-[#e11919]" onClick={() => setComposer("report-transition")}>Review workflow</Button> : null}</div>}>{composer === "report" ? <ReportForm legalEntities={postgresLegalEntities.data ?? []} pending={createReport.isPending} submit={createReport.mutate} /> : composer === "report-draft" ? ((postgresLegalEntities.data ?? []).length === 0 ? <Empty title="Authorised legal entity required" detail="Register the reporting legal entity in the canonical registry before drafting a regulator report pack." /> : <PostgresReportDraftForm legalEntities={postgresLegalEntities.data ?? []} pending={createPostgresReport.isPending} submit={createPostgresReport.mutate} error={createPostgresReport.error?.message ?? null} />) : composer === "deadline" ? <RegulatoryDeadlineForm pending={createDeadline.isPending} submit={createDeadline.mutate} error={createDeadline.error?.message ?? null} /> : composer === "report-transition" ? <PostgresReportTransitionForm rows={postgresReports.data ?? []} pending={transitionPostgresReport.isPending} submit={transitionPostgresReport.mutate} error={transitionPostgresReport.error?.message ?? null} /> : <Empty title="Submission is not inferred" detail="Create an auditable CBN, CBK, or SARB report draft and source-backed deadline. A record cannot be called submitted until a verified regulatory channel returns an attributable submission reference." />}</Panel><div className="grid gap-5"><Panel eyebrow="Reporting register" title="Report packs"><ReportTable rows={reports.data ?? []} loading={reports.isLoading} /></Panel><Panel eyebrow="Workflow record" title="Verified workflow evidence"><PostgresReportTable rows={postgresReports.data ?? []} loading={postgresReports.isLoading} /></Panel><Panel eyebrow="Deadline register" title="CBN, CBK, and SARB deadlines"><RegulatoryDeadlineTable rows={deadlines.data ?? []} loading={deadlines.isLoading} /></Panel></div></div>}
+        </div></TabsContent>
+        <TabsContent value="credentials"><div className="grid gap-5">
+          {canConfigureCredentials(user?.role) ? <>
+            <Panel eyebrow="Administrator action" title="Configure provider credential">
+              <IntegrationCredentialForm
+                connections={credentialStatus.data ?? []}
+                pending={configureCredential.isPending}
+                error={configureCredential.error?.message ?? null}
+                submit={configureCredential.mutate}
+              />
+            </Panel>
+            <Panel eyebrow="Activation" title="Credential state and verified activation">
+              <div className="border-b border-black/10 px-5 py-3 text-xs leading-5 text-black/55">
+                Activation contacts the provider with the credential named by the configured deployment secret. An integration
+                becomes active only if that request succeeds; a rejected credential, an error response, a redirect, or an
+                unreachable endpoint records an explicit failure and leaves the integration inactive.
+              </div>
+              <IntegrationCredentialTable
+                rows={credentialStatus.data ?? []}
+                loading={credentialStatus.isLoading}
+                canManage
+                activatePending={activateIntegration.isPending}
+                suspendPending={suspendIntegration.isPending}
+                activate={activateIntegration.mutate}
+                suspend={suspendIntegration.mutate}
+                activatingId={activateIntegration.variables?.integrationConnectionId ?? null}
+              />
+            </Panel>
+            <Panel eyebrow="Audit" title="Credential change history">
+              <div className="border-b border-black/10 px-5 py-3">
+                <label className="grid gap-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Connection</span>
+                  <select
+                    className="h-9 rounded-none border border-black/25 bg-white px-2 text-sm"
+                    aria-label="Audit trail connection"
+                    value={auditConnectionId}
+                    onChange={event => setAuditConnectionId(event.target.value)}
+                  >
+                    <option value="">Select a connection</option>
+                    {(credentialStatus.data ?? []).map(row => (
+                      <option key={row.id} value={row.id}>
+                        {row.counterpartyLegalName} · {row.category}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <CredentialAuditTrail
+                entries={credentialAuditTrail.data ?? []}
+                loading={credentialAuditTrail.isLoading}
+                connectionSelected={auditConnectionId !== ""}
+              />
+            </Panel>
+          </> : <Panel eyebrow="Administrator action" title="Configure provider credential">
+            <Empty title="Credential configuration is an administrator control" detail="Supplying the deployment secret that activates a provider adapter is restricted to administrators. This role may review connection state and service health." />
+          </Panel>}
+        </div></TabsContent>
+      </Tabs>}
+      {module === "governance" && <Tabs defaultValue="policy" className="gap-5">
+        <TabsList className="h-auto flex-wrap justify-start gap-1.5 rounded-none bg-transparent p-0">
+          <TabsTrigger className={moduleTabTrigger} value="policy">Corridor Policy</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="operators">Operator Access</TabsTrigger>
+        </TabsList>
+        <TabsContent value="policy"><div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><Panel eyebrow="Action" title="Version corridor policy" action={moduleActions("governance")}>{composer === "policy" ? <PolicyForm pending={createPolicy.isPending} submit={createPolicy.mutate} /> : <Empty title="Policy is a runtime gate" detail="A policy version must name the corridor, relevant regulator—CBN, CBK, or SARB—and source document. It is created pending review and cannot itself authorise a payment execution." />}</Panel><Panel eyebrow="Policy ledger" title="Corridor policy versions"><PolicyTable rows={policies.data ?? []} loading={policies.isLoading} /></Panel></div></TabsContent>
+        <TabsContent value="operators"><OperatorOnboardingControls role={user?.role as OperatorRole | undefined} /></TabsContent>
+      </Tabs>}
+      {module === "treasury" && <Tabs defaultValue="positions" className="gap-5">
+        <TabsList className="h-auto flex-wrap justify-start gap-1.5 rounded-none bg-transparent p-0">
+          <TabsTrigger className={moduleTabTrigger} value="positions">Positions</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="buffers">Buffer Policies</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="rebalancing">Rebalancing</TabsTrigger>
+        </TabsList>
+        <TabsContent value="positions"><div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><Panel eyebrow="Action" title="Record reconciled position" action={moduleActions("treasury")}>{composer === "liquidity" ? <LiquidityForm pending={recordLiquidity.isPending} submit={recordLiquidity.mutate} /> : <Empty title="No automatic balance is claimed" detail="Record a position only after reconciliation against its actual nostro, vostro, pre-funding, liquidity pool, or custody-wallet source reference." />}</Panel><Panel eyebrow="Evidence ledger" title="Liquidity positions"><LiquidityTable rows={liquidity.data ?? []} loading={liquidity.isLoading} /></Panel></div></TabsContent>
+        <TabsContent value="buffers"><Panel eyebrow="Approved thresholds" title="Treasury buffer policies"><TreasuryBufferPolicyTable policies={treasuryBufferPolicies.data ?? []} loading={treasuryBufferPolicies.isLoading} /></Panel></TabsContent>
+        <TabsContent value="rebalancing"><Panel eyebrow="Rebalancing" title="Recommendations and independent approval">{canProposeRebalancing(user?.role) ? <TreasuryRecommendationForm policies={treasuryBufferPolicies.data ?? []} pending={createTreasuryRecommendation.isPending} submit={createTreasuryRecommendation.mutate} /> : <div className="px-5 py-6 text-sm leading-6 text-black/55">Only treasury operators may propose a rebalancing recommendation. This role may review recommendations and their approval evidence.</div>}<TreasuryRecommendationTable recommendations={treasuryRecommendations.data ?? []} loading={treasuryRecommendations.isLoading} role={user?.role} currentSubject={user?.openId} pending={decideTreasuryRecommendation.isPending} decide={decideTreasuryRecommendation.mutate} /></Panel></TabsContent>
+      </Tabs>}
+      {module === "markets" && <Tabs defaultValue="rate-locks" className="gap-5">
+        <TabsList className="h-auto flex-wrap justify-start gap-1.5 rounded-none bg-transparent p-0">
+          <TabsTrigger className={moduleTabTrigger} value="rate-locks">Rate Locks</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="observations">Observations</TabsTrigger>
+        </TabsList>
+        <TabsContent value="rate-locks"><div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><Panel eyebrow="Action" title="Rate evidence and lock" action={moduleActions("markets", ["market", "rate-lock"])}>{canManageRateLocks(user?.role) ? <RateLockForm observations={markets.data ?? []} pending={createRateLock.isPending} submit={createRateLock.mutate} error={createRateLock.error?.message ?? null} /> : <p className="px-5 py-6 text-sm leading-6 text-black/55">Rate-lock creation is a treasury control. This role may review locks and their control evidence.</p>}</Panel><Panel eyebrow="Lock ledger" title="Source-derived rate locks"><RateLockTable rows={rateLocks.data ?? []} loading={rateLocks.isLoading} role={user?.role} pending={cancelRateLock.isPending} cancel={cancelRateLock.mutate} /></Panel></div></TabsContent>
+        <TabsContent value="observations"><Panel eyebrow="Rate evidence" title="Latest observations"><MarketTable rows={markets.data ?? []} loading={markets.isLoading} /></Panel></TabsContent>
+      </Tabs>}
+      {module === "payments" && <Tabs defaultValue="compose" className="gap-5">
+        <TabsList className="h-auto flex-wrap justify-start gap-1.5 rounded-none bg-transparent p-0">
+          <TabsTrigger className={moduleTabTrigger} value="compose">Compose</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="orders">Orders</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="legs">Legs</TabsTrigger>
+        </TabsList>
+        <TabsContent value="compose"><div className="grid gap-5 xl:grid-cols-[1fr_1fr_1fr]"><Panel eyebrow="Controlled intake" title="Draft payment order">{canOperatePayments(user?.role) ? <PaymentOrderForm customers={postgresCustomers.data ?? []} beneficiaries={postgresBeneficiaries.data ?? []} rateLocks={rateLocks.data ?? []} pending={createPaymentOrder.isPending} submit={createPaymentOrder.mutate} /> : <div className="px-5 py-6 text-sm leading-6 text-black/55">Payment drafting is a treasury control. This role may review orders, legs, and their control evidence.</div>}</Panel><Panel eyebrow="Settlement path" title="Add payment leg">{canOperatePayments(user?.role) ? <PaymentLegForm orders={pgPaymentOrders.data ?? []} counterparties={postgresCounterparties.data ?? []} pending={createPaymentLeg.isPending} submit={createPaymentLeg.mutate} /> : <div className="px-5 py-6 text-sm leading-6 text-black/55">Payment-leg composition is a treasury control. This role may review legs and their control evidence.</div>}</Panel><Panel eyebrow="Rate discipline" title="Rate-lock expiry"><RateLockExpiryControl role={user?.role} pending={expireRateLocks.isPending} expire={() => expireRateLocks.mutate()} /></Panel></div></TabsContent>
+        <TabsContent value="orders"><Panel eyebrow="Workflow" title="Payment orders"><PaymentOrderLedger orders={pgPaymentOrders.data ?? []} loading={pgPaymentOrders.isLoading} role={user?.role} pending={transitionPaymentOrder.isPending} transition={transitionPaymentOrder.mutate} /></Panel></TabsContent>
+        <TabsContent value="legs"><Panel eyebrow="Leg ledger" title="Payment legs"><PaymentLegLedger legs={pgPaymentLegs.data ?? []} loading={pgPaymentLegs.isLoading} role={user?.role} pending={transitionPaymentLeg.isPending} transition={transitionPaymentLeg.mutate} /></Panel></TabsContent>
+      </Tabs>}
+      {module === "compliance" && <Tabs defaultValue="customers" className="gap-5">
+        <TabsList className="h-auto flex-wrap justify-start gap-1.5 rounded-none bg-transparent p-0">
+          <TabsTrigger className={moduleTabTrigger} value="customers">Enterprise Customers</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="casework">Casework</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="evidence">KYC / KYB Evidence</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="sar-str">SAR/STR</TabsTrigger>
+        </TabsList>
+        <TabsContent value="customers"><EnterpriseCustomersWorkspace role={user?.role as OperatorRole | undefined} /></TabsContent>
+        <TabsContent value="casework"><div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><Panel eyebrow="Action" title="Evidence-based casework" action={moduleActions("compliance")}>{composer === "consent" ? <VerificationConsentForm canCapture={user?.role === "compliance_officer"} pending={createVerificationConsent.isPending} submit={createVerificationConsent.mutate} error={createVerificationConsent.error?.message ?? null} /> : composer === "analysis" ? <AnalysisJobSubmissionForm consents={activeVerificationConsents.data ?? []} documents={analysisReadyDocuments.data ?? []} canSubmit={user?.role === "compliance_officer"} pending={createDocumentAnalysisJob.isPending} submit={createDocumentAnalysisJob.mutate} error={createDocumentAnalysisJob.error?.message ?? null} /> : composer === "case" ? <ComplianceForm pending={createCase.isPending} submit={createCase.mutate} /> : composer === "kyc-document" ? <KycDocumentUploadForm customers={postgresCustomers.data ?? []} createIntent={createKycDocumentUploadIntent.mutateAsync} finalize={finalizeKycDocumentUpload.mutateAsync} onComplete={() => onSuccess("KYC document stored in protected object storage and recorded as canonical metadata")} /> : composer === "sar-str" ? <SarStrFilingForm pending={createSarStrFiling.isPending} cases={postgresComplianceCases.data ?? []} submit={createSarStrFiling.mutate} error={createSarStrFiling.error?.message ?? null} /> : <Empty title="Screening results are never invented" detail="Create a canonical case from a verified source reference, store authorised KYC evidence directly in protected object storage, or initiate a SAR/STR draft against a canonical case. Official filing submission remains unavailable unless a verified authorised channel produces an attributable submission reference." />}</Panel><div className="grid gap-5"><Panel eyebrow="Lawful basis" title="Verification consent precedes analysis"><VerificationConsentForm canCapture={user?.role === "compliance_officer"} pending={createVerificationConsent.isPending} submit={createVerificationConsent.mutate} error={createVerificationConsent.error?.message ?? null} /></Panel><Panel eyebrow="Casework" title="Compliance cases">{postgresComplianceCases.isLoading ? <div className="px-5 py-8 text-sm text-black/55">Loading compliance cases…</div> : <ComplianceCaseDispositionControls cases={postgresComplianceCases.data ?? []} canDispose={user?.role === "compliance_officer"} pending={disposeComplianceCase.isPending} dispose={disposeComplianceCase.mutate} />}</Panel></div></div></TabsContent>
+        <TabsContent value="evidence"><div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><Panel eyebrow="KYC / KYB evidence boundary" title="Authorised document workflow"><KycEvidenceWorkspace role={user?.role} jobs={documentAnalysisJobs.data ?? []} evidence={documentAnalysisEvidence.data ?? []} decisions={reviewerDecisions.data ?? []} loadingEvidence={documentAnalysisEvidence.isLoading} loadingDecisions={reviewerDecisions.isLoading} pendingDecision={createReviewerDecision.isPending} submitDecision={createReviewerDecision.mutate} /></Panel><div className="grid gap-5"><Panel eyebrow="KYC document review" title="Manual review lifecycle"><KycDocumentReviewTable rows={postgresKycDocuments.data ?? []} loading={postgresKycDocuments.isLoading} canReview={canPerformConsoleAction(user?.role, "case")} pending={updateKycDocumentReview.isPending} submit={updateKycDocumentReview.mutate} /></Panel><Panel eyebrow="Evidence register" title="KYC and KYB analysis jobs"><KycAnalysisJobTable jobs={documentAnalysisJobs.data ?? []} loading={documentAnalysisJobs.isLoading} /></Panel></div></div></TabsContent>
+        <TabsContent value="sar-str"><Panel eyebrow="SAR/STR ledger" title="SAR/STR filings"><SarStrFilingTable rows={postgresSarStrFilings.data ?? []} loading={postgresSarStrFilings.isLoading} canManage={canPerformConsoleAction(user?.role, "sar-str")} pending={transitionSarStrFiling.isPending} transition={transitionSarStrFiling.mutate} /></Panel></TabsContent>
+      </Tabs>}
+      {module === "reports" && <Tabs defaultValue="action" className="gap-5">
+        <TabsList className="h-auto flex-wrap justify-start gap-1.5 rounded-none bg-transparent p-0">
+          <TabsTrigger className={moduleTabTrigger} value="action">Report Pack &amp; Deadline</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="packs">Report Packs</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="deadlines">Deadlines</TabsTrigger>
+        </TabsList>
+        <TabsContent value="action"><Panel eyebrow="Action" title="Report pack and deadline" action={<div className="flex flex-wrap justify-end gap-2">{moduleActions("reports")}{canPerformConsoleAction(user?.role, "report") ? <Button className="rounded-none bg-black text-xs font-black uppercase hover:bg-[#e11919]" onClick={() => setComposer("report-draft")}>Report draft</Button> : null}{canPerformConsoleAction(user?.role, "report") && postgresReports.data?.length ? <Button className="rounded-none bg-black text-xs font-black uppercase hover:bg-[#e11919]" onClick={() => setComposer("report-transition")}>Review workflow</Button> : null}</div>}>{composer === "report" ? <ReportForm legalEntities={postgresLegalEntities.data ?? []} pending={createReport.isPending} submit={createReport.mutate} /> : composer === "report-draft" ? ((postgresLegalEntities.data ?? []).length === 0 ? <Empty title="Authorised legal entity required" detail="Register the reporting legal entity in the canonical registry before drafting a regulator report pack." /> : <PostgresReportDraftForm legalEntities={postgresLegalEntities.data ?? []} pending={createPostgresReport.isPending} submit={createPostgresReport.mutate} error={createPostgresReport.error?.message ?? null} />) : composer === "deadline" ? <RegulatoryDeadlineForm pending={createDeadline.isPending} submit={createDeadline.mutate} error={createDeadline.error?.message ?? null} /> : composer === "report-transition" ? <PostgresReportTransitionForm rows={postgresReports.data ?? []} pending={transitionPostgresReport.isPending} submit={transitionPostgresReport.mutate} error={transitionPostgresReport.error?.message ?? null} /> : <Empty title="Submission is not inferred" detail="Create an auditable CBN, CBK, or SARB report draft and source-backed deadline. A record cannot be called submitted until a verified regulatory channel returns an attributable submission reference." />}</Panel></TabsContent>
+        <TabsContent value="packs"><div className="grid gap-5 xl:grid-cols-2"><Panel eyebrow="Reporting register" title="Report packs"><ReportTable rows={reports.data ?? []} loading={reports.isLoading} /></Panel><Panel eyebrow="Workflow record" title="Verified workflow evidence"><PostgresReportTable rows={postgresReports.data ?? []} loading={postgresReports.isLoading} /></Panel></div></TabsContent>
+        <TabsContent value="deadlines"><Panel eyebrow="Deadline register" title="CBN, CBK, and SARB deadlines"><RegulatoryDeadlineTable rows={deadlines.data ?? []} loading={deadlines.isLoading} /></Panel></TabsContent>
+      </Tabs>}
       {module === "sandbox" && <CbnSandboxWorkspace role={user?.role as OperatorRole | undefined} />}
-      {module === "alerts" && <div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]"><Panel eyebrow="Action" title="Define and evaluate policy" action={<div className="flex flex-wrap items-center justify-end gap-2">{moduleActions("alerts", evaluateDeadlines.isPending ? ["evaluate-deadlines"] : [])}</div>}>{composer === "alert" ? <AlertForm pending={createAlert.isPending} submit={createAlert.mutate} /> : <Empty title="Alert policy is not delivery evidence" detail="Policies are stored with the configured threshold. An administrator may evaluate deadline records; scheduled evaluation becomes available only after deployment. Owner delivery is contingent on the relevant source event." />}</Panel><Panel eyebrow="Alert ledger" title="Configured policies"><AlertTable rows={alerts.data ?? []} loading={alerts.isLoading} /></Panel></div>}
+      {module === "alerts" && <Tabs defaultValue="action" className="gap-5">
+        <TabsList className="h-auto flex-wrap justify-start gap-1.5 rounded-none bg-transparent p-0">
+          <TabsTrigger className={moduleTabTrigger} value="action">Define Policy</TabsTrigger>
+          <TabsTrigger className={moduleTabTrigger} value="ledger">Policy Ledger</TabsTrigger>
+        </TabsList>
+        <TabsContent value="action"><Panel eyebrow="Action" title="Define and evaluate policy" action={<div className="flex flex-wrap items-center justify-end gap-2">{moduleActions("alerts", evaluateDeadlines.isPending ? ["evaluate-deadlines"] : [])}</div>}>{composer === "alert" ? <AlertForm pending={createAlert.isPending} submit={createAlert.mutate} /> : <Empty title="Alert policy is not delivery evidence" detail="Policies are stored with the configured threshold. An administrator may evaluate deadline records; scheduled evaluation becomes available only after deployment. Owner delivery is contingent on the relevant source event." />}</Panel></TabsContent>
+        <TabsContent value="ledger"><Panel eyebrow="Alert ledger" title="Configured policies"><AlertTable rows={alerts.data ?? []} loading={alerts.isLoading} /></Panel></TabsContent>
+      </Tabs>}
+      {module === "admins" && <OperatorsWorkspace role={user?.role as OperatorRole | undefined} currentSubject={user?.openId} />}
     </main>
   </div></DashboardLayout>;
 }

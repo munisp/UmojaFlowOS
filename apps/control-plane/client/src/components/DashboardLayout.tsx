@@ -34,12 +34,14 @@ import {
   ReceiptText,
   Scale,
   ShieldCheck,
+  UserCog,
   Waypoints,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
+import type { OperatorRole } from "@/lib/roleCapabilities";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Overview", path: "/console" },
@@ -53,7 +55,45 @@ const menuItems = [
   { icon: Activity, label: "Integrations", path: "/console/integrations" },
   { icon: Scale, label: "Governance", path: "/console/governance" },
   { icon: BellRing, label: "Alerts", path: "/console/alerts" },
+  { icon: UserCog, label: "Admins", path: "/console/admins" },
 ];
+
+const auditableModulePaths = menuItems.filter(item => item.path !== "/console/admins").map(item => item.path);
+
+/**
+ * Which modules a role sees in the sidebar, based on where that role can
+ * actually act (roleCapabilities.ts / consoleActionVisibility.ts) rather than
+ * an arbitrary cut. Auditor sees every operational module for the same
+ * reason it always has here — oversight requires full visibility ("withholding
+ * it from the roles who respond to incidents would be counterproductive") —
+ * but not Admins: that page lists every account's name, email, and enabled
+ * state, which is account-directory data, not business/compliance evidence.
+ * Only admin (which can also act on it) sees it.
+ */
+const modulesByRole: Record<OperatorRole, string[] | null> = {
+  admin: null,
+  auditor: auditableModulePaths,
+  compliance_officer: ["/console", "/console/compliance", "/console/reports", "/console/sandbox", "/console/registry", "/console/governance", "/console/alerts"],
+  treasury_operator: ["/console", "/console/payments", "/console/treasury", "/console/markets", "/console/compliance", "/console/registry", "/console/integrations", "/console/alerts"],
+  provider_contact: ["/console"],
+  cbn_liaison: ["/console"],
+};
+
+const roleLabels: Record<OperatorRole, string> = {
+  admin: "Admin",
+  compliance_officer: "Compliance officer",
+  treasury_operator: "Treasury operator",
+  auditor: "Auditor",
+  provider_contact: "Provider contact",
+  cbn_liaison: "CBN liaison",
+};
+
+function visibleMenuItems(role: OperatorRole | undefined) {
+  if (!role) return menuItems;
+  const allowed = modulesByRole[role];
+  if (!allowed) return menuItems;
+  return menuItems.filter(item => allowed.includes(item.path));
+}
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 280;
@@ -150,7 +190,8 @@ function DashboardLayoutContent({
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find(item => item.path === location);
+  const items = visibleMenuItems(user?.role as OperatorRole | undefined);
+  const activeMenuItem = items.find(item => item.path === location);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -217,7 +258,7 @@ function DashboardLayoutContent({
           <SidebarContent className="gap-0">
             <div className="px-4 pt-5 pb-2 text-[10px] font-bold tracking-[0.18em] text-black/40 uppercase group-data-[collapsible=icon]:hidden">Operations OS</div>
             <SidebarMenu className="px-2 py-1">
-              {menuItems.map(item => {
+              {items.map(item => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
@@ -254,6 +295,11 @@ function DashboardLayoutContent({
                     <p className="text-xs text-muted-foreground truncate mt-1.5">
                       {user?.email || "-"}
                     </p>
+                    {user?.role ? (
+                      <span className="mt-1.5 inline-block rounded-none bg-[#e11919] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">
+                        {roleLabels[user.role as OperatorRole] ?? user.role}
+                      </span>
+                    ) : null}
                   </div>
                 </button>
               </DropdownMenuTrigger>

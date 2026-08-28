@@ -54,7 +54,11 @@ GRANT INSERT ON TABLE
   segregation_of_duties_evaluation_runs,
   ledger_posting_intents,
   ledger_reconciliation_runs,
-  ledger_reconciliation_discrepancies
+  ledger_reconciliation_discrepancies,
+  customer_destination_counterparties,
+  customer_use_case_gate_decisions,
+  counterparty_evidence_items,
+  counterparty_financial_soundness_decisions
 TO :"app_role_ident";
 
 -- Records with a governed, reviewable lifecycle require in-place transitions.

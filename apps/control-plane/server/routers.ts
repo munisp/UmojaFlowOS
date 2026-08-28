@@ -23,6 +23,9 @@ import { assessVaspOffshoreCounterpartyProfile, assessVaspTravelRuleRoute, creat
 import { assessImtoReadiness, createImtoReadinessProfile, imtoEvidenceCategories, recordImtoReadinessEvidence } from "./imtoReadiness";
 import { assessReadinessAssurance, initialiseReadinessAssurance, listReadinessAssurance, readinessAssuranceAreas, recordReadinessAssuranceEvidence, rejectReadinessAssuranceEvidence, verifyReadinessAssuranceEvidence } from "./vaspReadinessAssurance";
 import { assignExternalStakeholder, listCbnLiaisonAssignments, listProviderContactAssignments, recordExternalStakeholderEvidence } from "./externalStakeholders";
+import { decideCustomerUseCaseGate, getCustomerWorkspace, recordCustomerDestinationCounterparty, updatePostgresCustomerProfile } from "./customerUseCase";
+import { decideFinancialSoundnessGate, getLiquidityProviderWorkspace, listLiquidityProviders, recordCounterpartyEvidenceItem, updateCounterpartyLpArchetype } from "./liquidityProviderEvidence";
+import { changeOperatorRole, deactivateOperator, listOperators } from "./operatorDirectory";
 import { listOperatorAccessRequests } from "./operatorAccessRequests";
 import { grantOperatingRole } from "./operatorRoleGrants";
 import { onboardOperator } from "./operatorOnboarding";
@@ -101,6 +104,9 @@ export const appRouter = router({
     createCbnSandboxReportingPack: complianceProcedure.input(z.object({ dossierId: z.string().uuid(), periodStart: z.coerce.date(), periodEnd: z.coerce.date(), artifactUri: z.string().url().refine(value => value.startsWith("https://"), "Artifact must use HTTPS") }).refine(input => input.periodEnd > input.periodStart, "Reporting period end must follow its start")).mutation(({ ctx, input }) => createCbnSandboxReportingPack({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     assignExternalStakeholder: adminProcedure.input(z.object({ role: z.enum(["provider_contact", "cbn_liaison"]), stakeholderSubject: z.string().trim().min(3).max(255), counterpartyId: z.string().uuid().optional(), dossierId: z.string().uuid().optional() }).superRefine((input, context) => { if ((input.role === "provider_contact") !== Boolean(input.counterpartyId) || (input.role === "cbn_liaison") !== Boolean(input.dossierId)) context.addIssue({ code: "custom", message: "assignment subject must match the stakeholder role" }); })).mutation(({ ctx, input }) => assignExternalStakeholder({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     operatorAccessRequests: adminProcedure.query(() => listOperatorAccessRequests()),
+    operators: adminProcedure.query(() => listOperators()),
+    changeOperatorRole: adminProcedure.input(z.object({ subject: z.string().trim().min(3).max(255), role: z.enum(["admin", "compliance_officer", "treasury_operator", "auditor"]) })).mutation(({ ctx, input }) => changeOperatorRole({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    deactivateOperator: adminProcedure.input(z.object({ keycloakUserId: z.string().trim().min(1).max(255), subject: z.string().trim().min(3).max(255), reason: z.string().trim().min(10).max(2000) })).mutation(({ ctx, input }) => deactivateOperator({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     grantOperatingRole: adminProcedure.input(z.object({ subject: z.string().trim().min(3).max(255), role: z.enum(["admin", "compliance_officer", "treasury_operator", "auditor"]) })).mutation(({ ctx, input }) => grantOperatingRole({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     operatorAccountCreationAvailable: adminProcedure.query(() => operatorAccountCreationAvailable()),
     onboardOperator: adminProcedure.input(z.object({ name: z.string().trim().min(2).max(120), email: z.string().trim().email().max(320), role: z.enum(["admin", "compliance_officer", "treasury_operator", "auditor", "provider_contact", "cbn_liaison"]), counterpartyId: z.string().uuid().optional(), dossierId: z.string().uuid().optional() }).superRefine((input, context) => { if ((input.role === "provider_contact") !== Boolean(input.counterpartyId) || (input.role === "cbn_liaison") !== Boolean(input.dossierId)) context.addIssue({ code: "custom", message: "assignment subject must match the stakeholder role" }); })).mutation(({ ctx, input }) => onboardOperator({ openId: ctx.user.openId, role: ctx.user.role }, input)),
@@ -141,8 +147,16 @@ export const appRouter = router({
       recertificationDueAt: z.coerce.date(),
     })).mutation(({ ctx, input }) => beginCounterpartyRecertification({ openId: ctx.user.openId, role: ctx.user.role }, input.onboardingId, input.legalEvidenceUri, input.recertificationDueAt)),
     customers: auditorProcedure.query(() => listPostgresCustomers()),
+    customerWorkspace: auditorProcedure.input(z.object({ customerId: z.string().uuid() })).query(async ({ input }) => {
+      const workspace = await getCustomerWorkspace(input.customerId);
+      if (!workspace) throw new TRPCError({ code: "NOT_FOUND", message: "customer record was not found" });
+      return workspace;
+    }),
     beneficiaries: auditorProcedure.input(z.object({ customerId: z.string().uuid().optional() }).optional()).query(({ input }) => listPostgresBeneficiaries(input?.customerId)),
     createCustomer: complianceProcedure.input(z.object({ legalName: z.string().trim().min(2).max(255), registrationIdentifier: z.string().trim().min(2).max(255) })).mutation(({ ctx, input }) => createPostgresCustomer({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    updateCustomerProfile: complianceProcedure.input(z.object({ customerId: z.string().uuid(), archetype: z.enum(["importer", "exporter", "intercompany_rebalancing", "payroll_operator"]).optional(), tier: z.enum(["smb", "mid", "enterprise"]).optional(), useCaseNarrative: z.string().trim().min(20).max(4000).optional() })).mutation(({ ctx, input }) => updatePostgresCustomerProfile({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordCustomerDestinationCounterparty: complianceProcedure.input(z.object({ customerId: z.string().uuid(), counterpartyName: z.string().trim().min(2).max(255), destinationJurisdiction: z.string().trim().min(2).max(120), invoiceReference: z.string().trim().min(1).max(2000).optional() })).mutation(({ ctx, input }) => recordCustomerDestinationCounterparty({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    decideCustomerUseCaseGate: complianceProcedure.input(z.object({ customerId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decideCustomerUseCaseGate({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     createBeneficiary: complianceProcedure.input(z.object({ customerId: z.string().uuid(), legalName: z.string().trim().min(2).max(255), countryCode: z.string().trim().length(2).toUpperCase(), bankOrWalletReference: z.string().trim().min(4).max(512) })).mutation(({ ctx, input }) => createPostgresBeneficiary({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     recordBeneficiaryScreening: complianceProcedure.input(z.object({ beneficiaryId: z.string().uuid(), integrationConnectionId: z.string().uuid(), correlationId: z.string().trim().min(8).max(255), screeningState: z.enum(["clear", "potential_match", "confirmed_match", "source_unavailable"]), providerReference: z.string().trim().min(3).max(512), sourceVersion: z.string().trim().min(1).max(255), evidenceSha256: z.string().regex(/^[a-f0-9]{64}$/), screenedAt: z.coerce.date().refine(value => value <= new Date(), "Screening time cannot be in the future") })).mutation(({ ctx, input }) => recordPostgresBeneficiaryScreening({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     counterpartyAuthorizations: auditorProcedure.query(() => listPostgresCounterpartyAuthorizations()),
@@ -326,6 +340,15 @@ export const appRouter = router({
       counterpartyType: z.enum(["licensed_psp", "correspondent_bank", "stablecoin_provider", "fx_liquidity_provider", "custody_provider", "kyc_provider", "sanctions_provider", "chain_analytics_provider", "notification_provider", "regulatory_submission_provider"]),
       jurisdiction: z.string().trim().min(2).max(64),
     })).mutation(({ ctx, input }) => createPostgresCounterparty({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    liquidityProviders: auditorProcedure.query(() => listLiquidityProviders()),
+    liquidityProviderWorkspace: auditorProcedure.input(z.object({ counterpartyId: z.string().uuid() })).query(async ({ input }) => {
+      const workspace = await getLiquidityProviderWorkspace(input.counterpartyId);
+      if (!workspace) throw new TRPCError({ code: "NOT_FOUND", message: "counterparty record was not found" });
+      return workspace;
+    }),
+    updateCounterpartyLpArchetype: complianceProcedure.input(z.object({ counterpartyId: z.string().uuid(), archetype: z.enum(["principal_market_maker", "regional_liquidity_desk", "stablecoin_fiat_conversion_desk", "otc_counterparty"]) })).mutation(({ ctx, input }) => updateCounterpartyLpArchetype({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordCounterpartyEvidenceItem: complianceProcedure.input(z.object({ counterpartyId: z.string().uuid(), evidenceType: z.enum(["mm_otc_licence", "incountry_vasp_licence", "beneficial_ownership_disclosure", "sanctions_pep_attestation", "audited_financials", "aml_cft_policy", "travel_rule_policy", "mlro_appointment_letter", "market_microstructure_policy", "reference_list", "insurance_certificate", "regulatory_disciplinary_history"]), evidenceUri: z.string().url(), note: z.string().trim().min(1).max(2000).optional() })).mutation(({ ctx, input }) => recordCounterpartyEvidenceItem({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    decideFinancialSoundnessGate: treasuryProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decideFinancialSoundnessGate({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     createCounterpartyAuthorization: adminProcedure.input(z.object({
       counterpartyId: z.string().uuid(),
       regulator: z.enum(["CBN", "CBK", "SARB", "SEC", "CMA", "FSCA", "FIC"]),

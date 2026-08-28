@@ -3,6 +3,10 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const CONSOLE = readFileSync(resolve(process.cwd(), "client/src/pages/Home.tsx"), "utf8");
+// Canonical customer creation moved out of Home.tsx into its own workspace
+// component (the Enterprise Customers list + tabbed detail view); the
+// role-gating boundary check follows it there.
+const CUSTOMER_WORKSPACE = readFileSync(resolve(process.cwd(), "client/src/components/EnterpriseCustomersWorkspace.tsx"), "utf8");
 
 /**
  * Creation affordances are the highest-risk controls in the console: they are
@@ -19,12 +23,14 @@ describe("creation affordance boundary", () => {
   });
 
   it("gates canonical customer onboarding to compliance officers and administrators", () => {
-    const index = CONSOLE.indexOf("<PostgresCustomerOnboardingForm");
+    const index = CUSTOMER_WORKSPACE.indexOf("<PostgresCustomerOnboardingForm");
     expect(index).toBeGreaterThan(-1);
-    const preceding = CONSOLE.slice(Math.max(0, index - 400), index);
-    // The rendering site is guarded by an explicit role check.
-    expect(preceding).toMatch(/compliance_officer|canReviewCompliance|canOperateCompliance/);
-    expect(preceding).toContain('user?.role === "admin"');
+    const preceding = CUSTOMER_WORKSPACE.slice(Math.max(0, index - 400), index);
+    // The rendering site is guarded by the workspace's canEdit flag.
+    expect(preceding).toMatch(/canEdit/);
+    // canEdit itself must resolve to compliance_officer or admin, not a
+    // broader or looser check.
+    expect(CUSTOMER_WORKSPACE).toContain('canEdit = role === "compliance_officer" || role === "admin"');
   });
 
   it("gates payment order and payment leg creation behind the payment role check", () => {
@@ -45,7 +51,6 @@ describe("creation affordance boundary", () => {
 
   it("routes every creation mutation through the canonical namespace", () => {
     const creationMutations = [
-      "createPostgresCustomer",
       "createPaymentOrder",
       "createPaymentLeg",
       "createRateLock",
@@ -56,5 +61,7 @@ describe("creation affordance boundary", () => {
     }
     // No creation mutation may bind to the transitional namespace.
     expect(CONSOLE).not.toMatch(/const create[A-Za-z]* = trpc\.umoja\./);
+    expect(CUSTOMER_WORKSPACE, "createCustomer must bind to trpc.postgres").toMatch(/const createCustomer = trpc\.postgres\./);
+    expect(CUSTOMER_WORKSPACE).not.toMatch(/const create[A-Za-z]* = trpc\.umoja\./);
   });
 });

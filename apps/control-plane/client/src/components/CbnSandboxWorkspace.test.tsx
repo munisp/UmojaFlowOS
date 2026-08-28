@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 vi.mock("@/lib/trpc", () => ({
   trpc: {
@@ -39,14 +40,17 @@ import { CbnSandboxWorkspace } from "./CbnSandboxWorkspace";
 describe("CBN sandbox workspace", () => {
   afterEach(cleanup);
 
-  it("makes the non-licensing and non-submission boundary visible to every role", () => {
+  it("makes the non-licensing and non-submission boundary visible to every role", async () => {
+    const user = userEvent.setup();
     render(<CbnSandboxWorkspace role="auditor" />);
     expect(screen.getByText(/does not submit to CBN, prove admission or licensing/i)).toBeTruthy();
-    expect(screen.getByText(/does not send a regulatory application, determine SEC or CBN status/i)).toBeTruthy();
-    expect(screen.getByText(/Every route remains unverified externally and no transmission is initiated/i)).toBeTruthy();
     expect(screen.getByText(/No CBN dossier selected/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /New dossier/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Assess records/i })).toBeNull();
+
+    await user.click(screen.getByRole("tab", { name: /vasp supervisory/i }));
+    expect(screen.getByText(/does not send a regulatory application, determine SEC or CBN status/i)).toBeTruthy();
+    expect(screen.getByText(/Every route remains unverified externally and no transmission is initiated/i)).toBeTruthy();
   });
 
   it("allows an administrator to open a required-evidence dossier form without promising an external result", () => {
