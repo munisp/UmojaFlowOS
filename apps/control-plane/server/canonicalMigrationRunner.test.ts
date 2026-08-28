@@ -18,7 +18,7 @@ describe("canonical PostgreSQL migration runner", () => {
     expect(output).toContain("database/postgresql");
     expect(output).toMatch(/\b0001_control_plane\.sql\b/);
     expect(output).toMatch(/\b0042_tigerbeetle_postgres_reconciliation\.sql\b/);
-    expect(output.split("\n").filter(line => /\b00\d{2}_.*\.sql$/.test(line))).toHaveLength(49);
+    expect(output.split("\n").filter(line => /\b00\d{2}_.*\.sql$/.test(line))).toHaveLength(50);
   });
 
   it("replaces the non-existent baseline command and removes the divergent application-side migration source", () => {

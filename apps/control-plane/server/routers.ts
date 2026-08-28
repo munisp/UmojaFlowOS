@@ -30,6 +30,7 @@ import { decidePspGate, getPayoutPspWorkspace, listPayoutPsps, recordPspEvidence
 import { decideStablecoinIssuerGate, getStablecoinIssuerWorkspace, listStablecoinIssuers, recordStablecoinIssuerEvidenceItem, updateCounterpartyStablecoinIssuerArchetype } from "./stablecoinIssuerEvidence";
 import { decideComplianceVendorGate, getComplianceVendorWorkspace, listComplianceVendors, recordComplianceVendorEvidenceItem, updateCounterpartyComplianceVendorArchetype } from "./complianceVendorEvidence";
 import { changeOperatorRole, deactivateOperator, listOperators } from "./operatorDirectory";
+import { listOperatorOnboardingRecords, recordLmsEnrolment, recordOperatorRecertification, recordShadowPeriodSupervision, recordSodMatrixReview, startOperatorOnboarding } from "./operatorOnboardingLifecycle";
 import { listOperatorAccessRequests } from "./operatorAccessRequests";
 import { grantOperatingRole } from "./operatorRoleGrants";
 import { onboardOperator } from "./operatorOnboarding";
@@ -111,6 +112,12 @@ export const appRouter = router({
     operators: adminProcedure.query(() => listOperators()),
     changeOperatorRole: adminProcedure.input(z.object({ subject: z.string().trim().min(3).max(255), role: z.enum(["admin", "compliance_officer", "treasury_operator", "auditor"]) })).mutation(({ ctx, input }) => changeOperatorRole({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     deactivateOperator: adminProcedure.input(z.object({ keycloakUserId: z.string().trim().min(1).max(255), subject: z.string().trim().min(3).max(255), reason: z.string().trim().min(10).max(2000) })).mutation(({ ctx, input }) => deactivateOperator({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    operatorOnboardingRecords: adminProcedure.query(() => listOperatorOnboardingRecords()),
+    startOperatorOnboarding: adminProcedure.input(z.object({ subject: z.string().trim().min(3).max(255) })).mutation(({ ctx, input }) => startOperatorOnboarding({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordSodMatrixReview: adminProcedure.input(z.object({ onboardingId: z.string().uuid(), note: z.string().trim().min(10).max(2000) })).mutation(({ ctx, input }) => recordSodMatrixReview({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordLmsEnrolment: complianceProcedure.input(z.object({ onboardingId: z.string().uuid(), certReference: z.string().trim().min(1).max(255) })).mutation(({ ctx, input }) => recordLmsEnrolment({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordShadowPeriodSupervision: adminProcedure.input(z.object({ onboardingId: z.string().uuid(), supervisedBy: z.string().trim().min(1).max(255) })).mutation(({ ctx, input }) => recordShadowPeriodSupervision({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordOperatorRecertification: complianceProcedure.input(z.object({ onboardingId: z.string().uuid(), nextRecertDueAt: z.coerce.date() })).mutation(({ ctx, input }) => recordOperatorRecertification({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     grantOperatingRole: adminProcedure.input(z.object({ subject: z.string().trim().min(3).max(255), role: z.enum(["admin", "compliance_officer", "treasury_operator", "auditor"]) })).mutation(({ ctx, input }) => grantOperatingRole({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     operatorAccountCreationAvailable: adminProcedure.query(() => operatorAccountCreationAvailable()),
     onboardOperator: adminProcedure.input(z.object({ name: z.string().trim().min(2).max(120), email: z.string().trim().email().max(320), role: z.enum(["admin", "compliance_officer", "treasury_operator", "auditor", "provider_contact", "cbn_liaison"]), counterpartyId: z.string().uuid().optional(), dossierId: z.string().uuid().optional() }).superRefine((input, context) => { if ((input.role === "provider_contact") !== Boolean(input.counterpartyId) || (input.role === "cbn_liaison") !== Boolean(input.dossierId)) context.addIssue({ code: "custom", message: "assignment subject must match the stakeholder role" }); })).mutation(({ ctx, input }) => onboardOperator({ openId: ctx.user.openId, role: ctx.user.role }, input)),

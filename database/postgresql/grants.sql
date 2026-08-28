@@ -102,6 +102,7 @@ GRANT INSERT, UPDATE ON TABLE
   treasury_rebalancing_recommendations,
   compliance_alerts,
   operator_role_assignments,
+  operator_onboarding_records,
   external_stakeholder_assignments,
   provider_send_requests,
   vasp_readiness_assurance_items,
