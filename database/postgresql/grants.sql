@@ -103,6 +103,7 @@ GRANT INSERT, UPDATE ON TABLE
   compliance_alerts,
   operator_role_assignments,
   operator_onboarding_records,
+  auditor_engagement_records,
   external_stakeholder_assignments,
   provider_send_requests,
   vasp_readiness_assurance_items,
