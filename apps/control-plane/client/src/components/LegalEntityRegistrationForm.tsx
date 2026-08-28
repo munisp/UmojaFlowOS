@@ -29,7 +29,7 @@ export function LegalEntityRegistrationForm({
   };
 
   return <form onSubmit={onSubmit} className="grid gap-4 p-5">
-    <p className="text-xs leading-5 text-black/60">Register the canonical legal entity that CBN Cohort 2 dossiers, IMTO readiness profiles, and regulatory reports attach to. This creates no counterparty authorization, licence evidence, or regulatory submission by itself.</p>
+    <p className="text-xs leading-5 text-black/60">Register the official legal entity that CBN Cohort 2 dossiers, IMTO readiness profiles, and regulatory reports attach to. This creates no counterparty authorization, licence evidence, or regulatory submission by itself.</p>
     <label className="grid gap-1.5"><span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Legal name</span><Input name="legalName" required minLength={3} maxLength={255} className="rounded-none" /></label>
     <label className="grid gap-1.5"><span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Jurisdiction</span><select name="jurisdiction" required className="h-10 rounded-none border border-black/25 bg-white px-2">{JURISDICTIONS.map(j => <option key={j} value={j}>{j}</option>)}</select></label>
     <label className="grid gap-1.5"><span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">Registration identifier</span><Input name="registrationIdentifier" required minLength={3} maxLength={128} className="rounded-none" /></label>

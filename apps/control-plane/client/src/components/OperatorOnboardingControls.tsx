@@ -74,7 +74,7 @@ function OnboardOperatorPanel({ counterparties, dossiers, onOnboarded }: { count
       <p className="font-black uppercase tracking-wide">Share this once — it is never shown again</p>
       <p className="mt-2">Account: <strong>{created.email}</strong></p>
       <p className="mt-1">Initial password: <code className="bg-white px-2 py-1 font-mono text-xs">{created.initialPassword}</code></p>
-      <p className="mt-2 text-black/60">A canonical customer record was also created for KYC evidence. Open Compliance to upload and review identity documents for this person.</p>
+      <p className="mt-2 text-black/60">A customer record was also created for KYC evidence. Open Compliance to upload and review identity documents for this person.</p>
       <Button variant="outline" className="mt-3 rounded-none text-xs font-black uppercase" onClick={() => setCreated(null)}>Dismiss</Button>
     </div>}
     <form className="grid gap-4" onSubmit={submit}>

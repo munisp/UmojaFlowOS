@@ -77,7 +77,7 @@ describe("regulatory report draft form", () => {
     fireEvent.change(screen.getByDisplayValue("CBN"), { target: { value: "CBK" } });
     fireEvent.change(screen.getByDisplayValue("Nigeria (NGN)"), { target: { value: "KENYA_KES" } });
 
-    const form = formOf(/Create PostgreSQL draft/i);
+    const form = formOf(/Create report draft/i);
     setField(form, "legalEntityId", LEGAL_ENTITIES[1].id);
     setField(form, "reportType", "cross_border_settlement_return");
     setField(form, "periodStart", "2026-07-01");
@@ -96,7 +96,7 @@ describe("regulatory report draft form", () => {
 
   it("offers only registered legal entities rather than free text, so an unregistered entity cannot be drafted against", () => {
     render(<PostgresReportDraftForm pending={false} submit={vi.fn()} legalEntities={LEGAL_ENTITIES} />);
-    const field = formOf(/Create PostgreSQL draft/i).querySelector('[name="legalEntityId"]') as HTMLSelectElement;
+    const field = formOf(/Create report draft/i).querySelector('[name="legalEntityId"]') as HTMLSelectElement;
 
     expect(field.tagName).toBe("SELECT");
     expect(field.required).toBe(true);
