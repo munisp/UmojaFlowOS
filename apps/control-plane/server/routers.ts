@@ -13,7 +13,7 @@ import {
 import { evaluatePostgresLiquidityThresholds, evaluatePostgresPaymentFailures, evaluatePostgresComplianceFlags, computePostgresFxSpread } from "./operationalAlerts";
 import { raisePostgresComplianceAlert, acknowledgePostgresComplianceAlert, escalatePostgresComplianceAlert, dismissPostgresComplianceAlert, listPostgresComplianceAlerts } from "./complianceAlerts";
 import { systemRouter } from "./_core/systemRouter";
-import { adminProcedure, assuranceVerifierProcedure, auditorProcedure, cbnLiaisonProcedure, complianceOnlyProcedure, complianceProcedure, providerContactProcedure, publicProcedure, router, treasuryProcedure } from "./_core/trpc";
+import { adminProcedure, assuranceVerifierProcedure, auditorProcedure, cbnLiaisonProcedure, complianceOnlyProcedure, complianceOrTreasuryProcedure, complianceProcedure, providerContactProcedure, publicProcedure, router, treasuryProcedure } from "./_core/trpc";
 import { listPostgresActiveVerificationConsents, listPostgresAnalysisReadyDocuments } from "./analysisSubmission";
 import { registerPostgresLegalEntity } from "./legalEntityRegistry";
 import { disposeComplianceCase } from "./complianceCaseWorkflow";
@@ -27,6 +27,7 @@ import { decideCustomerUseCaseGate, getCustomerWorkspace, recordCustomerDestinat
 import { decideFinancialSoundnessGate, getLiquidityProviderWorkspace, listLiquidityProviders, recordCounterpartyEvidenceItem, updateCounterpartyLpArchetype } from "./liquidityProviderEvidence";
 import { decideCryptoPostureGate, getBankingPartnerWorkspace, listBankingPartners, recordBankEvidenceItem, updateCounterpartyBankArchetype } from "./bankingPartnerEvidence";
 import { decidePspGate, getPayoutPspWorkspace, listPayoutPsps, recordPspEvidenceItem, updateCounterpartyPspArchetype } from "./payoutPspEvidence";
+import { decideStablecoinIssuerGate, getStablecoinIssuerWorkspace, listStablecoinIssuers, recordStablecoinIssuerEvidenceItem, updateCounterpartyStablecoinIssuerArchetype } from "./stablecoinIssuerEvidence";
 import { changeOperatorRole, deactivateOperator, listOperators } from "./operatorDirectory";
 import { listOperatorAccessRequests } from "./operatorAccessRequests";
 import { grantOperatingRole } from "./operatorRoleGrants";
@@ -372,6 +373,18 @@ export const appRouter = router({
     decidePspSettlementCutoffGate: treasuryProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decidePspGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "settlement_cutoff_validation" })),
     decidePspBoundedLiveGate: complianceProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decidePspGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "bounded_live" })),
     decidePspFailoverGate: adminProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decidePspGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "failover_rail" })),
+    stablecoinIssuers: auditorProcedure.query(() => listStablecoinIssuers()),
+    stablecoinIssuerWorkspace: auditorProcedure.input(z.object({ counterpartyId: z.string().uuid() })).query(async ({ input }) => {
+      const workspace = await getStablecoinIssuerWorkspace(input.counterpartyId);
+      if (!workspace) throw new TRPCError({ code: "NOT_FOUND", message: "counterparty record was not found" });
+      return workspace;
+    }),
+    updateCounterpartyStablecoinIssuerArchetype: complianceProcedure.input(z.object({ counterpartyId: z.string().uuid(), archetype: z.enum(["regulated_issuer", "open_issuer", "network"]) })).mutation(({ ctx, input }) => updateCounterpartyStablecoinIssuerArchetype({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordStablecoinIssuerEvidenceItem: complianceProcedure.input(z.object({ counterpartyId: z.string().uuid(), evidenceType: z.enum(["issuer_regulatory_licence", "reserve_attestation", "reserve_asset_composition", "aml_cft_policy", "sanctions_ofac_attestation", "blockchain_finality_posture", "custody_provider_licence_insurance", "network_fee_schedule", "principal_beneficial_ownership_kyb", "audited_financials", "smart_contract_audit"]), evidenceUri: z.string().url(), note: z.string().trim().min(1).max(2000).optional() })).mutation(({ ctx, input }) => recordStablecoinIssuerEvidenceItem({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    decideStablecoinIssuerLicenceReservePostureGate: complianceOrTreasuryProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decideStablecoinIssuerGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "licence_reserve_posture" })),
+    decideStablecoinIssuerMintRedeemGate: treasuryProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decideStablecoinIssuerGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "mint_redeem_technical_proof" })),
+    decideStablecoinIssuerChainReadinessGate: adminProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decideStablecoinIssuerGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "chain_readiness" })),
+    decideStablecoinIssuerOperatingPostureGate: complianceOrTreasuryProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decideStablecoinIssuerGate({ openId: ctx.user.openId, role: ctx.user.role }, { ...input, gate: "operating_posture" })),
     createCounterpartyAuthorization: adminProcedure.input(z.object({
       counterpartyId: z.string().uuid(),
       regulator: z.enum(["CBN", "CBK", "SARB", "SEC", "CMA", "FSCA", "FIC"]),

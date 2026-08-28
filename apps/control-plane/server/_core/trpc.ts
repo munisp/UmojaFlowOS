@@ -49,6 +49,8 @@ export const complianceProcedure = procedureForRoles(["admin", "compliance_offic
  */
 export const complianceOnlyProcedure = procedureForRoles(["compliance_officer"]);
 export const treasuryProcedure = procedureForRoles(["admin", "treasury_operator"]);
+/** Joint Compliance+Treasury ownership (e.g. OM stablecoin-issuer gates) without the read-only auditor role. */
+export const complianceOrTreasuryProcedure = procedureForRoles(["admin", "compliance_officer", "treasury_operator"]);
 export const auditorProcedure = procedureForRoles(["admin", "compliance_officer", "treasury_operator", "auditor"]);
 /** Independent signoff on external readiness evidence is restricted to an
  * administrator or auditor. The workflow itself additionally rejects a verifier

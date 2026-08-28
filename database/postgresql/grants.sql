@@ -62,7 +62,9 @@ GRANT INSERT ON TABLE
   bank_evidence_items,
   counterparty_crypto_posture_decisions,
   psp_evidence_items,
-  psp_gate_decisions
+  psp_gate_decisions,
+  stablecoin_issuer_evidence_items,
+  stablecoin_issuer_gate_decisions
 TO :"app_role_ident";
 
 -- Records with a governed, reviewable lifecycle require in-place transitions.

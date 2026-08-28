@@ -3,7 +3,7 @@ DECLARE
   expected_tables TEXT[] := ARRAY[
     'activity_events', 'alert_policies', 'beneficiaries', 'cbn_sandbox_consumer_records', 'cbn_sandbox_dossiers', 'cbn_sandbox_evidence_assessments', 'cbn_sandbox_evidence_items', 'cbn_sandbox_incidents', 'cbn_sandbox_reporting_packs', 'cbn_sandbox_test_plans', 'compliance_cases',
     'control_evidence_outbox', 'corridor_policies', 'counterparties', 'counterparty_authorizations', 'counterparty_onboardings', 'counterparty_onboarding_gate_decisions',
-    'counterparty_evidence_items', 'counterparty_financial_soundness_decisions', 'bank_evidence_items', 'counterparty_crypto_posture_decisions', 'psp_evidence_items', 'psp_gate_decisions',
+    'counterparty_evidence_items', 'counterparty_financial_soundness_decisions', 'bank_evidence_items', 'counterparty_crypto_posture_decisions', 'psp_evidence_items', 'psp_gate_decisions', 'stablecoin_issuer_evidence_items', 'stablecoin_issuer_gate_decisions',
     'customers', 'customer_destination_counterparties', 'customer_use_case_gate_decisions', 'integration_connections', 'kyc_documents', 'kyc_document_upload_intents', 'legal_entities',
     'liquidity_positions', 'market_observations', 'notification_deliveries',
     'payment_legs', 'payment_orders', 'policy_decisions', 'rate_locks',
