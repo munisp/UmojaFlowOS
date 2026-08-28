@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://umoja.example/schemas/cbn_vasp_governance.schema.json",
+  "title": "UmojaFlowOS CBN VASP Governance and Accountability",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "dossier_id", "officers", "authority_matrix", "access_governance", "approvals"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "dossier_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$" },
+    "officers": {
+      "type": "array", "minItems": 6,
+      "items": { "$ref": "#/$defs/officer" },
+      "allOf": [
+        { "contains": { "properties": { "role": { "const": "compliance_mlro" } }, "required": ["role"] } },
+        { "contains": { "properties": { "role": { "const": "security" } }, "required": ["role"] } },
+        { "contains": { "properties": { "role": { "const": "product_risk" } }, "required": ["role"] } },
+        { "contains": { "properties": { "role": { "const": "treasury_custody" } }, "required": ["role"] } },
+        { "contains": { "properties": { "role": { "const": "consumer_protection" } }, "required": ["role"] } },
+        { "contains": { "properties": { "role": { "const": "incident_commander_cbn_liaison" } }, "required": ["role"] } }
+      ]
+    },
+    "authority_matrix": {
+      "type": "array", "minItems": 1,
+      "items": { "$ref": "#/$defs/authority" }
+    },
+    "access_governance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["mfa_required_for_privileged_access", "last_access_review_ref", "departed_user_review_ref", "privileged_role_roster_ref"],
+      "properties": {
+        "mfa_required_for_privileged_access": { "const": true },
+        "last_access_review_ref": { "$ref": "#/$defs/document_ref" },
+        "departed_user_review_ref": { "$ref": "#/$defs/document_ref" },
+        "privileged_role_roster_ref": { "$ref": "#/$defs/document_ref" }
+      }
+    },
+    "approvals": {
+      "type": "array", "minItems": 2,
+      "items": { "$ref": "#/$defs/approval" }
+    }
+  },
+  "$defs": {
+    "subject": { "type": "string", "minLength": 3, "pattern": "^(?!.*(?:REPLACE_WITH|TODO|TBD|EXAMPLE|<[^>]+>))[A-Za-z0-9._:@/-]+$" },
+    "text": { "type": "string", "minLength": 3, "pattern": "^(?!.*(?:REPLACE_WITH|TODO|TBD|EXAMPLE|<[^>]+>)).+$" },
+    "officer": {
+      "type": "object", "additionalProperties": false,
+      "required": ["role", "primary_subject", "alternate_subject", "appointment_ref", "training_ref", "conflict_declaration_ref", "recusal_rules_ref"],
+      "properties": {
+        "role": { "enum": ["compliance_mlro", "security", "product_risk", "treasury_custody", "consumer_protection", "incident_commander_cbn_liaison"] },
+        "primary_subject": { "$ref": "#/$defs/subject" },
+        "alternate_subject": { "$ref": "#/$defs/subject" },
+        "appointment_ref": { "$ref": "#/$defs/document_ref" },
+        "training_ref": { "$ref": "#/$defs/document_ref" },
+        "conflict_declaration_ref": { "$ref": "#/$defs/document_ref" },
+        "recusal_rules_ref": { "$ref": "#/$defs/document_ref" }
+      }
+    },
+    "authority": {
+      "type": "object", "additionalProperties": false,
+      "required": ["decision", "permitted_roles", "dual_control", "prohibited_self_approval", "audit_event_type"],
+      "properties": {
+        "decision": { "$ref": "#/$defs/text" },
+        "permitted_roles": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "dual_control": { "type": "boolean" },
+        "prohibited_self_approval": { "const": true },
+        "audit_event_type": { "$ref": "#/$defs/text" }
+      }
+    },
+    "approval": {
+      "type": "object", "additionalProperties": false,
+      "required": ["approval_type", "approver_subject", "approved_at", "document_ref"],
+      "properties": {
+        "approval_type": { "enum": ["board_management", "policy_governance", "access_governance"] },
+        "approver_subject": { "$ref": "#/$defs/subject" },
+        "approved_at": { "type": "string", "format": "date-time" },
+        "document_ref": { "$ref": "#/$defs/document_ref" }
+      }
+    },
+    "document_ref": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "title", "uri", "sha256", "owner_subject", "reviewer_subject", "version", "issued_at"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$" },
+        "title": { "$ref": "#/$defs/text" },
+        "uri": { "type": "string", "pattern": "^https://[^\\s]+$" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "owner_subject": { "$ref": "#/$defs/subject" },
+        "reviewer_subject": { "$ref": "#/$defs/subject" },
+        "version": { "type": "string", "minLength": 2, "pattern": "^(?!.*(?:REPLACE_WITH|TODO|TBD|EXAMPLE|<[^>]+>)).+$" },
+        "issued_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

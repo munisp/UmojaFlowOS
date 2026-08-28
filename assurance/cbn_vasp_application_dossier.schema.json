@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://umoja.example/schemas/cbn_vasp_application_dossier.schema.json",
+  "title": "UmojaFlowOS CBN VASP Sandbox Application Dossier",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "dossier_id", "applicant", "innovation", "test_reference", "documents", "declarations"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "dossier_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$" },
+    "applicant": {
+      "type": "object", "additionalProperties": false,
+      "required": ["legal_name", "incorporation_country", "registered_address", "nigeria_connection", "ownership_document_ref", "regulatory_perimeter_document_ref", "authorised_signatory_subject"],
+      "properties": {
+        "legal_name": { "$ref": "#/$defs/non_placeholder" },
+        "incorporation_country": { "type": "string", "pattern": "^[A-Z]{2}$" },
+        "registered_address": { "$ref": "#/$defs/non_placeholder" },
+        "nigeria_connection": { "$ref": "#/$defs/non_placeholder" },
+        "ownership_document_ref": { "$ref": "#/$defs/document_ref" },
+        "regulatory_perimeter_document_ref": { "$ref": "#/$defs/document_ref" },
+        "authorised_signatory_subject": { "$ref": "#/$defs/subject" }
+      }
+    },
+    "innovation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["title", "track", "problem", "market_benefit", "in_scope_capabilities", "excluded_capabilities", "partner_operated_capabilities", "legal_boundary_ref"],
+      "properties": {
+        "title": { "$ref": "#/$defs/non_placeholder" },
+        "track": { "const": "vasp" },
+        "problem": { "$ref": "#/$defs/non_placeholder" },
+        "market_benefit": { "$ref": "#/$defs/non_placeholder" },
+        "in_scope_capabilities": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/non_placeholder" } },
+        "excluded_capabilities": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/non_placeholder" } },
+        "partner_operated_capabilities": { "type": "array", "items": { "$ref": "#/$defs/non_placeholder" } },
+        "legal_boundary_ref": { "$ref": "#/$defs/document_ref" }
+      }
+    },
+    "test_reference": { "$ref": "#/$defs/document_ref" },
+    "documents": {
+      "type": "array", "minItems": 1,
+      "items": { "$ref": "#/$defs/document_ref" }
+    },
+    "declarations": {
+      "type": "object", "additionalProperties": false,
+      "required": ["no_license_claim", "no_fabricated_external_evidence", "board_approval_ref", "approved_at"],
+      "properties": {
+        "no_license_claim": { "const": true },
+        "no_fabricated_external_evidence": { "const": true },
+        "board_approval_ref": { "$ref": "#/$defs/document_ref" },
+        "approved_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "$defs": {
+    "non_placeholder": { "type": "string", "minLength": 3, "pattern": "^(?!.*(?:REPLACE_WITH|TODO|TBD|EXAMPLE|<[^>]+>)).+$" },
+    "subject": { "type": "string", "minLength": 3, "pattern": "^(?!.*(?:REPLACE_WITH|TODO|TBD|EXAMPLE|<[^>]+>))[A-Za-z0-9._:@/-]+$" },
+    "document_ref": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "title", "uri", "sha256", "owner_subject", "reviewer_subject", "version", "issued_at"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$" },
+        "title": { "$ref": "#/$defs/non_placeholder" },
+        "uri": { "type": "string", "pattern": "^https://[^\\s]+$" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "owner_subject": { "$ref": "#/$defs/subject" },
+        "reviewer_subject": { "$ref": "#/$defs/subject" },
+        "version": { "type": "string", "minLength": 2, "pattern": "^(?!.*(?:REPLACE_WITH|TODO|TBD|EXAMPLE|<[^>]+>)).+$" },
+        "issued_at": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "dossier_id": "replace-with-lowercase-dossier-id",
+  "applicant": {
+    "legal_name": "REPLACE_WITH_VERIFIED_LEGAL_NAME",
+    "incorporation_country": "NG",
+    "registered_address": "REPLACE_WITH_VERIFIED_REGISTERED_ADDRESS",
+    "nigeria_connection": "REPLACE_WITH_VERIFIED_NIGERIA_CONNECTION",
+    "ownership_document_ref": {
+      "id": "ownership-record-v1", "title": "REPLACE_WITH_DOCUMENT_TITLE", "uri": "https://replace.example/ownership.pdf", "sha256": "REPLACE_WITH_64_LOWERCASE_HEX_SHA256", "owner_subject": "REPLACE_WITH_OWNER_SUBJECT", "reviewer_subject": "REPLACE_WITH_DIFFERENT_REVIEWER_SUBJECT", "version": "v1", "issued_at": "2026-08-28T00:00:00Z"
+    },
+    "regulatory_perimeter_document_ref": {
+      "id": "regulatory-perimeter-v1", "title": "REPLACE_WITH_DOCUMENT_TITLE", "uri": "https://replace.example/perimeter.pdf", "sha256": "REPLACE_WITH_64_LOWERCASE_HEX_SHA256", "owner_subject": "REPLACE_WITH_OWNER_SUBJECT", "reviewer_subject": "REPLACE_WITH_DIFFERENT_REVIEWER_SUBJECT", "version": "v1", "issued_at": "2026-08-28T00:00:00Z"
+    },
+    "authorised_signatory_subject": "REPLACE_WITH_VERIFIED_SIGNATORY_SUBJECT"
+  },
+  "innovation": {
+    "title": "REPLACE_WITH_APPROVED_INNOVATION_TITLE",
+    "track": "vasp",
+    "problem": "REPLACE_WITH_MARKET_PROBLEM_AND_NIGERIAN_BENEFIT",
+    "market_benefit": "REPLACE_WITH_MEASURABLE_MARKET_OR_CONSUMER_BENEFIT",
+    "in_scope_capabilities": ["REPLACE_WITH_EXACT_TESTED_CAPABILITY"],
+    "excluded_capabilities": ["custody", "token_issuance", "exchange", "unrestricted_wallet_operation", "final_settlement", "regulatory_filing_without_authorised_channel"],
+    "partner_operated_capabilities": ["REPLACE_WITH_AUTHORISED_PARTNER_CAPABILITY"],
+    "legal_boundary_ref": {
+      "id": "product-boundary-v1", "title": "REPLACE_WITH_SIGNED_PRODUCT_BOUNDARY_TITLE", "uri": "https://replace.example/product-boundary.pdf", "sha256": "REPLACE_WITH_64_LOWERCASE_HEX_SHA256", "owner_subject": "REPLACE_WITH_OWNER_SUBJECT", "reviewer_subject": "REPLACE_WITH_DIFFERENT_REVIEWER_SUBJECT", "version": "v1", "issued_at": "2026-08-28T00:00:00Z"
+    }
+  },
+  "test_reference": {
+    "id": "controlled-test-plan-v1", "title": "REPLACE_WITH_SIGNED_CONTROLLED_TEST_PLAN_TITLE", "uri": "https://replace.example/test-plan.pdf", "sha256": "REPLACE_WITH_64_LOWERCASE_HEX_SHA256", "owner_subject": "REPLACE_WITH_OWNER_SUBJECT", "reviewer_subject": "REPLACE_WITH_DIFFERENT_REVIEWER_SUBJECT", "version": "v1", "issued_at": "2026-08-28T00:00:00Z"
+  },
+  "documents": [],
+  "declarations": {
+    "no_license_claim": true,
+    "no_fabricated_external_evidence": true,
+    "board_approval_ref": {
+      "id": "board-approval-v1", "title": "REPLACE_WITH_BOARD_APPROVAL_TITLE", "uri": "https://replace.example/board-approval.pdf", "sha256": "REPLACE_WITH_64_LOWERCASE_HEX_SHA256", "owner_subject": "REPLACE_WITH_OWNER_SUBJECT", "reviewer_subject": "REPLACE_WITH_DIFFERENT_REVIEWER_SUBJECT", "version": "v1", "issued_at": "2026-08-28T00:00:00Z"
+    },
+    "approved_at": "2026-08-28T00:00:00Z"
+  }
+}
