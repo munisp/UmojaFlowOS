@@ -65,15 +65,20 @@ describe("canonical customer onboarding form", () => {
 describe("regulatory report draft form", () => {
   afterEach(() => cleanup());
 
-  it("submits the selected regulator and corridor with a parsed reporting period", () => {
+  const LEGAL_ENTITIES = [
+    { id: "7f1c2a3b-4d5e-4f60-8a71-9b2c3d4e5f60", legalName: "Corridor Importer Ltd" },
+    { id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d", legalName: "Second Registrant Ltd" },
+  ];
+
+  it("submits the selected regulator, corridor, and legal entity with a parsed reporting period", () => {
     const submit = vi.fn();
-    render(<PostgresReportDraftForm pending={false} submit={submit} />);
+    render(<PostgresReportDraftForm pending={false} submit={submit} legalEntities={LEGAL_ENTITIES} />);
 
     fireEvent.change(screen.getByDisplayValue("CBN"), { target: { value: "CBK" } });
     fireEvent.change(screen.getByDisplayValue("Nigeria (NGN)"), { target: { value: "KENYA_KES" } });
 
     const form = formOf(/Create PostgreSQL draft/i);
-    setField(form, "legalEntityId", "7f1c2a3b-4d5e-4f60-8a71-9b2c3d4e5f60");
+    setField(form, "legalEntityId", LEGAL_ENTITIES[1].id);
     setField(form, "reportType", "cross_border_settlement_return");
     setField(form, "periodStart", "2026-07-01");
     setField(form, "periodEnd", "2026-07-31");
@@ -83,22 +88,23 @@ describe("regulatory report draft form", () => {
     const payload = submit.mock.calls[0][0];
     expect(payload.regulator).toBe("CBK");
     expect(payload.corridor).toBe("KENYA_KES");
-    expect(payload.legalEntityId).toBe("7f1c2a3b-4d5e-4f60-8a71-9b2c3d4e5f60");
+    expect(payload.legalEntityId).toBe(LEGAL_ENTITIES[1].id);
     expect(payload.periodStart instanceof Date).toBe(true);
     expect(payload.periodEnd instanceof Date).toBe(true);
     expect(payload.periodStart.getTime()).toBeLessThan(payload.periodEnd.getTime());
   });
 
-  it("constrains the legal-entity field to a UUID shape so a free-text entity cannot be drafted against", () => {
-    render(<PostgresReportDraftForm pending={false} submit={vi.fn()} />);
-    const field = formOf(/Create PostgreSQL draft/i).querySelector('[name="legalEntityId"]') as HTMLInputElement;
+  it("offers only registered legal entities rather than free text, so an unregistered entity cannot be drafted against", () => {
+    render(<PostgresReportDraftForm pending={false} submit={vi.fn()} legalEntities={LEGAL_ENTITIES} />);
+    const field = formOf(/Create PostgreSQL draft/i).querySelector('[name="legalEntityId"]') as HTMLSelectElement;
 
+    expect(field.tagName).toBe("SELECT");
     expect(field.required).toBe(true);
-    expect(field.pattern).toBe("[0-9a-fA-F-]{36}");
+    expect(Array.from(field.options).map(option => option.value)).toEqual(LEGAL_ENTITIES.map(entity => entity.id));
   });
 
   it("offers exactly the three corridor regulators", () => {
-    render(<PostgresReportDraftForm pending={false} submit={vi.fn()} />);
+    render(<PostgresReportDraftForm pending={false} submit={vi.fn()} legalEntities={LEGAL_ENTITIES} />);
     const regulator = screen.getByDisplayValue("CBN") as HTMLSelectElement;
     expect(Array.from(regulator.options).map(option => option.value)).toEqual(["CBN", "CBK", "SARB"]);
   });

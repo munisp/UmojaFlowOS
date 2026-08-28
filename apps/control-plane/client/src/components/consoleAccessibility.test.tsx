@@ -78,7 +78,14 @@ const surfaces: Array<{ name: string; render: () => void }> = [
   },
   {
     name: "report draft form",
-    render: () => renderInPageContext(<PostgresReportDraftForm pending={false} submit={() => undefined} />),
+    render: () =>
+      renderInPageContext(
+        <PostgresReportDraftForm
+          legalEntities={[{ id: "3c4d5e6f-7081-4293-a4b5-c6d7e8f90123", legalName: "Registered Legal Entity" }]}
+          pending={false}
+          submit={() => undefined}
+        />,
+      ),
   },
   {
     name: "report transition form",

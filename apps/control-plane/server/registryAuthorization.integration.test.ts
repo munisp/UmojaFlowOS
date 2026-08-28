@@ -20,6 +20,7 @@ function contextFor(role: "admin" | "compliance_officer" | "treasury_operator" |
     },
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: {} as TrpcContext["res"],
+    pendingIdentity: null,
   };
 }
 

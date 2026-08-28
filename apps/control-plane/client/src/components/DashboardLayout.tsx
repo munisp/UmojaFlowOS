@@ -69,7 +69,7 @@ export default function DashboardLayout({
     const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
     return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
   });
-  const { loading, user } = useAuth();
+  const { loading, user, pendingIdentity } = useAuth();
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
@@ -77,6 +77,23 @@ export default function DashboardLayout({
 
   if (loading) {
     return <DashboardLayoutSkeleton />
+  }
+
+  if (!user && pendingIdentity) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
+          <div className="flex flex-col items-center gap-6">
+            <h1 className="text-2xl font-semibold tracking-tight text-center">
+              Waiting on access
+            </h1>
+            <p className="text-sm text-muted-foreground text-center max-w-sm">
+              {pendingIdentity.name || pendingIdentity.email || "Your account"} is verified but has no operating role yet. An administrator can grant one from Governance &rsaquo; Operator access.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!user) {

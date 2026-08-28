@@ -4,6 +4,7 @@ import type { Express, Request, Response } from "express";
 import { createRemoteJWKSet, jwtVerify, SignJWT } from "jose";
 import type { PlatformIdentity } from "../identity";
 import { COOKIE_NAME } from "@shared/const";
+import { deriveOpenId } from "../keycloakIdentity";
 
 const OIDC_TRANSACTION_COOKIE = "__Host-umoja-oidc";
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -37,7 +38,7 @@ function cookieOptions(secure: boolean) { return { httpOnly: true, secure, sameS
 function redirectUri(config: OidcConfiguration) { return new URL("/auth/callback", config.publicBaseUrl).toString(); }
 function platformUser(subject: string, name: unknown, email: unknown): PlatformIdentity {
   const now = new Date();
-  return { id: 0, openId: `kc_${createHash("sha256").update(subject).digest("hex").slice(0, 61)}`, name: typeof name === "string" ? name.slice(0, 500) : null, email: typeof email === "string" && email.length <= 320 ? email : null, loginMethod: "keycloak", role: "auditor", createdAt: now, updatedAt: now, lastSignedIn: now };
+  return { id: 0, openId: deriveOpenId(subject), name: typeof name === "string" ? name.slice(0, 500) : null, email: typeof email === "string" && email.length <= 320 ? email : null, loginMethod: "keycloak", role: "auditor", createdAt: now, updatedAt: now, lastSignedIn: now };
 }
 async function sign(value: Record<string, unknown>, expiresIn: number): Promise<string> {
   return new SignJWT(value).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setIssuedAt().setExpirationTime(`${expiresIn}s`).sign(secret());

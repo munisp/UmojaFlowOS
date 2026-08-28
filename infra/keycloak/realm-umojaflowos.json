@@ -76,6 +76,31 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "umojaflowos-admin-api",
+      "name": "UmojaFlowOS admin API",
+      "description": "Service-account client used only to create operator accounts from the console. Deliberately not the admin-cli superuser: it holds no realm-management rights beyond manage-users.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "implicitFlowEnabled": false,
+      "redirectUris": [],
+      "webOrigins": []
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-umojaflowos-admin-api",
+      "enabled": true,
+      "serviceAccountClientId": "umojaflowos-admin-api",
+      "clientRoles": {
+        "realm-management": ["manage-users"]
+      }
     }
   ]
 }

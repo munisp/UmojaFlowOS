@@ -18,6 +18,14 @@ export function useAuth(options?: UseAuthOptions) {
     refetchOnWindowFocus: false,
   });
 
+  // Only asked once "signed in with an operating role" has been ruled out, so
+  // an already-authorised user never pays for this extra round trip.
+  const pendingAccessQuery = trpc.auth.pendingAccessStatus.useQuery(undefined, {
+    retry: false,
+    refetchOnWindowFocus: false,
+    enabled: !meQuery.isLoading && !meQuery.data,
+  });
+
   const logout = useCallback(() => {
     startLogout();
   }, []);
@@ -25,11 +33,15 @@ export function useAuth(options?: UseAuthOptions) {
   const state = useMemo(() => {
     return {
       user: meQuery.data ?? null,
+      // Distinguishes "verified by the identity provider but no role granted
+      // yet" from a plain unauthenticated visitor, so the UI can show a
+      // waiting state instead of just another sign-in prompt.
+      pendingIdentity: pendingAccessQuery.data ?? null,
       loading: meQuery.isLoading,
       error: meQuery.error ?? null,
       isAuthenticated: Boolean(meQuery.data),
     };
-  }, [meQuery.data, meQuery.error, meQuery.isLoading]);
+  }, [meQuery.data, meQuery.error, meQuery.isLoading, pendingAccessQuery.data]);
 
   useEffect(() => {
     if (!redirectOnUnauthenticated) return;

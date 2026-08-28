@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import type { Request } from "express";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 import type { PlatformIdentity } from "./identity";
+import { deriveOpenId } from "./keycloakIdentity";
 
 type PlatformRole = "admin" | "compliance_officer" | "treasury_operator" | "auditor";
 
@@ -72,13 +72,6 @@ function mfaAssured(payload: JWTPayload): boolean {
   return amr.some(value => ["otp", "mfa", "2fa"].includes(value.toLowerCase())) || ["mfa", "2fa", "loa2", "loa3"].some(value => acr.includes(value));
 }
 
-function federatedOpenId(subject: string): string {
-  // The local identity column is capped at 64 characters. A fixed namespaced
-  // hash is stable, fits the column, and avoids persisting the provider's raw
-  // subject outside its dedicated identity system.
-  return `kc_${createHash("sha256").update(subject).digest("hex").slice(0, 61)}`;
-}
-
 export async function resolveKeycloakUser(request: Request): Promise<PlatformIdentity | null> {
   const token = authorizationToken(request);
   const configuration = configuredKeycloak();
@@ -95,7 +88,7 @@ export async function resolveKeycloakUser(request: Request): Promise<PlatformIde
     const now = new Date();
     return {
       id: 0,
-      openId: federatedOpenId(subject),
+      openId: deriveOpenId(subject),
       name: typeof payload.name === "string" ? payload.name.slice(0, 500) : null,
       email: typeof payload.email === "string" && payload.email.length <= 320 ? payload.email : null,
       loginMethod: "keycloak",

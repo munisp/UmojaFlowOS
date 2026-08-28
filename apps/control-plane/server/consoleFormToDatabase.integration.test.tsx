@@ -64,6 +64,7 @@ function contextFor(role: Role, openId: string): TrpcContext {
     },
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: {} as TrpcContext["res"],
+    pendingIdentity: null,
   };
 }
 
@@ -248,6 +249,7 @@ describe.skipIf(!runIntegration)("console form submissions reaching canonical Po
 
     render(
       <PostgresReportDraftForm
+        legalEntities={[entity]}
         pending={false}
         submit={input => {
           void caller.postgres.createRegulatoryReport(input).catch(error => errors.push(String(error)));

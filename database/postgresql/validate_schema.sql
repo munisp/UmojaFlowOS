@@ -7,7 +7,7 @@ DECLARE
     'liquidity_positions', 'market_observations', 'notification_deliveries',
     'payment_legs', 'payment_orders', 'policy_decisions', 'rate_locks',
     'postgres_cutover_runs', 'postgres_cutover_table_reconciliations', 'regulatory_deadlines', 'regulatory_reports', 'sar_str_filings',
-    'scheduled_jobs', 'user_role_assignments', 'operator_role_assignments',
+    'scheduled_jobs', 'user_role_assignments', 'operator_role_assignments', 'operator_access_requests',
     'external_stakeholder_assignments', 'external_stakeholder_evidence',
     'vasp_regulatory_profiles', 'vasp_regulatory_evidence_items', 'vasp_travel_rule_evidence_items', 'vasp_travel_rule_route_assessments',
     'vasp_offshore_counterparty_profiles', 'vasp_offshore_counterparty_evidence_items', 'vasp_offshore_counterparty_assessments',

@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { getPool, type Actor } from "./postgres";
+import { resolveOperatorAccessRequest } from "./operatorAccessRequests";
 
 export type ExternalStakeholderRole = "provider_contact" | "cbn_liaison";
 type ProviderEvidenceCategory = "provider_licensing" | "product_entitlement" | "technical_endpoint" | "callback_configuration" | "operating_runbook";
@@ -18,6 +19,7 @@ async function activity(client: PoolClient, actor: Actor, action: string, object
 export async function assignExternalStakeholder(actor: Actor, input: { role: ExternalStakeholderRole; stakeholderSubject: string; counterpartyId?: string; dossierId?: string }) {
   if ((input.role === "provider_contact") !== Boolean(input.counterpartyId) || (input.role === "cbn_liaison") !== Boolean(input.dossierId)) throw new Error("external stakeholder assignment must match its evidence-only subject");
   const client = await getPool().connect();
+  let assignment: { id: string; status: string };
   try {
     await client.query("BEGIN");
     await client.query(
@@ -42,10 +44,14 @@ export async function assignExternalStakeholder(actor: Actor, input: { role: Ext
        RETURNING id,status`,
       [input.role, input.stakeholderSubject, input.counterpartyId ?? null, input.dossierId ?? null, actor.openId],
     );
-    const assignment = rows[0]; if (!assignment) throw new Error("external stakeholder assignment did not return a record");
+    const created = rows[0]; if (!created) throw new Error("external stakeholder assignment did not return a record");
+    assignment = created;
     await activity(client, actor, "external_stakeholder.assigned", "external_stakeholder_assignment", assignment.id, { stakeholderRole: input.role, counterpartyAssigned: Boolean(input.counterpartyId), dossierAssigned: Boolean(input.dossierId) });
-    await client.query("COMMIT"); return assignment;
+    await client.query("COMMIT");
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+
+  await resolveOperatorAccessRequest(actor, input.stakeholderSubject);
+  return assignment;
 }
 
 export async function listProviderContactAssignments(subject: string) {

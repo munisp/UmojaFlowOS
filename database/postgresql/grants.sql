@@ -92,7 +92,8 @@ GRANT INSERT, UPDATE ON TABLE
   operator_role_assignments,
   external_stakeholder_assignments,
   provider_send_requests,
-  vasp_readiness_assurance_items
+  vasp_readiness_assurance_items,
+  operator_access_requests
 TO :"app_role_ident";
 
 -- `treasury_stress_test_runs` is intentionally omitted: no application write
