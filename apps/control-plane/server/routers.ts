@@ -25,6 +25,7 @@ import { assessReadinessAssurance, initialiseReadinessAssurance, listReadinessAs
 import { assignExternalStakeholder, listCbnLiaisonAssignments, listProviderContactAssignments, recordExternalStakeholderEvidence } from "./externalStakeholders";
 import { decideCustomerUseCaseGate, getCustomerWorkspace, recordCustomerDestinationCounterparty, updatePostgresCustomerProfile } from "./customerUseCase";
 import { decideFinancialSoundnessGate, getLiquidityProviderWorkspace, listLiquidityProviders, recordCounterpartyEvidenceItem, updateCounterpartyLpArchetype } from "./liquidityProviderEvidence";
+import { decideCryptoPostureGate, getBankingPartnerWorkspace, listBankingPartners, recordBankEvidenceItem, updateCounterpartyBankArchetype } from "./bankingPartnerEvidence";
 import { changeOperatorRole, deactivateOperator, listOperators } from "./operatorDirectory";
 import { listOperatorAccessRequests } from "./operatorAccessRequests";
 import { grantOperatingRole } from "./operatorRoleGrants";
@@ -349,6 +350,15 @@ export const appRouter = router({
     updateCounterpartyLpArchetype: complianceProcedure.input(z.object({ counterpartyId: z.string().uuid(), archetype: z.enum(["principal_market_maker", "regional_liquidity_desk", "stablecoin_fiat_conversion_desk", "otc_counterparty"]) })).mutation(({ ctx, input }) => updateCounterpartyLpArchetype({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     recordCounterpartyEvidenceItem: complianceProcedure.input(z.object({ counterpartyId: z.string().uuid(), evidenceType: z.enum(["mm_otc_licence", "incountry_vasp_licence", "beneficial_ownership_disclosure", "sanctions_pep_attestation", "audited_financials", "aml_cft_policy", "travel_rule_policy", "mlro_appointment_letter", "market_microstructure_policy", "reference_list", "insurance_certificate", "regulatory_disciplinary_history"]), evidenceUri: z.string().url(), note: z.string().trim().min(1).max(2000).optional() })).mutation(({ ctx, input }) => recordCounterpartyEvidenceItem({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     decideFinancialSoundnessGate: treasuryProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decideFinancialSoundnessGate({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    bankingPartners: auditorProcedure.query(() => listBankingPartners()),
+    bankingPartnerWorkspace: auditorProcedure.input(z.object({ counterpartyId: z.string().uuid() })).query(async ({ input }) => {
+      const workspace = await getBankingPartnerWorkspace(input.counterpartyId);
+      if (!workspace) throw new TRPCError({ code: "NOT_FOUND", message: "counterparty record was not found" });
+      return workspace;
+    }),
+    updateCounterpartyBankArchetype: complianceProcedure.input(z.object({ counterpartyId: z.string().uuid(), archetype: z.enum(["correspondent_bank", "receiving_bank", "settlement_bank", "custodian_bank", "issuing_bank"]) })).mutation(({ ctx, input }) => updateCounterpartyBankArchetype({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordBankEvidenceItem: complianceProcedure.input(z.object({ counterpartyId: z.string().uuid(), evidenceType: z.enum(["banking_licence", "aml_cft_attestation", "correspondent_agreement_template", "nostro_account_confirmation", "sanctions_policy", "travel_rule_readiness_attestation", "swift_message_support_confirmation", "fee_schedule", "audit_reports", "regulator_no_objection_letter", "cyber_bcm_evidence", "settlement_cutoff_calendar"]), evidenceUri: z.string().url(), note: z.string().trim().min(1).max(2000).optional() })).mutation(({ ctx, input }) => recordBankEvidenceItem({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    decideCryptoPostureGate: complianceProcedure.input(z.object({ onboardingId: z.string().uuid(), decision: z.enum(["approved", "blocked"]), rationale: z.string().trim().min(10).max(4000) })).mutation(({ ctx, input }) => decideCryptoPostureGate({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     createCounterpartyAuthorization: adminProcedure.input(z.object({
       counterpartyId: z.string().uuid(),
       regulator: z.enum(["CBN", "CBK", "SARB", "SEC", "CMA", "FSCA", "FIC"]),

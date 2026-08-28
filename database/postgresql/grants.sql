@@ -58,7 +58,9 @@ GRANT INSERT ON TABLE
   customer_destination_counterparties,
   customer_use_case_gate_decisions,
   counterparty_evidence_items,
-  counterparty_financial_soundness_decisions
+  counterparty_financial_soundness_decisions,
+  bank_evidence_items,
+  counterparty_crypto_posture_decisions
 TO :"app_role_ident";
 
 -- Records with a governed, reviewable lifecycle require in-place transitions.
