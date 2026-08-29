@@ -2,6 +2,7 @@ import { getPool, listPostgresActivityEventsForObjects, type Actor } from "./pos
 
 export type CustomerArchetype = "importer" | "exporter" | "intercompany_rebalancing" | "payroll_operator";
 export type CustomerTier = "smb" | "mid" | "enterprise";
+export type CustomerCountry = "NIGERIA_NGN" | "KENYA_KES" | "SOUTH_AFRICA_ZAR";
 export type CustomerGateDecision = "approved" | "blocked";
 
 async function recordActivity(client: { query: (text: string, values?: unknown[]) => Promise<unknown> }, actor: Actor, action: string, objectId: string, metadata: Record<string, unknown>) {
@@ -16,17 +17,17 @@ async function recordActivity(client: { query: (text: string, values?: unknown[]
  * G1 is decided against. Nullable on the customer record because these are
  * captured after creation, not at the minimal creation step.
  */
-export async function updatePostgresCustomerProfile(actor: Actor, input: { customerId: string; archetype?: CustomerArchetype; tier?: CustomerTier; useCaseNarrative?: string }) {
+export async function updatePostgresCustomerProfile(actor: Actor, input: { customerId: string; archetype?: CustomerArchetype; tier?: CustomerTier; country?: CustomerCountry; useCaseNarrative?: string }) {
   const client = await getPool().connect();
   try {
     await client.query("BEGIN");
     const current = await client.query<{ id: string }>("SELECT id FROM customers WHERE id=$1 FOR UPDATE", [input.customerId]);
     if (!current.rows[0]) throw new Error("customer record was not found");
     await client.query(
-      "UPDATE customers SET archetype = COALESCE($1::customer_archetype, archetype), tier = COALESCE($2::customer_tier, tier), use_case_narrative = COALESCE($3, use_case_narrative) WHERE id=$4",
-      [input.archetype ?? null, input.tier ?? null, input.useCaseNarrative ?? null, input.customerId],
+      "UPDATE customers SET archetype = COALESCE($1::customer_archetype, archetype), tier = COALESCE($2::customer_tier, tier), country = COALESCE($3::corridor_code, country), use_case_narrative = COALESCE($4, use_case_narrative) WHERE id=$5",
+      [input.archetype ?? null, input.tier ?? null, input.country ?? null, input.useCaseNarrative ?? null, input.customerId],
     );
-    await recordActivity(client, actor, "customer.profile_updated", input.customerId, { archetype: input.archetype, tier: input.tier, useCaseNarrativeLength: input.useCaseNarrative?.trim().length });
+    await recordActivity(client, actor, "customer.profile_updated", input.customerId, { archetype: input.archetype, tier: input.tier, country: input.country, useCaseNarrativeLength: input.useCaseNarrative?.trim().length });
     await client.query("COMMIT");
     return { id: input.customerId };
   } catch (error) {
@@ -131,8 +132,8 @@ export async function listCustomerUseCaseGateDecisions(customerId: string) {
  * composed read, not a stored view: every field traces to a real row.
  */
 export async function getCustomerWorkspace(customerId: string) {
-  const customerResult = await getPool().query<{ id: string; legalName: string; registrationIdentifier: string; kycStatus: string; archetype: CustomerArchetype | null; tier: CustomerTier | null; useCaseNarrative: string | null; createdAt: Date }>(
-    `SELECT id, legal_name AS "legalName", registration_identifier AS "registrationIdentifier", kyc_status AS "kycStatus", archetype, tier, use_case_narrative AS "useCaseNarrative", created_at AS "createdAt"
+  const customerResult = await getPool().query<{ id: string; legalName: string; registrationIdentifier: string; kycStatus: string; archetype: CustomerArchetype | null; tier: CustomerTier | null; country: CustomerCountry | null; useCaseNarrative: string | null; createdAt: Date }>(
+    `SELECT id, legal_name AS "legalName", registration_identifier AS "registrationIdentifier", kyc_status AS "kycStatus", archetype, tier, country, use_case_narrative AS "useCaseNarrative", created_at AS "createdAt"
        FROM customers WHERE id=$1`,
     [customerId],
   );

@@ -118,8 +118,8 @@ export async function listPostgresCustomers() {
   // not a stored or inferred status: they are what "evidence progress" derives
   // from on the enterprise-customer list, since customers.kyc_status itself is
   // never transitioned by any code path and would misrepresent progress.
-  const { rows } = await getPool().query<{ id: string; legalName: string; registrationIdentifier: string; kycStatus: string; archetype: string | null; tier: string | null; documentCount: string; approvedDocumentCount: string; createdAt: Date }>(
-    `SELECT customer.id, customer.legal_name AS "legalName", customer.registration_identifier AS "registrationIdentifier", customer.kyc_status AS "kycStatus", customer.archetype, customer.tier,
+  const { rows } = await getPool().query<{ id: string; legalName: string; registrationIdentifier: string; kycStatus: string; archetype: string | null; tier: string | null; country: string | null; documentCount: string; approvedDocumentCount: string; createdAt: Date }>(
+    `SELECT customer.id, customer.legal_name AS "legalName", customer.registration_identifier AS "registrationIdentifier", customer.kyc_status AS "kycStatus", customer.archetype, customer.tier, customer.country,
             count(document.id)::text AS "documentCount",
             count(document.id) FILTER (WHERE document.review_status = 'approved')::text AS "approvedDocumentCount",
             customer.created_at AS "createdAt"
@@ -423,7 +423,7 @@ export async function updatePostgresKycDocumentReview(actor: Actor, input: { doc
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
 }
 
-export async function createPostgresKycDocumentUploadIntent(actor: Actor, input: { customerId: string; documentType: "registration_certificate" | "identity_document" | "proof_of_address" | "beneficial_ownership" | "source_of_funds" | "other"; originalFilename: string; mimeType: "application/pdf" | "image/jpeg" | "image/png" | "image/webp" | "image/tiff"; sizeBytes: number; contentSha256: string }) {
+export async function createPostgresKycDocumentUploadIntent(actor: Actor, input: { customerId: string; documentType: "registration_certificate" | "identity_document" | "proof_of_address" | "beneficial_ownership" | "source_of_funds" | "other" | "ng_nin_reference" | "ng_cac_registration" | "ng_tax_identifier" | "ng_director_identity" | "ke_national_id_or_passport" | "ke_business_registration_or_cr12" | "ke_kra_pin" | "ke_beneficial_ownership" | "za_cipc_registration" | "za_sars_tax_reference" | "za_director_identity"; originalFilename: string; mimeType: "application/pdf" | "image/jpeg" | "image/png" | "image/webp" | "image/tiff"; sizeBytes: number; contentSha256: string }) {
   const customer = await getPool().query<{ id: string }>("SELECT id FROM customers WHERE id=$1", [input.customerId]);
   if (!customer.rows[0]) throw new Error("KYC upload requires an existing canonical customer record");
   const safeFilename = input.originalFilename.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 180) || "document";

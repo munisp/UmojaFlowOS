@@ -10,12 +10,14 @@ import { KycDocumentReviewTable } from "@/components/KycDocumentReviewControls";
 import { trpc } from "@/lib/trpc";
 import type { OperatorRole } from "@/lib/roleCapabilities";
 
-type DocumentType = "registration_certificate" | "identity_document" | "proof_of_address" | "beneficial_ownership" | "source_of_funds" | "other";
+type DocumentType = "registration_certificate" | "identity_document" | "proof_of_address" | "beneficial_ownership" | "source_of_funds" | "other" | "ng_nin_reference" | "ng_cac_registration" | "ng_tax_identifier" | "ng_director_identity" | "ke_national_id_or_passport" | "ke_business_registration_or_cr12" | "ke_kra_pin" | "ke_beneficial_ownership" | "za_cipc_registration" | "za_sars_tax_reference" | "za_director_identity";
 type Archetype = "importer" | "exporter" | "intercompany_rebalancing" | "payroll_operator";
 type Tier = "smb" | "mid" | "enterprise";
+type Country = "NIGERIA_NGN" | "KENYA_KES" | "SOUTH_AFRICA_ZAR";
 
 const archetypeLabels: Record<Archetype, string> = { importer: "Importer", exporter: "Exporter", intercompany_rebalancing: "Inter-company rebalancing", payroll_operator: "Payroll operator" };
 const tierLabels: Record<Tier, string> = { smb: "SMB", mid: "Mid-market", enterprise: "Enterprise" };
+const countryLabels: Record<Country, string> = { NIGERIA_NGN: "Nigeria", KENYA_KES: "Kenya", SOUTH_AFRICA_ZAR: "South Africa" };
 
 /**
  * OM §4.4's 16-item evidence pack, verbatim. `documentType` names the one
@@ -43,7 +45,7 @@ const evidencePack: Array<{ label: string; documentType?: DocumentType; useCase?
   { label: "Sanctions-policy attestation by customer" },
 ];
 
-const unlistedDocumentTypes: DocumentType[] = ["identity_document", "proof_of_address", "source_of_funds", "other"];
+const unlistedDocumentTypes: DocumentType[] = ["identity_document", "proof_of_address", "source_of_funds", "other", "ng_nin_reference", "ng_cac_registration", "ng_tax_identifier", "ng_director_identity", "ke_national_id_or_passport", "ke_business_registration_or_cr12", "ke_kra_pin", "ke_beneficial_ownership", "za_cipc_registration", "za_sars_tax_reference", "za_director_identity"];
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="grid gap-1.5"><span className="text-[10px] font-black uppercase tracking-[0.14em] text-black/50">{label}</span>{children}</label>;
@@ -60,7 +62,7 @@ function relativeTime(iso: string | Date) {
 }
 
 type WorkspaceData = {
-  customer: { id: string; legalName: string; registrationIdentifier: string; kycStatus: string; archetype: Archetype | null; tier: Tier | null; useCaseNarrative: string | null; createdAt: Date };
+  customer: { id: string; legalName: string; registrationIdentifier: string; kycStatus: string; archetype: Archetype | null; tier: Tier | null; country: Country | null; useCaseNarrative: string | null; createdAt: Date };
   destinationCounterparties: Array<{ id: string; customerId: string; counterpartyName: string; destinationJurisdiction: string; invoiceReference: string | null; createdBy: string; createdAt: Date }>;
   useCaseGateDecisions: Array<{ id: string; decision: "approved" | "blocked"; rationale: string; decidedBy: string; decidedRole: string; decidedAt: Date }>;
   kycDocuments: Array<{ id: string; documentType: string; storageKey: string; storageUrl: string; originalFilename: string; mimeType: string; sizeBytes: string; reviewStatus: string; reviewNote: string | null; reviewedBy: string | null; reviewedAt: Date | null; uploadedBy: string; uploadedAt: Date }>;
@@ -86,6 +88,7 @@ function OverviewTab({ workspace }: { workspace: WorkspaceData }) {
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <SummaryStat label="Archetype" value={customer.archetype ? archetypeLabels[customer.archetype] : "Not yet structured"} />
       <SummaryStat label="Tier" value={customer.tier ? tierLabels[customer.tier] : "Not yet structured"} />
+      <SummaryStat label="Country" value={customer.country ? countryLabels[customer.country] : "Not yet structured"} />
       <SummaryStat label="Created" value={new Date(customer.createdAt).toLocaleDateString()} />
       <SummaryStat label="Evidence items present" value={`${documentedCount} / ${evidencePack.length} (OM §4.4)`} />
     </div>
@@ -116,6 +119,7 @@ function CustomerInformationTab({ workspace, canEdit }: { workspace: WorkspaceDa
   const { customer, destinationCounterparties } = workspace;
   const [archetype, setArchetype] = useState<Archetype | "">(customer.archetype ?? "");
   const [tier, setTier] = useState<Tier | "">(customer.tier ?? "");
+  const [country, setCountry] = useState<Country | "">(customer.country ?? "");
   const invalidate = async () => { await Promise.all([utils.postgres.customerWorkspace.invalidate(), utils.postgres.customers.invalidate()]); };
   const updateProfile = trpc.postgres.updateCustomerProfile.useMutation({ onSuccess: () => { toast.success("Customer information updated."); void invalidate(); }, onError: error => toast.error(error.message) });
   const addCounterparty = trpc.postgres.recordCustomerDestinationCounterparty.useMutation({ onSuccess: () => { toast.success("Destination counterparty recorded."); void invalidate(); }, onError: error => toast.error(error.message) });
@@ -124,7 +128,7 @@ function CustomerInformationTab({ workspace, canEdit }: { workspace: WorkspaceDa
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const narrative = String(data.get("useCaseNarrative") ?? "").trim();
-    updateProfile.mutate({ customerId: customer.id, archetype: archetype || undefined, tier: tier || undefined, useCaseNarrative: narrative.length >= 20 ? narrative : undefined });
+    updateProfile.mutate({ customerId: customer.id, archetype: archetype || undefined, tier: tier || undefined, country: country || undefined, useCaseNarrative: narrative.length >= 20 ? narrative : undefined });
   };
 
   const submitCounterparty = (event: FormEvent<HTMLFormElement>) => {
@@ -145,7 +149,7 @@ function CustomerInformationTab({ workspace, canEdit }: { workspace: WorkspaceDa
     </div>
     <p className="text-xs leading-5 text-black/55">Everything below is OM §4.2/§4.3 taxonomy, not yet backed by anything beyond these two fields until set here. Trading name, jurisdiction of incorporation, business address, and similar fields the OM's future KYB scope implies remain entirely unstructured — no UI is shown for them, since showing an empty form field for a column that doesn't exist would misrepresent capability.</p>
     {canEdit ? <form className="grid gap-4 border border-black/15 bg-black/[0.02] p-4" onSubmit={submitProfile}>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Field label="Archetype (OM §4.2)">
           <select className="h-10 border border-black/25 bg-white px-2 text-sm" value={archetype} onChange={event => setArchetype(event.target.value as Archetype | "")}>
             <option value="">Not set</option>
@@ -156,6 +160,12 @@ function CustomerInformationTab({ workspace, canEdit }: { workspace: WorkspaceDa
           <select className="h-10 border border-black/25 bg-white px-2 text-sm" value={tier} onChange={event => setTier(event.target.value as Tier | "")}>
             <option value="">Not set</option>
             {(Object.entries(tierLabels) as [Tier, string][]).map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+          </select>
+        </Field>
+        <Field label="Country">
+          <select className="h-10 border border-black/25 bg-white px-2 text-sm" value={country} onChange={event => setCountry(event.target.value as Country | "")}>
+            <option value="">Not set</option>
+            {(Object.entries(countryLabels) as [Country, string][]).map(([value, text]) => <option key={value} value={value}>{text}</option>)}
           </select>
         </Field>
       </div>
@@ -334,7 +344,7 @@ export function EnterpriseCustomersWorkspace({ role }: { role: OperatorRole | un
     <div className="border-b border-black/10 px-5 py-3">
       <Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search by legal name or registration identifier" className="h-9 max-w-md rounded-none border-black/25" aria-label="Search enterprise customers" />
     </div>
-    {customers.isLoading ? <div className="px-5 py-8 text-sm text-black/55">Loading enterprise customers…</div> : filtered.length === 0 ? <div className="px-5 py-10"><p className="text-sm font-bold">No enterprise customers recorded</p><p className="mt-2 max-w-xl text-sm leading-6 text-black/55">Create the first enterprise customer record to begin its KYC/KYB evidence trail.</p></div> : <div className="overflow-x-auto"><table className="w-full border-collapse text-sm"><thead><tr className="border-b border-black/20 text-left text-[10px] font-black uppercase tracking-[0.12em] text-black/50"><th className="py-2 pl-5">Legal name</th><th className="py-2">Registration ID</th><th className="py-2">Archetype</th><th className="py-2">Tier</th><th className="py-2">Evidence</th><th className="py-2">Created</th><th className="py-2 pr-5" /></tr></thead><tbody>{filtered.map(row => <tr key={row.id} className="border-b border-black/10 hover:bg-black/[0.02]"><td className="py-2 pl-5 font-bold">{row.legalName}</td><td className="py-2 text-black/65">{row.registrationIdentifier}</td><td className="py-2 text-black/65">{row.archetype ? archetypeLabels[row.archetype as Archetype] : <span className="text-black/35">Not yet structured</span>}</td><td className="py-2 text-black/65">{row.tier ? tierLabels[row.tier as Tier] : <span className="text-black/35">Not yet structured</span>}</td><td className="py-2 text-black/65">{row.documentCount === "0" ? "No documents" : `${row.approvedDocumentCount}/${row.documentCount} approved`}</td><td className="py-2 text-black/50">{new Date(row.createdAt).toLocaleDateString()}</td><td className="py-2 pr-5 text-right"><Button variant="outline" onClick={() => setSelectedId(row.id)} className="rounded-none text-[10px] font-black uppercase">Open</Button></td></tr>)}</tbody></table></div>}
+    {customers.isLoading ? <div className="px-5 py-8 text-sm text-black/55">Loading enterprise customers…</div> : filtered.length === 0 ? <div className="px-5 py-10"><p className="text-sm font-bold">No enterprise customers recorded</p><p className="mt-2 max-w-xl text-sm leading-6 text-black/55">Create the first enterprise customer record to begin its KYC/KYB evidence trail.</p></div> : <div className="overflow-x-auto"><table className="w-full border-collapse text-sm"><thead><tr className="border-b border-black/20 text-left text-[10px] font-black uppercase tracking-[0.12em] text-black/50"><th className="py-2 pl-5">Legal name</th><th className="py-2">Registration ID</th><th className="py-2">Archetype</th><th className="py-2">Tier</th><th className="py-2">Country</th><th className="py-2">Evidence</th><th className="py-2">Created</th><th className="py-2 pr-5" /></tr></thead><tbody>{filtered.map(row => <tr key={row.id} className="border-b border-black/10 hover:bg-black/[0.02]"><td className="py-2 pl-5 font-bold">{row.legalName}</td><td className="py-2 text-black/65">{row.registrationIdentifier}</td><td className="py-2 text-black/65">{row.archetype ? archetypeLabels[row.archetype as Archetype] : <span className="text-black/35">Not yet structured</span>}</td><td className="py-2 text-black/65">{row.tier ? tierLabels[row.tier as Tier] : <span className="text-black/35">Not yet structured</span>}</td><td className="py-2 text-black/65">{row.country ? countryLabels[row.country as Country] : <span className="text-black/35">Not yet structured</span>}</td><td className="py-2 text-black/65">{row.documentCount === "0" ? "No documents" : `${row.approvedDocumentCount}/${row.documentCount} approved`}</td><td className="py-2 text-black/50">{new Date(row.createdAt).toLocaleDateString()}</td><td className="py-2 pr-5 text-right"><Button variant="outline" onClick={() => setSelectedId(row.id)} className="rounded-none text-[10px] font-black uppercase">Open</Button></td></tr>)}</tbody></table></div>}
     <p className="border-t border-black/10 px-5 py-3 text-[11px] leading-5 text-black/45">Additional evidence-type columns held by this system but not named in the OM's 16-item pack: {unlistedDocumentTypes.map(type => type.replaceAll("_", " ")).join(", ")}.</p>
   </section>;
 }
