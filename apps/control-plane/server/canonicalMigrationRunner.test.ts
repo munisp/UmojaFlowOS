@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -18,7 +18,9 @@ describe("canonical PostgreSQL migration runner", () => {
     expect(output).toContain("database/postgresql");
     expect(output).toMatch(/\b0001_control_plane\.sql\b/);
     expect(output).toMatch(/\b0042_tigerbeetle_postgres_reconciliation\.sql\b/);
-    expect(output.split("\n").filter(line => /\b00\d{2}_.*\.sql$/.test(line))).toHaveLength(51);
+    const expectedMigrationCount = readdirSync(resolve(repositoryRoot, "database/postgresql"))
+      .filter(file => /^00\d{2}_.*\.sql$/.test(file)).length;
+    expect(output.split("\n").filter(line => /\b00\d{2}_.*\.sql$/.test(line))).toHaveLength(expectedMigrationCount);
   });
 
   it("replaces the non-existent baseline command and removes the divergent application-side migration source", () => {
