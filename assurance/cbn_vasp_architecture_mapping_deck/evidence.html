@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        .slide-container {
+            width: 1280px;
+            min-height: 720px;
+            background: #f5f1e8;
+            color: #17251f;
+            font-family: Arial, sans-serif;
+            padding: 54px 72px 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .eyebrow {
+            font-size: 14px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #167c69;
+            font-weight: 700;
+        }
+        .title {
+            font: 44px Georgia, serif;
+            color: #143d31;
+            margin-top: 16px;
+        }
+        .rule {
+            height: 5px;
+            width: 90px;
+            background: #18a58a;
+            margin-top: 18px;
+        }
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 60px;
+            margin-top: 42px;
+        }
+        .evidence-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .evidence-table th {
+            text-align: left;
+            padding: 10px 0;
+            border-bottom: 2px solid #167c69;
+            font-family: Georgia, serif;
+            font-size: 20px;
+            color: #143d31;
+        }
+        .evidence-table td {
+            padding: 8px 0; /* reduced from 10px */
+            border-bottom: 1px solid #cbd4cd;
+            font-size: 14px;
+            line-height: 1.4;
+            color: #45534d;
+        }
+        .id-col {
+            font-weight: 700;
+            color: #167c69;
+            width: 60px;
+        }
+        .assurance-block {
+            background: rgba(22, 124, 105, 0.05);
+            padding: 10px; /* reduced from 30px to cut page height */
+            border-left: 6px solid #167c69;
+        }
+        .block-h {
+            font: 24px Georgia, serif;
+            color: #143d31;
+            margin-bottom: 20px;
+        }
+        .role-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px; /* reduced from 25px */
+        }
+        .role-tag {
+            background: #143d31;
+            color: #f5f1e8;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            text-align: center;
+        }
+        .mechanism {
+            margin-top: 12px; /* reduced from 20px */
+            padding-top: 12px; /* reduced from 20px */
+            border-top: 1px solid #cbd4cd;
+        }
+        .mech-h {
+            font-weight: 700;
+            font-size: 14px;
+            color: #167c69;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        .mech-p {
+            font-size: 15px;
+            line-height: 1.45;
+            color: #596660;
+        }
+        .footer {
+            position: absolute;
+            left: 72px;
+            right: 72px;
+            bottom: 34px;
+            border-top: 1px solid #c8d1ca;
+            padding-top: 10px;
+            font-size: 12px;
+            color: #66736d;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="eyebrow">04 · Assurance Lifecycle</div>
+        <h1 class="title">Evidence and Independent Assurance</h1>
+        <div class="rule"></div>
+
+        <div class="content-grid">
+            <div class="evidence-catalog">
+                <table class="evidence-table">
+                    <thead>
+                        <tr>
+                            <th colspan="2">E-01 through E-09 Evidence Set</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="id-col">E-01</td><td><strong>Build Provenance:</strong> Cryptographic proof of the exact code version.</td></tr>
+                        <tr><td class="id-col">E-02</td><td><strong>Schema Integrity:</strong> Database migration and structure validation.</td></tr>
+                        <tr><td class="id-col">E-03</td><td><strong>Role Separation:</strong> Proof of 12 distinct subjects for governance.</td></tr>
+                        <tr><td class="id-col">E-04</td><td><strong>Ledger Quorum:</strong> TigerBeetle cluster and reconciliation facts.</td></tr>
+                        <tr><td class="id-col">E-05</td><td><strong>Identity Trust:</strong> Keycloak realm and secret rotation evidence.</td></tr>
+                        <tr><td class="id-col">E-06</td><td><strong>Resilience:</strong> Deployment health and rollback/restore receipt.</td></tr>
+                        <tr><td class="id-col">E-07</td><td><strong>Observability:</strong> Alert delivery and human acknowledgement logs.</td></tr>
+                        <tr><td class="id-col">E-08</td><td><strong>Retention:</strong> WORM storage and legal-hold negative tests.</td></tr>
+                        <tr><td class="id-col">E-09</td><td><strong>Final Review:</strong> Independent audit of the complete manifest.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="assurance-mechanisms">
+                <div class="assurance-block">
+                    <h2 class="block-h">Dual-Control Authority</h2>
+                    <div class="role-grid">
+                        <div class="role-tag">Release</div>
+                        <div class="role-tag">Security</div>
+                        <div class="role-tag">Compliance</div>
+                        <div class="role-tag">Operations</div>
+                    </div>
+                    <div class="mechanism">
+                        <div class="mech-h">Immutable Binding</div>
+                        <p class="mech-p">Every artifact is hashed (SHA-256) and bound to the release manifest. Any change to a file invalidates the entire evidence set.</p>
+                    </div>
+                    <div class="mechanism">
+                        <div class="mech-h">WORM Preservation</div>
+                        <p class="mech-p">Evidence is stored in Write-Once-Read-Many storage, preventing deletion or modification by any platform user.</p>
+                    </div>
+                    <div class="mechanism">
+                        <div class="mech-h">Independent E-09</div>
+                        <p class="mech-p">A final review by a subject not involved in the test execution is mandatory before a release is marked GO.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <span>UmojaFlowOS Evidence & Assurance Framework</span>
+            <span>Machine-Verifiable Proof of Control</span>
+        </div>
+    </div>
+</body>
+</html>

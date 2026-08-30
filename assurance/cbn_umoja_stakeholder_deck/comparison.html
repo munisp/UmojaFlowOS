@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    .slide-container {
+        width: 1280px;
+        min-height: 720px;
+        background: #f5f1e8;
+        color: #17251f;
+        font-family: Arial, sans-serif;
+        padding: 54px 72px 0;
+        position: relative;
+        overflow: hidden;
+    }
+    .eyebrow {
+        font-size: 14px;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: #167c69;
+        font-weight: 700;
+    }
+    .title {
+        font-family: Georgia, serif;
+        font-size: 44px;
+        color: #143d31;
+        margin-top: 16px;
+    }
+    .rule {
+        width: 90px;
+        height: 5px;
+        background: #18a58a;
+        margin-top: 18px;
+    }
+    .table-container {
+        margin-top: 40px;
+        width: 100%;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+    }
+    th {
+        background: #143d31;
+        color: #f5f1e8;
+        text-align: left;
+        padding: 12px 15px;
+        font-family: Georgia, serif;
+        font-size: 18px;
+        border: 1px solid #143d31;
+    }
+    td {
+        padding: 12px 15px;
+        border: 1px solid #cbd4cd;
+        font-size: 15px;
+        line-height: 1.4;
+        vertical-align: top;
+    }
+    .feature-col {
+        width: 20%;
+        font-weight: 700;
+        color: #167c69;
+        background: #eef0e8;
+    }
+    .umoja-col {
+        background: rgba(24, 165, 138, 0.05);
+        font-weight: 700;
+        color: #143d31;
+        border: 2px solid #18a58a !important;
+    }
+    .check {
+        color: #18a58a;
+        font-weight: bold;
+    }
+    .cross {
+        color: #b43a3a;
+        opacity: 0.6;
+    }
+    .footer {
+        position: absolute;
+        left: 72px;
+        right: 72px;
+        bottom: 34px;
+        border-top: 1px solid #c8d1ca;
+        padding-top: 10px;
+        font-size: 12px;
+        color: #66736d;
+        display: flex;
+        justify-content: space-between;
+    }
+</style>
+</head>
+<body>
+<div class="slide-container">
+    <div class="eyebrow">09 · Competitive Positioning</div>
+    <h1 class="title">Why UmojaFlowOS is different</h1>
+    <div class="rule"></div>
+    
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 20%;">Capability</th>
+                    <th style="width: 20%;" class="umoja-col">UmojaFlowOS</th>
+                    <th style="width: 20%;">Point Compliance Tools</th>
+                    <th style="width: 20%;">Payment Orchestrators</th>
+                    <th style="width: 20%;">Generic GRC Software</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="feature-col">Scope of Control</td>
+                    <td class="umoja-col">End-to-end: Identity to Evidence</td>
+                    <td>Screening only</td>
+                    <td>Transaction routing only</td>
+                    <td>Policy documentation only</td>
+                </tr>
+                <tr>
+                    <td class="feature-col">Enforcement</td>
+                    <td class="umoja-col">Fail-closed technical gates</td>
+                    <td>Alerts only (passive)</td>
+                    <td>Business logic only</td>
+                    <td>Manual checks only</td>
+                </tr>
+                <tr>
+                    <td class="feature-col">Evidence Quality</td>
+                    <td class="umoja-col">Immutable WORM + SHA-256</td>
+                    <td>Database logs (mutable)</td>
+                    <td>Receipts only</td>
+                    <td>Self-attestations</td>
+                </tr>
+                <tr>
+                    <td class="feature-col">Sovereignty</td>
+                    <td class="umoja-col">Open-source & Cloud-agnostic</td>
+                    <td>Proprietary SaaS lock-in</td>
+                    <td>Proprietary SaaS lock-in</td>
+                    <td>Proprietary SaaS lock-in</td>
+                </tr>
+                <tr>
+                    <td class="feature-col">Regulatory Fit</td>
+                    <td class="umoja-col">Native CBN VASP alignment</td>
+                    <td>General purpose</td>
+                    <td>Commercial focus</td>
+                    <td>Enterprise focus</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="footer">
+        <span>UmojaFlowOS: The Premier Operating Layer for Regulated Finance</span>
+        <span>Comparative Analysis · Aug 2026</span>
+    </div>
+</div>
+</body>
+</html>

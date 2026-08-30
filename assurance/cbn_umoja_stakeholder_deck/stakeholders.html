@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        .slide-container {
+            width: 1280px;
+            min-height: 720px;
+            background: #f5f1e8;
+            color: #17251f;
+            font-family: Arial, sans-serif;
+            padding: 54px 72px 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .eyebrow {
+            font-size: 14px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #167c69;
+            font-weight: 700;
+        }
+        .title {
+            font: 44px Georgia, serif;
+            color: #143d31;
+            margin-top: 16px;
+        }
+        .rule {
+            height: 5px;
+            width: 90px;
+            background: #18a58a;
+            margin-top: 12px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px; /* reduced vertical gap to save height */
+            margin-top: 28px; /* reduced top margin to pull grid upward */
+        }
+        .stakeholder-block {
+            border-top: 1px solid #cbd4cd;
+            padding-top: 12px; /* reduced inner padding */
+        }
+        .label {
+            font-size: 12px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #167c69;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        .group-title {
+            font: 26px Georgia, serif;
+            color: #143d31;
+            margin-bottom: 16px;
+        }
+        .benefit-list {
+            list-style: none;
+        }
+        .benefit-item {
+            font-size: 17px;
+            line-height: 1.5;
+            color: #45534d;
+            margin-bottom: 10px; /* slightly reduced spacing */
+            display: flex;
+            gap: 12px;
+        }
+        .benefit-item::before {
+            content: "•";
+            color: #18a58a;
+            font-weight: bold;
+        }
+        .footer {
+            position: absolute;
+            left: 72px;
+            right: 72px;
+            bottom: 34px;
+            border-top: 1px solid #c8d1ca;
+            padding-top: 10px;
+            font-size: 12px;
+            color: #66736d;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="eyebrow">05 · Stakeholder Impact</div>
+        <h1 class="title">Value Across the Stakeholder System</h1>
+        <div class="rule"></div>
+
+        <div class="grid">
+            <div class="stakeholder-block">
+                <div class="label">Regulators & Ministries</div>
+                <h2 class="group-title">CBN & Government</h2>
+                <ul class="benefit-list">
+                    <li class="benefit-item">Real-time visibility into experimental financial flows and risk perimeters.</li>
+                    <li class="benefit-item">Automated evidence collection for policy-making and enforcement decisions.</li>
+                </ul>
+            </div>
+            <div class="stakeholder-block">
+                <div class="label">Financial Institutions</div>
+                <h2 class="group-title">Banks & Licensed VASPs</h2>
+                <ul class="benefit-list">
+                    <li class="benefit-item">Standardised control fabric for faster, safer regulatory sandbox participation.</li>
+                    <li class="benefit-item">Reduced compliance overhead through automated reconciliation and reporting.</li>
+                </ul>
+            </div>
+            <div class="stakeholder-block">
+                <div class="label">Citizens & Consumers</div>
+                <h2 class="group-title">The Nigerian Public</h2>
+                <ul class="benefit-list">
+                    <li class="benefit-item">Hard-coded transaction limits and mandatory consent to prevent financial harm.</li>
+                    <li class="benefit-item">Clearer recourse through documented incident response and complaint handling.</li>
+                </ul>
+            </div>
+            <div class="stakeholder-block">
+                <div class="label">Ecosystem Partners</div>
+                <h2 class="group-title">Auditors & Innovators</h2>
+                <ul class="benefit-list">
+                    <li class="benefit-item">Instant access to verified, tamper-proof evidence for independent audits.</li>
+                    <li class="benefit-item">Repeatable operating model for scaling innovations from sandbox to market.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="footer">
+            <span>UmojaFlowOS Stakeholder Value Matrix</span>
+            <span>Draft for Discussion</span>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,111 @@
+{
+  "project_info": {
+    "title": "Newwave CBN Sandbox Application",
+    "created": 1788013485.286,
+    "last_updated": 1788013719.004,
+    "total_slides": 9
+  },
+  "slides": [
+    {
+      "id": "title",
+      "state": "edited",
+      "pageNum": 1
+    },
+    {
+      "id": "verified_profile",
+      "state": "edited",
+      "pageNum": 2
+    },
+    {
+      "id": "innovation",
+      "state": "edited",
+      "pageNum": 3
+    },
+    {
+      "id": "test_perimeter",
+      "state": "edited",
+      "pageNum": 4
+    },
+    {
+      "id": "compliance_gaps",
+      "state": "edited",
+      "pageNum": 5
+    },
+    {
+      "id": "risk_register",
+      "state": "edited",
+      "pageNum": 6
+    },
+    {
+      "id": "governance",
+      "state": "edited",
+      "pageNum": 7
+    },
+    {
+      "id": "submission_plan",
+      "state": "edited",
+      "pageNum": 8
+    },
+    {
+      "id": "closing",
+      "state": "edited",
+      "pageNum": 9
+    }
+  ],
+  "outline": [
+    {
+      "id": "title",
+      "title": "Newwave CBN Sandbox Application",
+      "summary": "Executive overview of the proposed Cohort 2 VASP Track application and its current draft status.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "verified_profile",
+      "title": "What Public Research Verifies",
+      "summary": "Publicly verifiable NewWave identity, leadership, capabilities, and corporate information, with source boundaries.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "innovation",
+      "title": "Proposed UmojaFlowOS Innovation",
+      "summary": "The proposed non-custodial VASP control, risk, governance, and evidence platform narrative.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "test_perimeter",
+      "title": "Controlled Sandbox Test Perimeter",
+      "summary": "Proposed participant, geography, transaction, customer-asset, monitoring, and exit boundaries.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "compliance_gaps",
+      "title": "Critical Missing Evidence",
+      "summary": "The most important corporate, regulatory, financial, AML/CFT/CPF, Travel Rule, privacy, and resilience gaps.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "risk_register",
+      "title": "Regulatory Risk Register",
+      "summary": "Critical regulatory risks, triggers, controls, and required closure evidence.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "governance",
+      "title": "Governance and Accountability",
+      "summary": "Six accountable governance roles, segregation of duties, independent compliance reporting, and approval requirements.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "submission_plan",
+      "title": "Submission Readiness Plan",
+      "summary": "Ordered path from NO-GO draft to evidence-complete submission and controlled sandbox entry.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "closing",
+      "title": "Decision and Required Actions",
+      "summary": "Executive decision: remain NO-GO until the evidence and jurisdiction gates are closed.",
+      "image_plan": "Use a suitable image if needed"
+    }
+  ]
+}

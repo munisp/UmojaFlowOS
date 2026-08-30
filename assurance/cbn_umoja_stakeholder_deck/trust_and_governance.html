@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        .slide-container {
+            width: 1280px;
+            min-height: 720px;
+            background: #f5f1e8;
+            color: #17251f;
+            font-family: Arial, sans-serif;
+            padding: 54px 72px 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .eyebrow {
+            font-size: 14px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #167c69;
+            font-weight: 700;
+        }
+        .title {
+            font: 44px Georgia, serif;
+            color: #143d31;
+            margin-top: 16px;
+        }
+        .rule {
+            height: 5px;
+            width: 90px;
+            background: #18a58a;
+            margin-top: 18px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-top: 48px;
+        }
+        .pillar {
+            border-top: 1px solid #cbd4cd;
+            padding-top: 20px;
+        }
+        .pillar-label {
+            font-size: 12px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #167c69;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        .pillar-h {
+            font: 26px Georgia, serif;
+            color: #143d31;
+            margin-bottom: 16px;
+        }
+        .pillar-p {
+            font-size: 17px;
+            line-height: 1.5;
+            color: #45534d;
+        }
+        .highlight {
+            color: #143d31;
+            font-weight: 700;
+        }
+        .footer {
+            position: absolute;
+            left: 72px;
+            right: 72px;
+            bottom: 34px;
+            border-top: 1px solid #c8d1ca;
+            padding-top: 10px;
+            font-size: 12px;
+            color: #66736d;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="eyebrow">10 · Governance Framework</div>
+        <h1 class="title">Trust by Design</h1>
+        <div class="rule"></div>
+
+        <div class="grid">
+            <div class="pillar">
+                <div class="pillar-label">Accountability</div>
+                <h2 class="pillar-h">Segregation of Duties</h2>
+                <p class="pillar-p">Mandatory <span class="highlight">12 distinct identities</span> for primary and alternate governance roles. No single person can initiate, approve, and reconcile a transaction.</p>
+            </div>
+            <div class="pillar">
+                <div class="pillar-label">Security</div>
+                <h2 class="pillar-h">Fail-Closed Controls</h2>
+                <p class="pillar-p">Automated gates for identity, AML screening, and limits. If a required control or external dependency is unavailable, the <span class="highlight">system stops automatically</span>.</p>
+            </div>
+            <div class="pillar">
+                <div class="pillar-label">Integrity</div>
+                <h2 class="pillar-h">Immutable Evidence</h2>
+                <p class="pillar-p">Material actions are recorded in <span class="highlight">WORM (Write-Once-Read-Many)</span> storage with SHA-256 cryptographic binding, ensuring proof is permanent and tamper-proof.</p>
+            </div>
+            <div class="pillar">
+                <div class="pillar-label">Authority</div>
+                <h2 class="pillar-h">Independent Approvals</h2>
+                <p class="pillar-p">Production releases require <span class="highlight">four independent sign-offs</span> (Release, Security, Compliance, Operations) bound to the specific, verified code version.</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <span>UmojaFlowOS Governance & Trust Architecture</span>
+            <span>Built for Institutional Rigor</span>
+        </div>
+    </div>
+</body>
+</html>

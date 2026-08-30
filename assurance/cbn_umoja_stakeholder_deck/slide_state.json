@@ -1,0 +1,155 @@
+{
+  "project_info": {
+    "title": "UmojaFlowOS — Trusted Operating Layer for Responsible Digital Finance",
+    "created": 1788126625.141,
+    "last_updated": 1788126883.451,
+    "total_slides": 13
+  },
+  "slides": [
+    {
+      "id": "cover",
+      "state": "edited",
+      "pageNum": 1
+    },
+    {
+      "id": "executive_case",
+      "state": "edited",
+      "pageNum": 2
+    },
+    {
+      "id": "platform_one_stop",
+      "state": "edited",
+      "pageNum": 3
+    },
+    {
+      "id": "modules",
+      "state": "edited",
+      "pageNum": 4
+    },
+    {
+      "id": "stakeholders",
+      "state": "edited",
+      "pageNum": 5
+    },
+    {
+      "id": "cbn_alignment",
+      "state": "edited",
+      "pageNum": 6
+    },
+    {
+      "id": "technology",
+      "state": "edited",
+      "pageNum": 7
+    },
+    {
+      "id": "operating_model",
+      "state": "edited",
+      "pageNum": 8
+    },
+    {
+      "id": "economic_value",
+      "state": "edited",
+      "pageNum": 9
+    },
+    {
+      "id": "comparison",
+      "state": "edited",
+      "pageNum": 10
+    },
+    {
+      "id": "trust_and_governance",
+      "state": "edited",
+      "pageNum": 11
+    },
+    {
+      "id": "roadmap",
+      "state": "edited",
+      "pageNum": 12
+    },
+    {
+      "id": "decision",
+      "state": "edited",
+      "pageNum": 13
+    }
+  ],
+  "outline": [
+    {
+      "id": "cover",
+      "title": "UmojaFlowOS — Trusted Operating Layer for Responsible Digital Finance",
+      "summary": "Cover page with author, founder and CEO identity, company, public contact information, and deck purpose.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "executive_case",
+      "title": "The Executive Case",
+      "summary": "Why regulated digital-finance innovation needs one accountable control, compliance, evidence, and enforcement platform.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "platform_one_stop",
+      "title": "One Platform, One Control Fabric",
+      "summary": "High-level visual overview of the platform’s end-to-end modules and how they connect from identity through evidence and reporting.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "modules",
+      "title": "What the Platform Does",
+      "summary": "Non-technical explanation of the major modules: control plane, payments, ledger, risk/compliance, reporting, document intelligence, retention, and operations.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "stakeholders",
+      "title": "Value Across the Stakeholder System",
+      "summary": "How the platform serves CBN, government ministries, licensed institutions, citizens, innovators, banks, auditors, and partners.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "cbn_alignment",
+      "title": "Direct Alignment to CBN Cohort 2",
+      "summary": "Maps UmojaFlowOS capabilities to the CBN Sandbox mission, VASP Track, eligibility, safeguards, evidence, and post-sandbox pathway.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "technology",
+      "title": "Technology Prowess Without the Jargon",
+      "summary": "Explains the open-source, cloud-agnostic technology stack and the value of each layer to regulators and operators.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "operating_model",
+      "title": "Compliance, Enforcement, and Impact Operating Model",
+      "summary": "Illustrated lifecycle from onboarding and risk assessment to controlled execution, incident response, investigation, reporting, and exit.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "economic_value",
+      "title": "Economic Value to Nigeria — Scenario Model",
+      "summary": "Illustrative dollar-value scenarios for loss prevention, operational efficiency, formalisation, innovation, and public-sector capacity; assumptions clearly labelled.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "comparison",
+      "title": "Why UmojaFlowOS Is Different",
+      "summary": "Comparison with point compliance tools, payment orchestration, generic GRC, data platforms, and bespoke government systems.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "trust_and_governance",
+      "title": "Trust by Design",
+      "summary": "Shows governance, segregation of duties, fail-closed controls, immutable evidence, privacy, and independent approvals.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "roadmap",
+      "title": "Path to National-Scale Value",
+      "summary": "Phased roadmap from CBN sandbox evidence to controlled pilots, ecosystem partnerships, and national infrastructure adoption.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "decision",
+      "title": "Decision, Partnership, and Next Step",
+      "summary": "Clear asks for government officials and business partners, with current readiness boundaries and proposed next actions.",
+      "image_plan": "Use a suitable image if needed"
+    }
+  ]
+}

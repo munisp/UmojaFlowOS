@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    .slide-container {
+        width: 1280px;
+        min-height: 720px;
+        background: #f5f1e8;
+        color: #17251f;
+        font-family: Arial, sans-serif;
+        padding: 54px 72px 0;
+        position: relative;
+        overflow: hidden;
+    }
+    .eyebrow {
+        font-size: 14px;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: #167c69;
+        font-weight: 700;
+    }
+    .title {
+        font-family: Georgia, serif;
+        font-size: 44px;
+        color: #143d31;
+        margin-top: 16px;
+    }
+    .rule {
+        width: 90px;
+        height: 5px;
+        background: #18a58a;
+        margin-top: 18px;
+    }
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 30px;
+        margin-top: 48px;
+    }
+    .scenario-card {
+        border-top: 1px solid #cbd4cd;
+        padding-top: 20px;
+    }
+    .label {
+        font-size: 12px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: #167c69;
+        font-weight: 700;
+        margin-bottom: 12px;
+    }
+    .value-header {
+        font-family: Georgia, serif;
+        font-size: 28px;
+        color: #143d31;
+        margin-bottom: 16px;
+    }
+    .impact-box {
+        background: #eef0e8;
+        padding: 20px;
+        margin-bottom: 16px;
+        border-left: 4px solid #18a58a;
+    }
+    .dollar-value {
+        font-family: Georgia, serif;
+        font-size: 32px;
+        color: #167c69;
+        font-weight: 700;
+    }
+    .impact-desc {
+        font-size: 15px;
+        line-height: 1.45;
+        color: #45534d;
+        margin-top: 8px;
+    }
+    .assumptions {
+        font-size: 13px;
+        color: #66736d;
+        line-height: 1.4;
+    }
+    .footer {
+        position: absolute;
+        left: 72px;
+        right: 72px;
+        bottom: 34px;
+        border-top: 1px solid #c8d1ca;
+        padding-top: 10px;
+        font-size: 12px;
+        color: #66736d;
+        display: flex;
+        justify-content: space-between;
+    }
+</style>
+</head>
+<body>
+<div class="slide-container">
+    <div class="eyebrow">08 · Economic Impact</div>
+    <h1 class="title">Economic Value to Nigeria — Scenario Model</h1>
+    <div class="rule"></div>
+
+    <div class="grid">
+        <div class="scenario-card">
+            <div class="label">Loss Prevention</div>
+            <h2 class="value-header">Fraud & AML Mitigation</h2>
+            <div class="impact-box">
+                <div class="dollar-value">$150M+</div>
+                <p class="impact-desc">Estimated annual savings through automated screening and fail-closed transaction gates.</p>
+            </div>
+            <p class="assumptions">Based on 0.5% reduction in illicit flow leakage across a $30B digital payment corridor.</p>
+        </div>
+
+        <div class="scenario-card">
+            <div class="label">Operational Efficiency</div>
+            <h2 class="value-header">Regulatory Capacity</h2>
+            <div class="impact-box">
+                <div class="dollar-value">75% Reduction</div>
+                <p class="impact-desc">Decrease in manual evidence collection and audit reporting time for regulators and firms.</p>
+            </div>
+            <p class="assumptions">Assumes transition from manual PDF/Email reporting to machine-verifiable WORM evidence streams.</p>
+        </div>
+
+        <div class="scenario-card">
+            <div class="label">Market Innovation</div>
+            <h2 class="value-header">Financial Inclusion</h2>
+            <div class="impact-box">
+                <div class="dollar-value">$1.2B GVA</div>
+                <p class="impact-desc">Potential Gross Value Added by formalising informal VASP activity into the regulated system.</p>
+            </div>
+            <p class="assumptions">Based on 5% increase in formal digital finance participation within the SME sector.</p>
+        </div>
+    </div>
+
+    <div class="footer">
+        <span>Illustrative Scenarios · Not Guaranteed Outcomes</span>
+        <span>Sources: World Bank Nigeria GDP (2025) · Chainalysis Africa Report (2025)</span>
+    </div>
+</div>
+</body>
+</html>

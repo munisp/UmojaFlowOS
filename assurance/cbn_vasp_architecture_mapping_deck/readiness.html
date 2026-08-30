@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        .slide-container {
+            width: 1280px;
+            min-height: 720px;
+            background: #f5f1e8;
+            color: #17251f;
+            font-family: Arial, sans-serif;
+            padding: 54px 72px 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .eyebrow {
+            font-size: 14px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #167c69;
+            font-weight: 700;
+        }
+        .title {
+            font: 44px Georgia, serif;
+            color: #143d31;
+            margin-top: 16px;
+        }
+        .rule {
+            height: 5px;
+            width: 90px;
+            background: #18a58a;
+            margin-top: 18px;
+        }
+        .readiness-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            margin-top: 48px;
+        }
+        .column-h {
+            font: 24px Georgia, serif;
+            color: #143d31;
+            border-bottom: 2px solid #167c69;
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+        }
+        .item-list {
+            list-style: none;
+        }
+        .item {
+            font-size: 16px;
+            line-height: 1.5;
+            color: #45534d;
+            margin-bottom: 16px;
+            padding-left: 24px;
+            position: relative;
+        }
+        .item.pass::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #167c69;
+            font-weight: bold;
+        }
+        .item.pending::before {
+            content: "○";
+            position: absolute;
+            left: 0;
+            color: #b47d3a;
+            font-weight: bold;
+        }
+        .gate-callout {
+            position: absolute;
+            bottom: 100px;
+            left: 72px;
+            right: 72px;
+            background: #143d31;
+            color: #f5f1e8;
+            padding: 24px;
+            display: flex;
+            align-items: center;
+            gap: 30px;
+        }
+        .gate-label {
+            font-size: 12px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: #18a58a;
+        }
+        .gate-text {
+            font: 20px Georgia, serif;
+            line-height: 1.4;
+        }
+        .footer {
+            position: absolute;
+            left: 72px;
+            right: 72px;
+            bottom: 34px;
+            border-top: 1px solid #c8d1ca;
+            padding-top: 10px;
+            font-size: 12px;
+            color: #66736d;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="eyebrow">08 · Readiness Assessment</div>
+        <h1 class="title">Readiness Boundary and Path to GO</h1>
+        <div class="rule"></div>
+
+        <div class="readiness-grid">
+            <div class="readiness-col">
+                <h2 class="column-h">Implemented locally (Code)</h2>
+                <ul class="item-list">
+                    <li class="item pass"><strong>Governance Schemas:</strong> Strict contracts for dossier and officer roles.</li>
+                    <li class="item pass"><strong>Semantic Validators:</strong> Automated checks for SoD and hash integrity.</li>
+                    <li class="item pass"><strong>Local Staging Stack:</strong> Reproducible Docker Compose environment.</li>
+                    <li class="item pass"><strong>Seeding Engine:</strong> Deterministic Nigerian-scenario test data.</li>
+                </ul>
+            </div>
+            <div class="readiness-col">
+                <h2 class="column-h">Required for GO (Evidence)</h2>
+                <ul class="item-list">
+                    <li class="item pending"><strong>Real Identity:</strong> Authorised Keycloak realm and officer subjects.</li>
+                    <li class="item pending"><strong>External Proof:</strong> Real E-01–E-08 staging artifacts and logs.</li>
+                    <li class="item pending"><strong>Independent Review:</strong> Signed E-09 code and manifest verification.</li>
+                    <li class="item pending"><strong>Dual-Control:</strong> Four distinct production sign-off approvals.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="gate-callout">
+            <div class="gate-label">Current Status: NO-GO</div>
+            <div class="gate-text">The platform is technically ready for staging. Transition to GO requires real organisational facts, staging evidence, and authorised sign-off.</div>
+        </div>
+
+        <div class="footer">
+            <span>UmojaFlowOS Readiness Register</span>
+            <span>Internal Assessment · Aug 2026</span>
+        </div>
+    </div>
+</body>
+</html>

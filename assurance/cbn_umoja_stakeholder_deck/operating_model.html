@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        .slide-container {
+            width: 1280px;
+            min-height: 720px;
+            background: #f5f1e8;
+            color: #17251f;
+            font-family: Arial, sans-serif;
+            padding: 54px 72px 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .eyebrow {
+            font-size: 14px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #167c69;
+            font-weight: 700;
+        }
+        .title {
+            font: 44px Georgia, serif;
+            color: #143d31;
+            margin-top: 16px;
+        }
+        .rule {
+            height: 5px;
+            width: 90px;
+            background: #18a58a;
+            margin-top: 18px;
+        }
+        .process-flow {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 60px;
+            gap: 15px;
+        }
+        .phase {
+            flex: 1;
+            border-top: 4px solid #167c69;
+            padding-top: 20px;
+            background: rgba(22, 124, 105, 0.03);
+            min-height: 380px;
+        }
+        .phase-num {
+            font-weight: 700;
+            font-size: 12px;
+            color: #167c69;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+        .phase-h {
+            font: 22px Georgia, serif;
+            color: #143d31;
+            margin-bottom: 15px;
+            min-height: 54px;
+        }
+        .action-list {
+            list-style: none;
+        }
+        .action-item {
+            font-size: 14px;
+            line-height: 1.4;
+            color: #45534d;
+            margin-bottom: 12px;
+            padding-left: 15px;
+            position: relative;
+        }
+        .action-item::before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #18a58a;
+        }
+        .enforcement-tag {
+            margin-top: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #b47d3a;
+            border: 1px solid #d4cbb8;
+            padding: 4px 8px;
+            display: inline-block;
+        }
+        .footer {
+            position: absolute;
+            left: 72px;
+            right: 72px;
+            bottom: 34px;
+            border-top: 1px solid #c8d1ca;
+            padding-top: 10px;
+            font-size: 12px;
+            color: #66736d;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="eyebrow">07 · Operating Model</div>
+        <h1 class="title">Compliance, Enforcement, and Impact</h1>
+        <div class="rule"></div>
+
+        <div class="process-flow">
+            <div class="phase">
+                <div class="phase-num">Phase 01</div>
+                <h3 class="phase-h">Onboarding & Risk Gate</h3>
+                <ul class="action-list">
+                    <li class="action-item">KYC/KYB identity verification</li>
+                    <li class="action-item">UBO ownership tracing</li>
+                    <li class="action-item">AML/CFT/Sanctions screening</li>
+                    <li class="action-item">Participant consent capture</li>
+                </ul>
+                <div class="enforcement-tag">Prevention</div>
+            </div>
+            <div class="phase">
+                <div class="phase-num">Phase 02</div>
+                <h3 class="phase-h">Controlled Execution</h3>
+                <ul class="action-list">
+                    <li class="action-item">Dual-control approvals</li>
+                    <li class="action-item">Hard transaction limits</li>
+                    <li class="action-item">Real-time ledger posting</li>
+                    <li class="action-item">Fail-closed safety gates</li>
+                </ul>
+                <div class="enforcement-tag">Control</div>
+            </div>
+            <div class="phase">
+                <div class="phase-num">Phase 03</div>
+                <h3 class="phase-h">Monitoring & Response</h3>
+                <ul class="action-list">
+                    <li class="action-item">Continuous health tracking</li>
+                    <li class="action-item">Automated incident alerts</li>
+                    <li class="action-item">Controlled rollback/pause</li>
+                    <li class="action-item">Crisis communication logs</li>
+                </ul>
+                <div class="enforcement-tag">Detection</div>
+            </div>
+            <div class="phase">
+                <div class="phase-num">Phase 04</div>
+                <h3 class="phase-h">Evidence & Reporting</h3>
+                <ul class="action-list">
+                    <li class="action-item">Immutable WORM storage</li>
+                    <li class="action-item">SHA-256 hash verification</li>
+                    <li class="action-item">Automated CBN reports</li>
+                    <li class="action-item">Impact data aggregation</li>
+                </ul>
+                <div class="enforcement-tag">Accountability</div>
+            </div>
+            <div class="phase">
+                <div class="phase-num">Phase 05</div>
+                <h3 class="phase-h">Orderly Exit & Transition</h3>
+                <ul class="action-list">
+                    <li class="action-item">Final ledger reconciliation</li>
+                    <li class="action-item">Customer asset wind-down</li>
+                    <li class="action-item">Independent audit review</li>
+                    <li class="action-item">Licensing readiness pack</li>
+                </ul>
+                <div class="enforcement-tag">Resolution</div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <span>UmojaFlowOS Lifecycle Operating Model</span>
+            <span>End-to-End Governance Framework</span>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        .slide-container {
+            width: 1280px;
+            min-height: 720px;
+            background: #f5f1e8;
+            color: #17251f;
+            font-family: Arial, sans-serif;
+            padding: 54px 72px 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .eyebrow {
+            font-size: 14px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #167c69;
+            font-weight: 700;
+        }
+        .title {
+            font: 44px Georgia, serif;
+            color: #143d31;
+            margin-top: 16px;
+        }
+        .rule {
+            height: 5px;
+            width: 90px;
+            background: #18a58a;
+            margin-top: 18px;
+        }
+        .table-container {
+            margin-top: 40px;
+            width: 100%;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        th {
+            background: #143d31;
+            color: #f5f1e8;
+            text-align: left;
+            padding: 12px 15px;
+            font-family: Georgia, serif;
+            font-size: 18px;
+            border: 1px solid #143d31;
+        }
+        td {
+            padding: 12px 15px;
+            border: 1px solid #cbd4cd;
+            font-size: 15px;
+            line-height: 1.4;
+            vertical-align: top;
+            color: #45534d;
+        }
+        .req-col { width: 25%; font-weight: 700; color: #143d31; }
+        .ctrl-col { width: 40%; }
+        .ev-col { width: 35%; font-style: italic; }
+        .footer {
+            position: absolute;
+            left: 72px;
+            right: 72px;
+            bottom: 34px;
+            border-top: 1px solid #c8d1ca;
+            padding-top: 10px;
+            font-size: 12px;
+            color: #66736d;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="eyebrow">03 · Traceability Mapping</div>
+        <h1 class="title">CBN Requirement to Control Mapping</h1>
+        <div class="rule"></div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="req-col">CBN Requirement</th>
+                        <th class="ctrl-col">UmojaFlowOS Control</th>
+                        <th class="ev-col">Required Staging Evidence</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="req-col">AML/CFT/CPF & Sanctions</td>
+                        <td>Automated screening gates, analyst disposition workflows, and Travel Rule data handling.</td>
+                        <td>E-05: Screening provider contract, hit/clear test traces, and analyst review logs.</td>
+                    </tr>
+                    <tr>
+                        <td class="req-col">Consumer Protection</td>
+                        <td>Hard-coded transaction limits, mandatory consent capture, and risk disclosure workflows.</td>
+                        <td>E-08: Limit breach rejection logs, consent records, and disclosure versioning.</td>
+                    </tr>
+                    <tr>
+                        <td class="req-col">Operational Resilience</td>
+                        <td>Fail-closed architecture, real-time monitoring, and SHA-bound rollback/recovery protocols.</td>
+                        <td>E-06: Deployment health-gate logs, rollback receipts, and restore reports.</td>
+                    </tr>
+                    <tr>
+                        <td class="req-col">Financial Integrity</td>
+                        <td>Double-entry ledger (TigerBeetle) reconciled against PostgreSQL projection.</td>
+                        <td>E-04: Ledger quorum evidence, transfer facts, and zero-discrepancy reconciliation.</td>
+                    </tr>
+                    <tr>
+                        <td class="req-col">Evidence for Policy</td>
+                        <td>Immutable WORM storage for all material actions with cryptographic binding.</td>
+                        <td>E-09: Independent review of release manifest, artifact hashes, and WORM metadata.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="footer">
+            <span>UmojaFlowOS Regulatory Traceability Matrix</span>
+            <span>Mapping to CBN Sandbox Framework v2.0</span>
+        </div>
+    </div>
+</body>
+</html>

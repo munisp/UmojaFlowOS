@@ -1,0 +1,111 @@
+{
+  "project_info": {
+    "title": "UmojaFlowOS and the CBN VASP Sandbox",
+    "created": 1788127628.618,
+    "last_updated": 1788127913.347,
+    "total_slides": 9
+  },
+  "slides": [
+    {
+      "id": "cover",
+      "state": "edited",
+      "pageNum": 1
+    },
+    {
+      "id": "cbn_mission",
+      "state": "edited",
+      "pageNum": 2
+    },
+    {
+      "id": "architecture",
+      "state": "edited",
+      "pageNum": 3
+    },
+    {
+      "id": "control_mapping",
+      "state": "edited",
+      "pageNum": 4
+    },
+    {
+      "id": "external_integrations",
+      "state": "edited",
+      "pageNum": 5
+    },
+    {
+      "id": "evidence",
+      "state": "edited",
+      "pageNum": 6
+    },
+    {
+      "id": "stakeholder_value",
+      "state": "edited",
+      "pageNum": 7
+    },
+    {
+      "id": "readiness",
+      "state": "edited",
+      "pageNum": 8
+    },
+    {
+      "id": "closing",
+      "state": "edited",
+      "pageNum": 9
+    }
+  ],
+  "outline": [
+    {
+      "id": "cover",
+      "title": "UmojaFlowOS and the CBN VASP Sandbox",
+      "summary": "Executive cover and purpose: a governed control plane for responsible virtual-asset and stablecoin testing.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "cbn_mission",
+      "title": "What the CBN Sandbox Is Designed to Achieve",
+      "summary": "Official CBN Sandbox objectives, VASP Track scope, safeguards, and post-sandbox boundary.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "architecture",
+      "title": "Architecture: From Identity to Immutable Evidence",
+      "summary": "Plain-language architecture map showing control plane, payments, ledger, compliance, evidence, and operations.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "control_mapping",
+      "title": "CBN Requirement to UmojaFlowOS Control Mapping",
+      "summary": "Traceability view connecting CBN expectations to platform control capabilities and required real-world evidence.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "external_integrations",
+      "title": "External Integrations and Trust Boundaries",
+      "summary": "How Keycloak, AML providers, liquidity providers, TigerBeetle, PostgreSQL, WORM, and monitoring connect safely.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "evidence",
+      "title": "Evidence and Independent Assurance",
+      "summary": "E-01 through E-09 evidence lifecycle, four-role approval, and independent E-09 review.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "stakeholder_value",
+      "title": "Value to CBN, Government, Partners, and Citizens",
+      "summary": "Stakeholder outcomes: visibility, consumer protection, safer innovation, and measurable policy learning.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "readiness",
+      "title": "Readiness Boundary and Path to GO",
+      "summary": "What is implemented locally, what still needs real staging proof, and the decisions required before activation.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "closing",
+      "title": "A Responsible Path from Innovation to Trust",
+      "summary": "Closing partnership ask and clear next steps for CBN-facing sandbox preparation.",
+      "image_plan": "Use a suitable image if needed"
+    }
+  ]
+}

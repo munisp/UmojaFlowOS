@@ -1,0 +1,215 @@
+name: umojaflowos-local-staging
+
+services:
+  postgres:
+    image: postgres:16.4-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-umoja}
+      POSTGRES_USER: ${POSTGRES_USER:-umoja_owner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a local-only password}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [protected]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.0
+    restart: unless-stopped
+    command: ["start-dev", "--http-port=8080", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-local_admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set a local-only password}
+      KC_DB: dev-file
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+    ports:
+      - "127.0.0.1:${KEYCLOAK_PORT:-8088}:8080"
+    volumes:
+      - ../../infra/keycloak/realm-umojaflowos.json:/opt/keycloak/data/import/realm-umojaflowos.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks: [protected]
+
+  redis:
+    image: redis:7.4.2-bookworm
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--protected-mode", "yes", "--requirepass", "${REDIS_PASSWORD:?set a local-only password}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set a local-only password}
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [protected]
+
+  minio:
+    image: minio/minio:RELEASE.2025-02-18T16-25-55Z
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-local_minio_admin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set a local-only password}
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [protected]
+
+  opa:
+    image: openpolicyagent/opa:0.70.0-static
+    restart: unless-stopped
+    command: ["run", "--server", "--addr=0.0.0.0:8181", "/policies"]
+    ports:
+      - "127.0.0.1:${OPA_PORT:-8181}:8181"
+    volumes:
+      - ../../infra/opa:/policies:ro
+    healthcheck:
+      test: ["CMD", "/opa", "eval", "--format=raw", "1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [protected]
+
+  control-plane:
+    build:
+      context: ../../apps/control-plane
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres: {condition: service_healthy}
+      keycloak: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    environment:
+      NODE_ENV: development
+      PORT: "3000"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-umoja_owner}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-umoja}
+      POSTGRES_DATABASE_URL: postgresql://${POSTGRES_USER:-umoja_owner}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-umoja}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      KEYCLOAK_ISSUER: http://keycloak:8080/realms/umojaflowos
+      UMOJA_KEYCLOAK_ISSUER: http://keycloak:8080/realms/umojaflowos
+      UMOJA_KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-umojaflowos-control-plane}
+      UMOJA_KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-umojaflowos-control-plane}
+      UMOJA_PUBLIC_BASE_URL: http://localhost:${CONTROL_PLANE_PORT:-3000}
+      UMOJA_OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      UMOJA_OBJECT_STORAGE_BUCKET: ${MINIO_BUCKET:-synthetic-evidence}
+      UMOJA_OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-local_minio_admin}
+      UMOJA_OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      UMOJA_PROVIDER_EXECUTION_ENABLED: "false"
+      UMOJA_TIGERBEETLE_ENABLED: "false"
+      UMOJA_SCREENING_ENABLED: "false"
+      UMOJA_REGULATORY_SUBMISSION_ENABLED: "false"
+    ports:
+      - "127.0.0.1:${CONTROL_PLANE_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks: [protected]
+
+  payment-engine:
+    build:
+      context: ../../services/payment-engine
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis: {condition: service_healthy}
+    environment:
+      PORT: "8081"
+      UMOJA_YELLOWCARD_ENABLED: "false"
+      UMOJA_YELLOWCARD_EXECUTION_ENABLED: "false"
+      UMOJA_YELLOWCARD_WEBHOOK_ENABLED: "false"
+      UMOJA_TIGERBEETLE_ENABLED: "false"
+      UMOJA_YELLOWCARD_FAIL_CLOSED: "true"
+      UMOJA_YELLOWCARD_WEBHOOK_FAIL_CLOSED: "true"
+    ports:
+      - "127.0.0.1:${PAYMENT_ENGINE_PORT:-8081}:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8081/healthz >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks: [protected]
+
+  ledger-gateway:
+    build:
+      context: ../../services/ledger-gateway
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: "8083"
+      UMOJA_TIGERBEETLE_ENABLED: "false"
+    ports:
+      - "127.0.0.1:${LEDGER_GATEWAY_PORT:-8083}:8083"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8083/healthz >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks: [protected]
+
+  risk-compliance-core:
+    build:
+      context: ../../services/risk-compliance-core
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: "8082"
+      UMOJA_SCREENING_ENABLED: "false"
+      UMOJA_SCREENING_FAIL_CLOSED: "true"
+    ports:
+      - "127.0.0.1:${RISK_CORE_PORT:-8082}:8082"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8082/healthz >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks: [protected]
+
+  reporting-analytics:
+    build:
+      context: ../../services/reporting-analytics
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: "8084"
+      UMOJA_REGULATORY_SUBMISSION_ENABLED: "false"
+    ports:
+      - "127.0.0.1:${REPORTING_PORT:-8084}:8084"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8084/healthz\", timeout=3)' "]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks: [protected]
+
+networks:
+  protected:
+    driver: bridge
+    internal: false
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

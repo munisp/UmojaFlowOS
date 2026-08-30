@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    .slide-container {
+        width: 1280px;
+        min-height: 720px;
+        background: #f5f1e8;
+        color: #17251f;
+        font-family: Arial, sans-serif;
+        padding: 54px 72px 0;
+        position: relative;
+        overflow: hidden;
+    }
+    .eyebrow {
+        font-size: 14px;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: #167c69;
+        font-weight: 700;
+    }
+    .title {
+        font-family: Georgia, serif;
+        font-size: 44px;
+        color: #143d31;
+        margin-top: 16px;
+    }
+    .rule {
+        width: 90px;
+        height: 5px;
+        background: #18a58a;
+        margin-top: 18px;
+    }
+    .table-container {
+        margin-top: 40px;
+        width: 100%;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+    }
+    th {
+        background: #143d31;
+        color: #f5f1e8;
+        text-align: left;
+        padding: 12px 15px;
+        font-family: Georgia, serif;
+        font-size: 18px;
+        border: 1px solid #143d31;
+    }
+    td {
+        padding: 12px 15px;
+        border: 1px solid #cbd4cd;
+        font-size: 16px;
+        line-height: 1.4;
+        vertical-align: top;
+    }
+    .category {
+        font-weight: 700;
+        color: #167c69;
+        text-transform: uppercase;
+        font-size: 13px;
+        letter-spacing: 1px;
+    }
+    .requirement {
+        font-weight: 700;
+        color: #143d31;
+    }
+    .footer {
+        position: absolute;
+        left: 72px;
+        right: 72px;
+        bottom: 34px;
+        border-top: 1px solid #c8d1ca;
+        padding-top: 10px;
+        font-size: 12px;
+        color: #66736d;
+        display: flex;
+        justify-content: space-between;
+    }
+</style>
+</head>
+<body>
+<div class="slide-container">
+    <div class="eyebrow">05 · Regulatory Alignment</div>
+    <h1 class="title">Direct Alignment to CBN Cohort 2</h1>
+    <div class="rule"></div>
+    
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 20%;">CBN Objective</th>
+                    <th style="width: 40%;">Sandbox Requirement</th>
+                    <th style="width: 40%;">UmojaFlowOS Capability</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="category">VASP Track</td>
+                    <td><span class="requirement">Virtual Asset Testing:</span> Support controlled testing of virtual asset and stablecoin propositions.</td>
+                    <td>Non-custodial control plane for bounded VASP workflows, payments, and settlement testing.</td>
+                </tr>
+                <tr>
+                    <td class="category">Safeguards</td>
+                    <td><span class="requirement">Risk Mitigation:</span> Effective AML/CFT/CPF controls and appropriate consumer safeguards.</td>
+                    <td>Automated screening gates, hard transaction limits, and mandatory participant consent workflows.</td>
+                </tr>
+                <tr>
+                    <td class="category">Resilience</td>
+                    <td><span class="requirement">Operational Readiness:</span> Incident response, business continuity, and orderly wind-down.</td>
+                    <td>Fail-closed architecture, real-time monitoring, and SHA-bound rollback/recovery protocols.</td>
+                </tr>
+                <tr>
+                    <td class="category">Evidence</td>
+                    <td><span class="requirement">Evidence for Policy:</span> Generate evidence to inform future supervisory and policy decisions.</td>
+                    <td>Immutable WORM evidence store (E-01–E-09) providing machine-verifiable proof of every material action.</td>
+                </tr>
+                <tr>
+                    <td class="category">Pathway</td>
+                    <td><span class="requirement">Structured Transition:</span> Support transition from innovation testing to full regulatory compliance.</td>
+                    <td>Standardised control fabric designed to satisfy licensing readiness and ongoing supervisory reporting.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="footer">
+        <span>Source: CBN Regulatory Sandbox Framework & UmojaFlowOS Implementation</span>
+        <span>Alignment Mapping · Aug 2026</span>
+    </div>
+</div>
+</body>
+</html>

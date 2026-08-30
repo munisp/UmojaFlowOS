@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        .slide-container {
+            width: 1280px;
+            min-height: 720px;
+            background: #f5f1e8;
+            color: #17251f;
+            font-family: Arial, sans-serif;
+            padding: 54px 72px 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .eyebrow {
+            font-size: 14px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #167c69;
+            font-weight: 700;
+        }
+        .title {
+            font: 44px Georgia, serif;
+            color: #143d31;
+            margin-top: 16px;
+        }
+        .rule {
+            height: 5px;
+            width: 90px;
+            background: #18a58a;
+            margin-top: 18px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-top: 48px;
+        }
+        .value-block {
+            border-top: 1px solid #cbd4cd;
+            padding-top: 20px;
+        }
+        .label {
+            font-size: 12px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #167c69;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        .group-title {
+            font: 26px Georgia, serif;
+            color: #143d31;
+            margin-bottom: 16px;
+        }
+        .outcome-list {
+            list-style: none;
+        }
+        .outcome-item {
+            font-size: 17px;
+            line-height: 1.5;
+            color: #45534d;
+            margin-bottom: 12px;
+            display: flex;
+            gap: 12px;
+        }
+        .outcome-item::before {
+            content: "•";
+            color: #18a58a;
+            font-weight: bold;
+        }
+        .footer {
+            position: absolute;
+            left: 72px;
+            right: 72px;
+            bottom: 34px;
+            border-top: 1px solid #c8d1ca;
+            padding-top: 10px;
+            font-size: 12px;
+            color: #66736d;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="eyebrow">07 · Stakeholder Outcomes</div>
+        <h1 class="title">Value to CBN, Government, Partners, and Citizens</h1>
+        <div class="rule"></div>
+
+        <div class="grid">
+            <div class="value-block">
+                <div class="label">CBN & Regulators</div>
+                <h2 class="group-title">Visibility & Policy Learning</h2>
+                <ul class="outcome-list">
+                    <li class="outcome-item">Real-time oversight of experimental VASP flows and risk perimeters.</li>
+                    <li class="outcome-item">Machine-verifiable evidence to inform future licensing and policy decisions.</li>
+                </ul>
+            </div>
+            <div class="value-block">
+                <div class="label">Government & Ministries</div>
+                <h2 class="group-title">Sovereignty & Economic Impact</h2>
+                <ul class="outcome-list">
+                    <li class="outcome-item">Cloud-agnostic infrastructure ensuring national sovereignty over financial data.</li>
+                    <li class="outcome-item">Safer formalisation of digital finance to drive inclusion and fiscal visibility.</li>
+                </ul>
+            </div>
+            <div class="value-block">
+                <div class="label">Financial Partners</div>
+                <h2 class="group-title">Trust & Operational Efficiency</h2>
+                <ul class="outcome-list">
+                    <li class="outcome-item">Standardised control fabric for faster, safer regulatory sandbox participation.</li>
+                    <li class="outcome-item">Automated reconciliation and reporting to reduce compliance overhead.</li>
+                </ul>
+            </div>
+            <div class="value-block">
+                <div class="label">Citizens & Consumers</div>
+                <h2 class="group-title">Protection & Recourse</h2>
+                <ul class="outcome-list">
+                    <li class="outcome-item">Hard-coded transaction limits and mandatory consent to prevent harm.</li>
+                    <li class="outcome-item">Clearer recourse through documented incident response and audit trails.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="footer">
+            <span>UmojaFlowOS Stakeholder Value Matrix</span>
+            <span>Alignment to CBN Sandbox Mission</span>
+        </div>
+    </div>
+</body>
+</html>

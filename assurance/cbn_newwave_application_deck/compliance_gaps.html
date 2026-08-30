@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    .slide-container { width: 1280px; min-height: 720px; background: #f5f1e8; color: #17251f; font-family: Arial, sans-serif; padding: 54px 72px 0; position: relative; overflow: hidden; }
+    .eyebrow { font-size: 14px; letter-spacing: 3px; text-transform: uppercase; color: #167c69; font-weight: 700; }
+    .title { font: 44px Georgia, serif; color: #143d31; margin-top: 16px; }
+    .rule { height: 5px; width: 90px; background: #18a58a; margin-top: 18px; }
+    .table-container { margin-top: 40px; width: 100%; border-collapse: collapse; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th { background: #143d31; color: #f5f1e8; text-align: left; padding: 12px 15px; font-family: Georgia, serif; font-size: 18px; border: 1px solid #143d31; }
+    td { padding: 12px 15px; border: 1px solid #cbd4cd; font-size: 16px; line-height: 1.4; vertical-align: top; }
+    .severity { font-weight: 700; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; }
+    .critical { color: #b43a3a; }
+    .high { color: #b47d3a; }
+    .category { font-weight: 700; color: #167c69; }
+    .footer { position: absolute; left: 72px; right: 72px; bottom: 34px; border-top: 1px solid #c8d1ca; padding-top: 10px; font-size: 12px; color: #66736d; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+<div class="slide-container">
+    <div class="eyebrow">04 · Compliance Audit</div>
+    <div class="title">Critical Missing Evidence</div>
+    <div class="rule"></div>
+    
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 20%;">Category</th>
+                    <th style="width: 45%;">Missing Evidence Item</th>
+                    <th style="width: 15%;">Severity</th>
+                    <th style="width: 20%;">Primary Blocker</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="category">Identity & Legal</td>
+                    <td>Exact applying entity, Nigerian legal nexus, and CBN/SEC perimeter analysis.</td>
+                    <td class="severity critical">Critical</td>
+                    <td>Jurisdictional Standing</td>
+                </tr>
+                <tr>
+                    <td class="category">Governance</td>
+                    <td>Board approval, UBO/PEP declarations, and distinct officer appointments.</td>
+                    <td class="severity critical">Critical</td>
+                    <td>Accountability</td>
+                </tr>
+                <tr>
+                    <td class="category">Financials</td>
+                    <td>Audited statements (3 yrs), bank statements, and runway certification.</td>
+                    <td class="severity critical">Critical</td>
+                    <td>Capital Adequacy</td>
+                </tr>
+                <tr>
+                    <td class="category">Compliance</td>
+                    <td>AML/CFT/CPF manual, Travel Rule provider, and DPA safeguards.</td>
+                    <td class="severity critical">Critical</td>
+                    <td>Regulatory Gate</td>
+                </tr>
+                <tr>
+                    <td class="category">Operations</td>
+                    <td>Penetration test report, BCP/DR plans, and real staging evidence (E-01–E-09).</td>
+                    <td class="severity high">High</td>
+                    <td>Resilience</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="footer">
+        <span>Status: NO-GO for submission</span>
+        <span>Source: Newwave CBN Compliance Gap Audit (Aug 2026)</span>
+    </div>
+</div>
+</body>
+</html>

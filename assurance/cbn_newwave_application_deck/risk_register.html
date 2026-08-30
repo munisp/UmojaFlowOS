@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        .slide-container {
+            width: 1280px;
+            min-height: 720px;
+            background: #f5f1e8;
+            color: #17251f;
+            font-family: Arial, sans-serif;
+            padding: 54px 72px 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .eyebrow {
+            font-size: 14px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #167c69;
+            font-weight: 700;
+        }
+        .title {
+            font: 44px Georgia, serif;
+            color: #143d31;
+            margin-top: 16px;
+        }
+        .rule {
+            height: 5px;
+            width: 90px;
+            background: #18a58a;
+            margin-top: 18px;
+        }
+        .table-wrapper {
+            margin-top: 40px;
+            width: 100%;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 16px;
+        }
+        th {
+            text-align: left;
+            padding: 12px 15px;
+            background: #143d31;
+            color: #f5f1e8;
+            font-family: Georgia, serif;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 14px;
+        }
+        td {
+            /* Reduced inner padding to shrink row height without changing font size */
+            padding: 6px 15px;
+            border-bottom: 1px solid #cbd4cd;
+            vertical-align: top;
+            line-height: 1.4;
+        }
+        .sev-critical {
+            color: #b47d3a;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 12px;
+        }
+        .risk-name {
+            font-weight: 700;
+            color: #143d31;
+            display: block;
+            margin-bottom: 4px;
+        }
+        .footer {
+            position: absolute;
+            left: 72px;
+            right: 72px;
+            bottom: 34px;
+            border-top: 1px solid #c8d1ca;
+            padding-top: 10px;
+            font-size: 12px;
+            color: #66736d;
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="eyebrow">06 · Risk Management</div>
+        <div class="title">Regulatory Risk Register</div>
+        <div class="rule"></div>
+        
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 25%;">Risk Category</th>
+                        <th style="width: 10%;">Severity</th>
+                        <th style="width: 30%;">Trigger / Event</th>
+                        <th style="width: 35%;">Preventive Control</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="risk-name">Jurisdictional Nexus</span>Missing Nigerian legal entity or local connection.</td>
+                        <td><span class="sev-critical">Critical</span></td>
+                        <td>Entity or local representative cannot be evidenced to CBN.</td>
+                        <td>Freeze filing until counsel confirms perimeter and local partner.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="risk-name">Regulatory Perimeter</span>Unauthorised VASP activity (e.g. custody, issuance).</td>
+                        <td><span class="sev-critical">Critical</span></td>
+                        <td>Product performs activities outside approved sandbox scope.</td>
+                        <td>Strict product-boundary allowlist and fail-closed policy.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="risk-name">AML/CFT/CPF Failure</span>Screening outage or missed STR escalation.</td>
+                        <td><span class="sev-critical">Critical</span></td>
+                        <td>Sanctions hit missed or suspicious activity not reported.</td>
+                        <td>Automated screening gates and independent MLRO oversight.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="risk-name">Consumer Harm</span>Uncontrolled losses or test limit breach.</td>
+                        <td><span class="sev-critical">Critical</span></td>
+                        <td>Transaction value or volume exceeds approved Naira caps.</td>
+                        <td>Hard-coded system limits and mandatory volunteer consent.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="risk-name">Evidence Integrity</span>Corrupted or fabricated staging evidence.</td>
+                        <td><span class="sev-critical">High</span></td>
+                        <td>Artifact digest mismatch or duplicate approver subjects.</td>
+                        <td>SHA-256 manifest binding and WORM immutable storage.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="footer">
+            Source: UmojaFlowOS Compliance-Gap Audit · Status: NO-GO until Critical risks are mitigated
+        </div>
+    </div>
+</body>
+</html>

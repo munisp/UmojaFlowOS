@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        .slide-container {
+            width: 1280px;
+            min-height: 720px;
+            background: #f5f1e8;
+            color: #17251f;
+            font-family: Arial, sans-serif;
+            padding: 54px 72px 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .eyebrow {
+            font-size: 14px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #167c69;
+            font-weight: 700;
+        }
+        .title {
+            font: 44px Georgia, serif;
+            color: #143d31;
+            margin-top: 16px;
+        }
+        .rule {
+            height: 5px;
+            width: 90px;
+            background: #18a58a;
+            margin-top: 18px;
+        }
+        .section-h {
+            font: 24px Georgia, serif;
+            color: #143d31;
+            margin-top: 32px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #cbd4cd;
+            padding-bottom: 8px;
+        }
+        .roles-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+        .role-box {
+            border: 1px solid #cbd4cd;
+            padding: 16px;
+            background: rgba(22, 124, 105, 0.03);
+        }
+        .role-title {
+            font-weight: 700;
+            font-size: 16px;
+            color: #167c69;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        .role-desc {
+            font-size: 14px;
+            line-height: 1.4;
+            color: #45534d;
+        }
+        .principles-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-top: 30px;
+        }
+        .principle {
+            display: flex;
+            gap: 15px;
+        }
+        .icon {
+            font-size: 24px;
+            color: #167c69;
+            margin-top: 4px;
+        }
+        .p-text h4 {
+            font: 20px Georgia, serif;
+            color: #143d31;
+            margin-bottom: 6px;
+        }
+        .p-text p {
+            font-size: 15px;
+            line-height: 1.5;
+            color: #596660;
+        }
+        .footer {
+            position: absolute;
+            left: 72px;
+            right: 72px;
+            bottom: 34px;
+            border-top: 1px solid #c8d1ca;
+            padding-top: 10px;
+            font-size: 12px;
+            color: #66736d;
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="eyebrow">07 · Governance and Accountability</div>
+        <div class="title">Strict Dual-Control Framework</div>
+        <div class="rule"></div>
+
+        <div class="section-h">Mandatory Accountable Officer Roles</div>
+        <div class="roles-grid">
+            <div class="role-box">
+                <div class="role-title">Compliance / MLRO</div>
+                <div class="role-desc">Independent reporting to Board; AML/CFT/CPF oversight and STR/SAR filing authority.</div>
+            </div>
+            <div class="role-box">
+                <div class="role-title">Security Owner</div>
+                <div class="role-desc">Cybersecurity posture, mTLS/OIDC enforcement, and incident response leadership.</div>
+            </div>
+            <div class="role-box">
+                <div class="role-title">Product Risk</div>
+                <div class="role-desc">Test boundary enforcement, Naira-equivalent limit monitoring, and risk assessment.</div>
+            </div>
+            <div class="role-box">
+                <div class="role-title">Treasury / Custody</div>
+                <div class="role-desc">Asset reconciliation, payment release authority, and liquidity management.</div>
+            </div>
+            <div class="role-box">
+                <div class="role-title">Consumer Protection</div>
+                <div class="role-desc">Participant consent, complaint resolution, and wind-down/refund management.</div>
+            </div>
+            <div class="role-box">
+                <div class="role-title">Incident Commander</div>
+                <div class="role-desc">CBN liaison, material incident declaration, and recovery orchestration.</div>
+            </div>
+        </div>
+
+        <div class="principles-grid">
+            <div class="principle">
+                <div class="icon"><i class="fas fa-users-slash"></i></div>
+                <div class="p-text">
+                    <h4>Segregation of Duties</h4>
+                    <p>Mandatory distinct subjects for all 6 primary and 6 alternate roles (12 unique identities). Prohibited self-approval for all material actions.</p>
+                </div>
+            </div>
+            <div class="principle">
+                <div class="icon"><i class="fas fa-shield-check"></i></div>
+                <div class="p-text">
+                    <h4>Dual-Control Approvals</h4>
+                    <p>Release manifest requires 4 independent sign-offs (Release, Security, Compliance, Operations) bound to the specific commit SHA.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">Requirement: All roles must be evidenced by appointment letters, CVs, and fit-and-proper declarations.</div>
+    </div>
+</body>
+</html>

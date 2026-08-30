@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    .slide-container {
+        width: 1280px;
+        min-height: 720px;
+        background: #f5f1e8;
+        color: #17251f;
+        font-family: Arial, sans-serif;
+        padding: 54px 72px 0;
+        position: relative;
+        overflow: hidden;
+    }
+    .eyebrow {
+        font-size: 14px;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: #167c69;
+        font-weight: 700;
+    }
+    .title {
+        font-family: Georgia, serif;
+        font-size: 44px;
+        color: #143d31;
+        margin-top: 16px;
+    }
+    .rule {
+        width: 90px;
+        height: 5px;
+        background: #18a58a;
+        margin-top: 18px;
+    }
+    .content-grid {
+        display: grid;
+        grid-template-columns: 450px 1fr;
+        gap: 60px;
+        margin-top: 48px;
+    }
+    .stack {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .layer {
+        padding: 20px;
+        border: 1px solid #cbd4cd;
+        background: #eef0e8;
+        position: relative;
+    }
+    .layer-name {
+        font-weight: 700;
+        font-size: 12px;
+        color: #167c69;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 4px;
+    }
+    .layer-desc {
+        font-family: Georgia, serif;
+        font-size: 20px;
+        color: #143d31;
+    }
+    .value-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    .value-table th {
+        text-align: left;
+        padding: 12px 0;
+        border-bottom: 2px solid #167c69;
+        font-family: Georgia, serif;
+        font-size: 22px;
+        color: #143d31;
+    }
+    .value-table td {
+        padding: 20px 0;
+        border-bottom: 1px solid #cbd4cd;
+        vertical-align: top;
+    }
+    .stakeholder {
+        font-weight: 700;
+        color: #167c69;
+        font-size: 16px;
+        text-transform: uppercase;
+        width: 180px;
+    }
+    .benefit {
+        font-size: 17px;
+        line-height: 1.45;
+        color: #45534d;
+    }
+    .footer {
+        position: absolute;
+        left: 72px;
+        right: 72px;
+        bottom: 34px;
+        border-top: 1px solid #c8d1ca;
+        padding-top: 10px;
+        font-size: 12px;
+        color: #66736d;
+        display: flex;
+        justify-content: space-between;
+    }
+</style>
+</head>
+<body>
+<div class="slide-container">
+    <div class="eyebrow">06 · Technology Architecture</div>
+    <h1 class="title">Technology Prowess Without the Jargon</h1>
+    <div class="rule"></div>
+
+    <div class="content-grid">
+        <div class="stack">
+            <div class="layer">
+                <div class="layer-name">Assurance Layer</div>
+                <div class="layer-desc">Immutable Evidence & Reporting</div>
+            </div>
+            <div class="layer">
+                <div class="layer-name">Control Layer</div>
+                <div class="layer-desc">Identity & Dual-Control Authority</div>
+            </div>
+            <div class="layer">
+                <div class="layer-name">Ledger Layer</div>
+                <div class="layer-desc">High-Performance Financial Truth</div>
+            </div>
+            <div class="layer">
+                <div class="layer-name">Foundation</div>
+                <div class="layer-desc">Open-Source & Cloud-Agnostic</div>
+            </div>
+        </div>
+
+        <div class="value-section">
+            <table class="value-table">
+                <thead>
+                    <tr>
+                        <th colspan="2">Value to the Ecosystem</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="stakeholder">CBN & Regulators</td>
+                        <td class="benefit">Full transparency through independent evidence verification. No "black boxes"—every rule is inspectable and enforceable.</td>
+                    </tr>
+                    <tr>
+                        <td class="stakeholder">Government</td>
+                        <td class="benefit">National sovereignty over financial data. Cloud-agnostic design prevents vendor lock-in and ensures long-term resilience.</td>
+                    </tr>
+                    <tr>
+                        <td class="stakeholder">Citizens</td>
+                        <td class="benefit">Stronger protection of personal data and assets. Fail-closed security means the system stops before a mistake becomes a loss.</td>
+                    </tr>
+                    <tr>
+                        <td class="stakeholder">Partners</td>
+                        <td class="benefit">Faster time-to-market with pre-built compliance gates. Reduced operational risk through automated reconciliation.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="footer">
+        <span>Stack: PostgreSQL · TigerBeetle · Keycloak · OpenSearch</span>
+        <span>Built for National-Scale Resilience</span>
+    </div>
+</div>
+</body>
+</html>

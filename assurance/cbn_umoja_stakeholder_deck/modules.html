@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        .slide-container {
+            width: 1280px;
+            min-height: 720px;
+            background: #f5f1e8;
+            color: #17251f;
+            font-family: Arial, sans-serif;
+            padding: 54px 72px 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .eyebrow {
+            font-size: 14px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #167c69;
+            font-weight: 700;
+        }
+        .title {
+            font: 44px Georgia, serif;
+            color: #143d31;
+            margin-top: 16px;
+        }
+        .rule {
+            height: 5px;
+            width: 90px;
+            background: #18a58a;
+            margin-top: 18px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 24px;
+            margin-top: 42px;
+        }
+        .module-box {
+            border-top: 3px solid #167c69;
+            padding-top: 16px;
+            min-height: 180px;
+        }
+        .module-h {
+            font: 22px Georgia, serif;
+            color: #143d31;
+            margin-bottom: 10px;
+        }
+        .module-p {
+            font-size: 15px;
+            line-height: 1.45;
+            color: #596660;
+        }
+        .footer {
+            position: absolute;
+            left: 72px;
+            right: 72px;
+            bottom: 34px;
+            border-top: 1px solid #c8d1ca;
+            padding-top: 10px;
+            font-size: 12px;
+            color: #66736d;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="eyebrow">03 · Platform Capabilities</div>
+        <div class="title">What the platform does</div>
+        <div class="rule"></div>
+        
+        <div class="grid">
+            <div class="module-box">
+                <h3 class="module-h">Control Plane</h3>
+                <p class="module-p">The "brain" of the system that manages user authority, session security, and coordinates all stakeholder workflows.</p>
+            </div>
+            <div class="module-box">
+                <h3 class="module-h">Payment Engine</h3>
+                <p class="module-p">Validates every transaction against strict rules and ensures value only moves when all conditions are met.</p>
+            </div>
+            <div class="module-box">
+                <h3 class="module-h">Ledger Gateway</h3>
+                <p class="module-p">Maintains the "financial truth" by recording every event in a high-speed, permanent, and balanced double-entry ledger.</p>
+            </div>
+            <div class="module-box">
+                <h3 class="module-h">Risk & Compliance</h3>
+                <p class="module-p">Automated screening for AML/CFT, sanctions, and Travel Rule data to block illicit activity in real-time.</p>
+            </div>
+            <div class="module-box">
+                <h3 class="module-h">Reporting & Analytics</h3>
+                <p class="module-p">Transforms raw data into usable insights for regulators, providing a clear view of market impact and trends.</p>
+            </div>
+            <div class="module-box">
+                <h3 class="module-h">Document Intel</h3>
+                <p class="module-p">Verifies the authenticity of identity documents and detects potential deepfakes or fraudulent submissions.</p>
+            </div>
+            <div class="module-box">
+                <h3 class="module-h">Retention Gateway</h3>
+                <p class="module-p">Enforces data privacy by ensuring records are kept only as long as required and deleted securely when authorised.</p>
+            </div>
+            <div class="module-box">
+                <h3 class="module-h">Operations Hub</h3>
+                <p class="module-p">Monitors system health, manages incidents, and provides the tools for controlled rollback and recovery.</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <span>UmojaFlowOS Module Architecture</span>
+            <span>Non-Technical Functional Summary</span>
+        </div>
+    </div>
+</body>
+</html>
