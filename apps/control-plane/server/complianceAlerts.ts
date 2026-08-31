@@ -10,6 +10,7 @@
  */
 
 import { Pool } from "pg";
+import { registerTestResource } from "./testResourceRegistry";
 
 type AlertActor = { subject: string; role: string };
 
@@ -32,14 +33,16 @@ let pool: Pool | null = null;
 
 function getPool(): Pool {
   if (!pool) {
-    pool = process.env.POSTGRES_DATABASE_URL
-      ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL, max: 4 })
-      : new Pool({
-          host: "/var/run/postgresql",
-          database: process.env.POSTGRES_TEST_DATABASE ?? "umoja_test",
-          user: process.env.POSTGRES_LOCAL_USER ?? "ubuntu",
-          max: 4,
-        });
+    pool = registerTestResource(
+      process.env.POSTGRES_DATABASE_URL
+        ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL, max: 4 })
+        : new Pool({
+            host: "/var/run/postgresql",
+            database: process.env.POSTGRES_TEST_DATABASE ?? "umoja_test",
+            user: process.env.POSTGRES_LOCAL_USER ?? "ubuntu",
+            max: 4,
+          }),
+    );
   }
   return pool;
 }

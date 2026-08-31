@@ -15,6 +15,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import type { PoolClient } from "pg";
+import { registerTestResource } from "./testResourceRegistry";
 
 export type AlertActor = { subject: string; role: string };
 
@@ -23,13 +24,15 @@ export type Corridor = "NIGERIA_NGN" | "KENYA_KES" | "SOUTH_AFRICA_ZAR";
 let pool: Pool | null = null;
 function getPool(): Pool {
   if (!pool) {
-    pool = process.env.POSTGRES_DATABASE_URL
-      ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL })
-      : new Pool({
-          host: "/var/run/postgresql",
-          database: process.env.POSTGRES_TEST_DATABASE ?? "umoja_test",
-          user: process.env.POSTGRES_LOCAL_USER ?? "ubuntu",
-        });
+    pool = registerTestResource(
+      process.env.POSTGRES_DATABASE_URL
+        ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL })
+        : new Pool({
+            host: "/var/run/postgresql",
+            database: process.env.POSTGRES_TEST_DATABASE ?? "umoja_test",
+            user: process.env.POSTGRES_LOCAL_USER ?? "ubuntu",
+          }),
+    );
   }
   return pool;
 }

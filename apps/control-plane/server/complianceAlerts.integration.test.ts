@@ -11,6 +11,7 @@
 import { describe, expect, it } from "vitest";
 import { Pool } from "pg";
 import { postgresTestConnectionConfig } from "./testPostgres";
+import { registerTestResource } from "./testResourceRegistry";
 import {
   raisePostgresComplianceAlert,
   acknowledgePostgresComplianceAlert,
@@ -22,7 +23,7 @@ import {
 const RUN = process.env.POSTGRES_INTEGRATION_TEST === "1";
 const suite = RUN ? describe : describe.skip;
 
-const pool = new Pool({ ...postgresTestConnectionConfig(), max: 3 });
+const pool = registerTestResource(new Pool({ ...postgresTestConnectionConfig(), max: 3 }));
 
 const officer = { subject: "regression-alert-officer", role: "compliance_officer" };
 const admin = { subject: "regression-alert-admin", role: "admin" };

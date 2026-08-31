@@ -1,16 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
+import { registerTestResource } from "./testResourceRegistry";
 
 let pool: Pool | undefined;
 function getPool() {
   if (!pool) {
-    pool = process.env.POSTGRES_DATABASE_URL
-      ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL })
-      : new Pool({
-          host: "/var/run/postgresql",
-          database: process.env.POSTGRES_TEST_DATABASE ?? "umoja_test",
-          user: process.env.POSTGRES_LOCAL_USER ?? "ubuntu",
-        });
+    pool = registerTestResource(
+      process.env.POSTGRES_DATABASE_URL
+        ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL })
+        : new Pool({
+            host: "/var/run/postgresql",
+            database: process.env.POSTGRES_TEST_DATABASE ?? "umoja_test",
+            user: process.env.POSTGRES_LOCAL_USER ?? "ubuntu",
+          }),
+    );
   }
   return pool;
 }
