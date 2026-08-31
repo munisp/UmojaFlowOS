@@ -42,9 +42,38 @@ fetch() {
   fi
 }
 
+fetch_verified() {
+  local artifact_url="$1" artifact_path="$2" checksum_url="$3" artifact_name="$4"
+  local checksum_path="${artifact_path}.sha256"
+  fetch "$artifact_url" "$artifact_path"
+  local checksum_tmp="${checksum_path}.tmp.$$"
+  curl --fail --location --retry 4 --retry-delay 2 --proto '=https' --tlsv1.2 -o "$checksum_tmp" "$checksum_url"
+  mv -f "$checksum_tmp" "$checksum_path"
+
+  local expected actual
+  expected="$(awk -v wanted="$artifact_name" '
+    $1 ~ /^[[:xdigit:]]{64}$/ && ($2 == wanted || $NF == wanted) { print tolower($1); exit }
+  ' "$checksum_path")"
+  if [[ -z "$expected" ]]; then
+    expected="$(tr -d "[:space:]" < "$checksum_path")"
+  fi
+  [[ "$expected" =~ ^[[:xdigit:]]{64}$ ]] || {
+    echo "unable to parse SHA-256 for ${artifact_name} from ${checksum_url}" >&2
+    exit 1
+  }
+  actual="$(sha256sum "$artifact_path" | awk '{print tolower($1)}')"
+  [[ "$actual" == "${expected,,}" ]] || {
+    echo "SHA-256 mismatch for ${artifact_name}: expected ${expected}, got ${actual}" >&2
+    rm -f "$artifact_path"
+    exit 1
+  }
+  printf 'verified SHA-256  %s  %s\n' "$artifact_name" "$actual"
+}
+
 install_go() {
   local archive="${CACHE_DIR}/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
-  fetch "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz" "$archive"
+  local name="go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
+  fetch_verified "https://go.dev/dl/${name}" "$archive" "https://dl.google.com/go/${name}.sha256" "$name"
   rm -rf "${ROOT_DIR}/.toolchain/go"
   mkdir -p "${ROOT_DIR}/.toolchain/go"
   tar -xzf "$archive" -C "${ROOT_DIR}/.toolchain"
@@ -55,7 +84,7 @@ install_go() {
 install_github_tarball() {
   local repo="$1" version="$2" asset="$3" binary="$4"
   local archive="${CACHE_DIR}/${binary}-${version}.tar.gz"
-  fetch "https://github.com/${repo}/releases/download/v${version}/${asset}" "$archive"
+  fetch_verified "https://github.com/${repo}/releases/download/v${version}/${asset}" "$archive" "https://github.com/${repo}/releases/download/v${version}/$(basename "${asset%%.tar.gz}")-checksums.txt" "${asset}"
   tar -xzf "$archive" -C "${CACHE_DIR}"
   local candidate
   candidate="$(find "${CACHE_DIR}" -type f -name "$binary" -perm -u+x | sort | tail -1)"
@@ -65,33 +94,38 @@ install_github_tarball() {
 
 install_helm() {
   local archive="${CACHE_DIR}/helm-v${HELM_VERSION}-linux-${RELEASE_ARCH}.tar.gz"
-  fetch "https://get.helm.sh/helm-v${HELM_VERSION}-linux-${RELEASE_ARCH}.tar.gz" "$archive"
+  local name="helm-v${HELM_VERSION}-linux-${RELEASE_ARCH}.tar.gz"
+  fetch_verified "https://get.helm.sh/${name}" "$archive" "https://get.helm.sh/${name}.sha256sum" "$name"
   tar -xzf "$archive" -C "${CACHE_DIR}"
   install -m 0755 "${CACHE_DIR}/linux-${RELEASE_ARCH}/helm" "${BIN_DIR}/helm"
 }
 
 install_kubectl() {
-  fetch "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${KUBE_ARCH}/kubectl" "${BIN_DIR}/kubectl"
+  local path="https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${KUBE_ARCH}/kubectl"
+  fetch_verified "$path" "${BIN_DIR}/kubectl" "${path}.sha256" "kubectl"
   chmod 0755 "${BIN_DIR}/kubectl"
 }
 
 install_prometheus() {
   local archive="${CACHE_DIR}/prometheus-${PROMETHEUS_VERSION}.linux-${RELEASE_ARCH}.tar.gz"
-  fetch "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-${RELEASE_ARCH}.tar.gz" "$archive"
+  local name="prometheus-${PROMETHEUS_VERSION}.linux-${RELEASE_ARCH}.tar.gz"
+  fetch_verified "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/${name}" "$archive" "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/sha256sums.txt" "$name"
   tar -xzf "$archive" -C "${CACHE_DIR}"
   install -m 0755 "${CACHE_DIR}/prometheus-${PROMETHEUS_VERSION}.linux-${RELEASE_ARCH}/promtool" "${BIN_DIR}/promtool"
 }
 
 install_alertmanager() {
   local archive="${CACHE_DIR}/alertmanager-${ALERTMANAGER_VERSION}.linux-${RELEASE_ARCH}.tar.gz"
-  fetch "https://github.com/prometheus/alertmanager/releases/download/v${ALERTMANAGER_VERSION}/alertmanager-${ALERTMANAGER_VERSION}.linux-${RELEASE_ARCH}.tar.gz" "$archive"
+  local name="alertmanager-${ALERTMANAGER_VERSION}.linux-${RELEASE_ARCH}.tar.gz"
+  fetch_verified "https://github.com/prometheus/alertmanager/releases/download/v${ALERTMANAGER_VERSION}/${name}" "$archive" "https://github.com/prometheus/alertmanager/releases/download/v${ALERTMANAGER_VERSION}/sha256sums.txt" "$name"
   tar -xzf "$archive" -C "${CACHE_DIR}"
   install -m 0755 "${CACHE_DIR}/alertmanager-${ALERTMANAGER_VERSION}.linux-${RELEASE_ARCH}/amtool" "${BIN_DIR}/amtool"
 }
 
 install_k6() {
   local archive="${CACHE_DIR}/k6-v${K6_VERSION}-linux-${RELEASE_ARCH}.tar.gz"
-  fetch "https://github.com/grafana/k6/releases/download/v${K6_VERSION}/k6-v${K6_VERSION}-linux-${RELEASE_ARCH}.tar.gz" "$archive"
+  local name="k6-v${K6_VERSION}-linux-${RELEASE_ARCH}.tar.gz"
+  fetch_verified "https://github.com/grafana/k6/releases/download/v${K6_VERSION}/${name}" "$archive" "https://github.com/grafana/k6/releases/download/v${K6_VERSION}/k6-v${K6_VERSION}-checksums.txt" "$name"
   tar -xzf "$archive" -C "${CACHE_DIR}"
   local candidate
   candidate="$(find "${CACHE_DIR}" -type f -name k6 -perm -u+x | sort | tail -1)"
@@ -101,7 +135,8 @@ install_k6() {
 
 install_act() {
   local archive="${CACHE_DIR}/act_Linux_${ACT_ARCH}.tar.gz"
-  fetch "https://github.com/nektos/act/releases/download/v${ACT_VERSION}/act_Linux_${ACT_ARCH}.tar.gz" "$archive"
+  local name="act_Linux_${ACT_ARCH}.tar.gz"
+  fetch_verified "https://github.com/nektos/act/releases/download/v${ACT_VERSION}/${name}" "$archive" "https://github.com/nektos/act/releases/download/v${ACT_VERSION}/checksums.txt" "$name"
   tar -xzf "$archive" -C "${CACHE_DIR}"
   install -m 0755 "${CACHE_DIR}/act" "${BIN_DIR}/act"
 }
@@ -116,7 +151,8 @@ install_act
 
 if ! command -v rustup >/dev/null 2>&1; then
   rustup_init="${CACHE_DIR}/rustup-init"
-  fetch "https://static.rust-lang.org/rustup/dist/${RUST_HOST}/rustup-init" "$rustup_init"
+  rustup_url="https://static.rust-lang.org/rustup/dist/${RUST_HOST}/rustup-init"
+  fetch_verified "$rustup_url" "$rustup_init" "${rustup_url}.sha256" "rustup-init"
   chmod 0755 "$rustup_init"
   "$rustup_init" -y --default-toolchain none --profile minimal
   export PATH="${HOME}/.cargo/bin:${PATH}"
