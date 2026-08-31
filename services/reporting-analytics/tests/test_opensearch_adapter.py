@@ -58,7 +58,8 @@ def search_endpoint():
         yield f"http://127.0.0.1:{server.server_port}"
     finally:
         server.shutdown()
-        thread.join()
+        thread.join(timeout=5)
+        server.server_close()
 
 
 def writer(endpoint: str) -> OpenSearchProjectionWriter:

@@ -56,20 +56,21 @@ def test_analytics_routes_are_explicitly_unavailable_without_deployment_configur
         "UMOJA_GEOLIBRE_VIEWER_URL",
     ):
         monkeypatch.delenv(key, raising=False)
-    client = TestClient(app)
-    bronze = client.post("/v1/lakehouse/bronze", json={"dataset": "service-health", "records": []})
-    sedona = client.post(
-        "/v1/geospatial/sedona/submit",
-        json={"input_uri": "s3://bucket/in", "output_uri": "s3://bucket/out", "metric_name": "payment_count", "h3_resolution": 7},
-    )
-    geolibre = client.post("/v1/geospatial/geolibre-project", json={"project_name": "Kenya aggregate", "aggregate_object_key": "silver/geospatial-aggregates/kenya.geojson"})
-    assert (bronze.status_code, sedona.status_code, geolibre.status_code) == (503, 503, 503)
-    assert "configured" in bronze.json()["detail"]
-    assert "configured" in sedona.json()["detail"]
+    with TestClient(app) as client:
+        bronze = client.post("/v1/lakehouse/bronze", json={"dataset": "service-health", "records": []})
+        sedona = client.post(
+            "/v1/geospatial/sedona/submit",
+            json={"input_uri": "s3://bucket/in", "output_uri": "s3://bucket/out", "metric_name": "payment_count", "h3_resolution": 7},
+        )
+        geolibre = client.post("/v1/geospatial/geolibre-project", json={"project_name": "Kenya aggregate", "aggregate_object_key": "silver/geospatial-aggregates/kenya.geojson"})
+        assert (bronze.status_code, sedona.status_code, geolibre.status_code) == (503, 503, 503)
+        assert "configured" in bronze.json()["detail"]
+        assert "configured" in sedona.json()["detail"]
 
 
 def test_configured_routes_use_real_protocol_requests_and_return_aggregate_only_results(monkeypatch) -> None:
     server, thread, endpoint = live_protocol_endpoint()
+    client = None
     try:
         monkeypatch.setenv("UMOJA_LAKEHOUSE_ENDPOINT", endpoint)
         monkeypatch.setenv("UMOJA_LAKEHOUSE_BUCKET", "umojaflowos-lakehouse")
@@ -111,5 +112,8 @@ def test_configured_routes_use_real_protocol_requests_and_return_aggregate_only_
         assert any(method == "PUT" and "/umojaflowos-lakehouse/bronze/service-health/" in path for method, path in methods_paths)
         assert ("POST", "/batches") in methods_paths
     finally:
+        if client is not None:
+            client.close()
         server.shutdown()
-        thread.join()
+        thread.join(timeout=5)
+        server.server_close()

@@ -66,7 +66,8 @@ def protocol_endpoint():
         yield f"http://127.0.0.1:{server.server_port}"
     finally:
         server.shutdown()
-        thread.join()
+        thread.join(timeout=5)
+        server.server_close()
 
 
 def test_lakehouse_writer_signs_and_conditionally_puts_redacted_evidence(protocol_endpoint: str) -> None:
