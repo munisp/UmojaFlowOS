@@ -106,6 +106,8 @@ GRANT INSERT, UPDATE ON TABLE
   auditor_engagement_records,
   external_stakeholder_assignments,
   provider_send_requests,
+  provider_unknown_reconciliation,
+  provider_reconciliation_decision,
   vasp_readiness_assurance_items,
   operator_access_requests
 TO :"app_role_ident";
