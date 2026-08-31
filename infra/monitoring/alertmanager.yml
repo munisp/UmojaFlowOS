@@ -1,0 +1,54 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: umoja-signer-warning-slack
+  group_by: [alertname, service, component, environment]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - service="payment-engine"
+        - component="mojaloop-signer"
+        - severity="critical"
+      receiver: umoja-signer-critical-pagerduty
+      continue: false
+    - matchers:
+        - service="payment-engine"
+        - component="mojaloop-signer"
+        - severity="warning"
+      receiver: umoja-signer-warning-slack
+      continue: false
+
+receivers:
+  - name: umoja-signer-critical-pagerduty
+    pagerduty_configs:
+      - routing_key_file: /etc/alertmanager/secrets/pagerduty-routing-key
+        severity: critical
+        class: mojaloop-signer
+        component: payment-engine
+        group: mojaloop-signer
+        description: '{{ .CommonAnnotations.summary }}'
+        details:
+          alertname: '{{ .CommonLabels.alertname }}'
+          service: '{{ .CommonLabels.service }}'
+          component: '{{ .CommonLabels.component }}'
+          environment: '{{ .CommonLabels.environment }}'
+          runbook: '{{ .CommonAnnotations.runbook }}'
+          description: '{{ .CommonAnnotations.description }}'
+
+  - name: umoja-signer-warning-slack
+    slack_configs:
+      - api_url_file: /etc/alertmanager/secrets/slack-webhook-url
+        channel: '#umoja-signer-alerts'
+        username: alertmanager
+        send_resolved: true
+        title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+        text: >-
+          {{ .CommonAnnotations.summary }}
+          service={{ .CommonLabels.service }}
+          component={{ .CommonLabels.component }}
+          severity={{ .CommonLabels.severity }}
+          runbook={{ .CommonAnnotations.runbook }}
+          {{ .CommonAnnotations.description }}

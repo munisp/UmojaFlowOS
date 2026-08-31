@@ -1,0 +1,57 @@
+name: monitoring-validation
+
+on:
+  pull_request:
+    paths:
+      - "infra/monitoring/**"
+      - ".github/workflows/monitoring-validation.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/monitoring/**"
+      - ".github/workflows/monitoring-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-monitoring:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Prometheus and Alertmanager tooling
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/prometheus.tar.gz https://github.com/prometheus/prometheus/releases/download/v2.55.1/prometheus-2.55.1.linux-amd64.tar.gz
+          tar -xzf /tmp/prometheus.tar.gz -C /tmp
+          curl -fsSL -o /tmp/alertmanager.tar.gz https://github.com/prometheus/alertmanager/releases/download/v0.27.0/alertmanager-0.27.0.linux-amd64.tar.gz
+          tar -xzf /tmp/alertmanager.tar.gz -C /tmp
+
+      - name: Validate Prometheus alert rule syntax
+        run: /tmp/prometheus-2.55.1.linux-amd64/promtool check rules infra/monitoring/mojaloop-signer-alerts.yml
+
+      - name: Test Prometheus alert expressions
+        working-directory: infra/monitoring
+        run: /tmp/prometheus-2.55.1.linux-amd64/promtool test rules mojaloop-signer-alerts.test.yml
+
+      - name: Validate Alertmanager routing configuration
+        run: /tmp/alertmanager-0.27.0.linux-amd64/amtool check-config infra/monitoring/alertmanager.yml
+
+      - name: Validate dashboard JSON and monitoring YAML
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          import yaml
+
+          dashboard = json.loads(Path("infra/monitoring/grafana/dashboards/mojaloop-signer-observability.json").read_text())
+          assert dashboard["uid"] == "umoja-mojaloop-signer"
+          assert len(dashboard["panels"]) >= 5
+          for panel in dashboard["panels"]:
+              assert panel["datasource"]["uid"] == "prometheus"
+          yaml.safe_load(Path("infra/monitoring/alertmanager.yml").read_text())
+          yaml.safe_load(Path("infra/monitoring/prometheus.yml").read_text())
+          print("monitoring assets: valid")
+          PY

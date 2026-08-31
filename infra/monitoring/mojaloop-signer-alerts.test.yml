@@ -1,0 +1,56 @@
+rule_files:
+  - mojaloop-signer-alerts.yml
+
+evaluation_interval: 30s
+
+tests:
+  - interval: 30s
+    input_series:
+      - series: 'umoja_signer_retry_exhausted_total{service="payment-engine",component="mojaloop-signer"}'
+        values: '0 0 0 0 0 0 1 1 1 1 1 1 1'
+      - series: 'umoja_signer_retries_total{service="payment-engine",component="mojaloop-signer"}'
+        values: '0 0 0 1 2 3 4 5 6 7 8 9 10'
+      - series: 'umoja_signer_attempts_total{service="payment-engine",component="mojaloop-signer"}'
+        values: '0 1 2 4 6 8 10 12 14 16 18 20 22'
+      - series: 'umoja_signer_non_retryable_errors_total{service="payment-engine",component="mojaloop-signer"}'
+        values: '0 0 0 0 1 1 1 2 2 2 3 3 3'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: UmojaMojaloopSignerRetryExhausted
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              component: mojaloop-signer
+              service: payment-engine
+            exp_annotations:
+              summary: Mojaloop signer retry budget exhausted
+              description: A delegated HSM/FSPIOP signing request exhausted its bounded retry budget. Mojaloop execution must remain fail-closed until the signer service is healthy.
+              runbook: https://github.com/munisp/UmojaFlowOS/blob/main/docs/mojaloop_signer_operations.md
+              runbook_url: https://github.com/munisp/UmojaFlowOS/blob/main/docs/mojaloop_signer_operations.md
+              dashboard_url: https://github.com/munisp/UmojaFlowOS/blob/main/infra/monitoring/grafana/dashboards/mojaloop-signer-observability.json
+      - eval_time: 5m30s
+        alertname: UmojaMojaloopSignerRetryPressure
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              component: mojaloop-signer
+              service: payment-engine
+            exp_annotations:
+              summary: Elevated Mojaloop signer retry pressure
+              description: At least 20 percent of recent signer attempts are retries, indicating degraded HSM or signing-service health.
+              runbook: https://github.com/munisp/UmojaFlowOS/blob/main/docs/mojaloop_signer_operations.md
+              runbook_url: https://github.com/munisp/UmojaFlowOS/blob/main/docs/mojaloop_signer_operations.md
+              dashboard_url: https://github.com/munisp/UmojaFlowOS/blob/main/infra/monitoring/grafana/dashboards/mojaloop-signer-observability.json
+      - eval_time: 6m
+        alertname: UmojaMojaloopSignerNonRetryableBurst
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              component: mojaloop-signer
+              service: payment-engine
+            exp_annotations:
+              summary: Mojaloop signer non-retryable error burst
+              description: Multiple signer requests failed without retry because the errors were classified as authorization, validation, or configuration failures.
+              runbook: https://github.com/munisp/UmojaFlowOS/blob/main/docs/mojaloop_signer_operations.md
+              runbook_url: https://github.com/munisp/UmojaFlowOS/blob/main/docs/mojaloop_signer_operations.md
+              dashboard_url: https://github.com/munisp/UmojaFlowOS/blob/main/infra/monitoring/grafana/dashboards/mojaloop-signer-observability.json
