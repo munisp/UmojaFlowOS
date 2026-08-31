@@ -104,28 +104,41 @@ class OllamaVisualAdapter:
         except (httpx.HTTPError, ValueError) as exc:
             raise OllamaUnavailable(f"Ollama request failed: {exc}") from exc
 
-        model_info_body = model_info.json()
-        digest = model_info_body.get("details", {}).get("digest") or model_info_body.get("digest")
-        if not isinstance(digest, str):
-            tagged_models = tags.json().get("models")
-            if isinstance(tagged_models, list):
-                for tagged_model in tagged_models:
-                    if not isinstance(tagged_model, dict):
-                        continue
-                    if tagged_model.get("name") == self.model or tagged_model.get("model") == self.model:
-                        candidate = tagged_model.get("digest")
-                        if isinstance(candidate, str):
-                            digest = candidate
-                            break
-        if not isinstance(digest, str) or digest not in self.allowed_digests:
-            raise OllamaUnavailable("Ollama model digest is absent or not allowlisted")
-        content = chat.json().get("message", {}).get("content")
-        if not isinstance(content, str):
-            raise OllamaUnavailable("Ollama returned no structured analysis content")
         try:
-            assessment = OllamaVisualAssessment.model_validate_json(content)
-        except ValueError as exc:
-            raise OllamaUnavailable(f"Ollama response failed strict schema validation: {exc}") from exc
+            model_info_body = model_info.json()
+            if not isinstance(model_info_body, dict):
+                raise ValueError("model metadata must be a JSON object")
+            digest = model_info_body.get("details", {}).get("digest") or model_info_body.get("digest")
+            if not isinstance(digest, str):
+                tagged_body = tags.json()
+                if not isinstance(tagged_body, dict):
+                    raise ValueError("tag inventory must be a JSON object")
+                tagged_models = tagged_body.get("models")
+                if isinstance(tagged_models, list):
+                    for tagged_model in tagged_models:
+                        if not isinstance(tagged_model, dict):
+                            continue
+                        if tagged_model.get("name") == self.model or tagged_model.get("model") == self.model:
+                            candidate = tagged_model.get("digest")
+                            if isinstance(candidate, str):
+                                digest = candidate
+                                break
+            if not isinstance(digest, str) or digest not in self.allowed_digests:
+                raise OllamaUnavailable("Ollama model digest is absent or not allowlisted")
+            chat_body = chat.json()
+            if not isinstance(chat_body, dict):
+                raise ValueError("chat response must be a JSON object")
+            content = chat_body.get("message", {}).get("content")
+            if not isinstance(content, str):
+                raise OllamaUnavailable("Ollama returned no structured analysis content")
+            try:
+                assessment = OllamaVisualAssessment.model_validate_json(content)
+            except ValueError as exc:
+                raise OllamaUnavailable(f"Ollama response failed strict schema validation: {exc}") from exc
+        except OllamaUnavailable:
+            raise
+        except (ValueError, TypeError, AttributeError, KeyError) as exc:
+            raise OllamaUnavailable(f"Ollama response JSON was malformed: {exc}") from exc
         return assessment, digest
 
 
