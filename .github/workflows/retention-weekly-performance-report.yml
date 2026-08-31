@@ -60,7 +60,7 @@ jobs:
       - name: Add report to job summary
         run: cat "$RUNNER_TEMP/retention-weekly-report/weekly-summary.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload sanitized performance report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: retention-weekly-performance-${{ github.run_id }}
           path: ${{ runner.temp }}/retention-weekly-report/

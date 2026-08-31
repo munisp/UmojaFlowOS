@@ -91,7 +91,7 @@ jobs:
             --repo .
 
       - name: Upload cryptographic verification outputs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-cryptography-${{ github.sha }}
           path: ${{ runner.temp }}/release-cryptography
@@ -99,7 +99,7 @@ jobs:
           retention-days: 2555
 
       - name: Upload validated evidence manifest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: production-release-evidence-${{ github.sha }}
           path: ${{ inputs.evidence_manifest }}
