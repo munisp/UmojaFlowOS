@@ -2,6 +2,8 @@ package multirail
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -54,5 +56,78 @@ func TestIdempotencyReturnsOriginalResult(t *testing.T) {
 	b, _ := c.Execute(context.Background(), in, p, s)
 	if a != b || p.calls != 1 {
 		t.Fatalf("a=%+v b=%+v calls=%d", a, b, p.calls)
+	}
+}
+
+type singleFlightRail struct {
+	started chan struct{}
+	release chan struct{}
+	calls   atomic.Int64
+}
+
+func (r *singleFlightRail) Name() string { return "yellow_card" }
+func (r *singleFlightRail) Submit(context.Context, Intent) (Submission, error) {
+	r.calls.Add(1)
+	select {
+	case r.started <- struct{}{}:
+	default:
+	}
+	<-r.release
+	return Submission{Status: Submitted, ProviderRef: "single-flight-provider-ref"}, nil
+}
+func (r *singleFlightRail) Query(context.Context, Intent) (Submission, error) {
+	return Submission{}, ErrUnknownOutcome
+}
+
+func TestConcurrentExecuteIsSingleFlight(t *testing.T) {
+	const callers = 64
+	rail := &singleFlightRail{started: make(chan struct{}, 1), release: make(chan struct{})}
+	coordinator := NewCoordinator()
+	intent := Intent{ID: "single-flight-intent", IdempotencyKey: "single-flight-key", Payload: []byte(`{"amount":100}`)}
+	results := make([]Result, callers)
+	errs := make([]error, callers)
+	var wg sync.WaitGroup
+	wg.Add(callers)
+	for i := 0; i < callers; i++ {
+		go func(index int) {
+			defer wg.Done()
+			results[index], errs[index] = coordinator.Execute(context.Background(), intent, rail, nil)
+		}(i)
+	}
+	select {
+	case <-rail.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("single-flight leader did not reach provider")
+	}
+	close(rail.release)
+	wg.Wait()
+	if got := rail.calls.Load(); got != 1 {
+		t.Fatalf("expected exactly one provider submission, got %d", got)
+	}
+	for i := range results {
+		if errs[i] != nil || results[i].ProviderRef != "single-flight-provider-ref" || results[i].Status != Submitted {
+			t.Fatalf("caller %d received result=%+v err=%v", i, results[i], errs[i])
+		}
+	}
+}
+
+func TestConcurrentExecuteRejectsChangedPayloadForSameKey(t *testing.T) {
+	rail := &singleFlightRail{started: make(chan struct{}, 1), release: make(chan struct{})}
+	coordinator := NewCoordinator()
+	first := Intent{ID: "same-key-a", IdempotencyKey: "same-key", Payload: []byte(`{"amount":100}`)}
+	second := Intent{ID: "same-key-b", IdempotencyKey: "same-key", Payload: []byte(`{"amount":200}`)}
+	firstDone := make(chan struct{})
+	go func() {
+		_, _ = coordinator.Execute(context.Background(), first, rail, nil)
+		close(firstDone)
+	}()
+	<-rail.started
+	if _, err := coordinator.Execute(context.Background(), second, rail, nil); err != ErrIdempotencyConflict {
+		t.Fatalf("changed payload must be rejected, got %v", err)
+	}
+	close(rail.release)
+	<-firstDone
+	if got := rail.calls.Load(); got != 1 {
+		t.Fatalf("expected one provider submission, got %d", got)
 	}
 }
