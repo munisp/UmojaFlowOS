@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BIN_DIR="${ROOT_DIR}/.toolchain/bin"
 CACHE_DIR="${ROOT_DIR}/.toolchain/cache"
 GO_VERSION="1.25.0"
-RUST_VERSION="1.88.0"
+RUST_VERSION="1.89.0"
 NODE_VERSION="20.19.4"
 HELM_VERSION="3.16.4"
 KUBECTL_VERSION="1.31.5"
@@ -30,8 +30,8 @@ require_cmd sha256sum
 
 host_arch="$(uname -m)"
 case "${host_arch}" in
-  x86_64) GO_ARCH="amd64"; KUBE_ARCH="amd64"; RELEASE_ARCH="amd64"; ACT_ARCH="x86_64" ;;
-  aarch64|arm64) GO_ARCH="arm64"; KUBE_ARCH="arm64"; RELEASE_ARCH="arm64"; ACT_ARCH="arm64" ;;
+  x86_64) GO_ARCH="amd64"; KUBE_ARCH="amd64"; RELEASE_ARCH="amd64"; ACT_ARCH="x86_64"; RUST_HOST="x86_64-unknown-linux-gnu" ;;
+  aarch64|arm64) GO_ARCH="arm64"; KUBE_ARCH="arm64"; RELEASE_ARCH="arm64"; ACT_ARCH="arm64"; RUST_HOST="aarch64-unknown-linux-gnu" ;;
   *) echo "unsupported architecture: ${host_arch}" >&2; exit 1 ;;
 esac
 
@@ -116,7 +116,7 @@ install_act
 
 if ! command -v rustup >/dev/null 2>&1; then
   rustup_init="${CACHE_DIR}/rustup-init"
-  fetch "https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init" "$rustup_init"
+  fetch "https://static.rust-lang.org/rustup/dist/${RUST_HOST}/rustup-init" "$rustup_init"
   chmod 0755 "$rustup_init"
   "$rustup_init" -y --default-toolchain none --profile minimal
   export PATH="${HOME}/.cargo/bin:${PATH}"
