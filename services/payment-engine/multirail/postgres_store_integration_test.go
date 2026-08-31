@@ -91,43 +91,158 @@ func TestPostgresUnknownStoreDuplicateTerminalDecisionIsImmutable(t *testing.T) 
 	}
 	ctx := context.Background()
 	db, err := sql.Open("postgres", dsn)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer db.Close()
-	if err := db.PingContext(ctx); err != nil { t.Fatal(err) }
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatal(err)
+	}
 	key := "duplicate-decision-" + time.Now().UTC().Format("20060102150405.000000000")
 	state := UnknownState{Intent: Intent{ID: key, IdempotencyKey: key, Payload: []byte(`{"intent":"duplicate-decision"}`)}, PrimaryRail: "yellow_card", ObservedStatus: Unknown, NextAttemptAt: time.Now().UTC()}
 	store := &PostgresUnknownStateStore{DB: db, LeaseDuration: time.Minute}
-	defer func() { _, _ = db.ExecContext(ctx, `DELETE FROM provider_reconciliation_decision WHERE idempotency_key=$1`, key); _, _ = db.ExecContext(ctx, `DELETE FROM provider_unknown_reconciliation WHERE idempotency_key=$1`, key) }()
-	if err := store.EnqueueUnknown(ctx, state); err != nil { t.Fatal(err) }
+	defer func() {
+		_, _ = db.ExecContext(ctx, `DELETE FROM provider_reconciliation_decision WHERE idempotency_key=$1`, key)
+		_, _ = db.ExecContext(ctx, `DELETE FROM provider_unknown_reconciliation WHERE idempotency_key=$1`, key)
+	}()
+	if err := store.EnqueueUnknown(ctx, state); err != nil {
+		t.Fatal(err)
+	}
 	claimed, ok, err := store.Claim(ctx, key, time.Now().UTC())
-	if err != nil || !ok { t.Fatalf("claim ok=%v err=%v", ok, err) }
+	if err != nil || !ok {
+		t.Fatalf("claim ok=%v err=%v", ok, err)
+	}
 	result := ReconciliationResult{IntentID: claimed.Intent.ID, IdempotencyKey: key, PrimaryRail: claimed.PrimaryRail, Decision: DecisionAwaitingEvidence, ObservedStatus: Unknown, Attempt: claimed.Attempts, DecidedAt: time.Now().UTC(), Reason: "provider evidence required", EvidenceDigest: "evidence-immutable-1", LeaseToken: claimed.LeaseToken}
-	if err := store.RecordDecision(ctx, result); err != nil { t.Fatal(err) }
-	if err := store.RecordDecision(ctx, result); err != nil { t.Fatalf("same immutable decision should be idempotent: %v", err) }
+	if err := store.RecordDecision(ctx, result); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordDecision(ctx, result); err != nil {
+		t.Fatalf("same immutable decision should be idempotent: %v", err)
+	}
 	conflict := result
 	conflict.EvidenceDigest = "evidence-immutable-2"
-	if err := store.RecordDecision(ctx, conflict); err != ErrDecisionConflict { t.Fatalf("conflicting terminal decision error=%v, want ErrDecisionConflict", err) }
+	if err := store.RecordDecision(ctx, conflict); err != ErrDecisionConflict {
+		t.Fatalf("conflicting terminal decision error=%v, want ErrDecisionConflict", err)
+	}
 }
 
 func TestPostgresUnknownStoreRejectsStaleLeaseMutation(t *testing.T) {
 	dsn := os.Getenv("UMOJA_TEST_DATABASE_URL")
-	if dsn == "" { t.Skip("UMOJA_TEST_DATABASE_URL is not set") }
+	if dsn == "" {
+		t.Skip("UMOJA_TEST_DATABASE_URL is not set")
+	}
 	ctx := context.Background()
 	db, err := sql.Open("postgres", dsn)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer db.Close()
-	if err := db.PingContext(ctx); err != nil { t.Fatal(err) }
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatal(err)
+	}
 	key := "stale-lease-" + time.Now().UTC().Format("20060102150405.000000000")
 	state := UnknownState{Intent: Intent{ID: key, IdempotencyKey: key, Payload: []byte(`{"intent":"stale-lease"}`)}, PrimaryRail: "yellow_card", ObservedStatus: Unknown, NextAttemptAt: time.Now().UTC()}
 	store := &PostgresUnknownStateStore{DB: db, LeaseDuration: time.Minute}
-	defer func() { _, _ = db.ExecContext(ctx, `DELETE FROM provider_reconciliation_decision WHERE idempotency_key=$1`, key); _, _ = db.ExecContext(ctx, `DELETE FROM provider_unknown_reconciliation WHERE idempotency_key=$1`, key) }()
-	if err := store.EnqueueUnknown(ctx, state); err != nil { t.Fatal(err) }
+	defer func() {
+		_, _ = db.ExecContext(ctx, `DELETE FROM provider_reconciliation_decision WHERE idempotency_key=$1`, key)
+		_, _ = db.ExecContext(ctx, `DELETE FROM provider_unknown_reconciliation WHERE idempotency_key=$1`, key)
+	}()
+	if err := store.EnqueueUnknown(ctx, state); err != nil {
+		t.Fatal(err)
+	}
 	claimed, ok, err := store.Claim(ctx, key, time.Now().UTC())
-	if err != nil || !ok { t.Fatalf("claim ok=%v err=%v", ok, err) }
+	if err != nil || !ok {
+		t.Fatalf("claim ok=%v err=%v", ok, err)
+	}
 	stale := claimed
 	stale.LeaseToken = "00000000-0000-4000-8000-000000000000"
-	if err := store.Reschedule(ctx, stale, time.Now().UTC().Add(time.Minute), "stale worker"); err != ErrLeaseLost { t.Fatalf("stale reschedule error=%v, want ErrLeaseLost", err) }
+	if err := store.Reschedule(ctx, stale, time.Now().UTC().Add(time.Minute), "stale worker"); err != ErrLeaseLost {
+		t.Fatalf("stale reschedule error=%v, want ErrLeaseLost", err)
+	}
 	decision := ReconciliationResult{IntentID: claimed.Intent.ID, IdempotencyKey: key, PrimaryRail: claimed.PrimaryRail, Decision: DecisionAwaitingEvidence, ObservedStatus: Unknown, Attempt: claimed.Attempts, DecidedAt: time.Now().UTC(), Reason: "stale worker", EvidenceDigest: "stale-evidence", LeaseToken: stale.LeaseToken}
-	if err := store.RecordDecision(ctx, decision); err != ErrLeaseLost { t.Fatalf("stale decision error=%v, want ErrLeaseLost", err) }
-	if _, claimedAgain, err := store.Claim(ctx, key, time.Now().UTC().Add(2*time.Minute)); err != nil || !claimedAgain { t.Fatalf("active lease should remain claimable after stale mutation rejection: claimed=%v err=%v", claimedAgain, err) }
+	if err := store.RecordDecision(ctx, decision); err != ErrLeaseLost {
+		t.Fatalf("stale decision error=%v, want ErrLeaseLost", err)
+	}
+	if _, claimedAgain, err := store.Claim(ctx, key, time.Now().UTC().Add(2*time.Minute)); err != nil || !claimedAgain {
+		t.Fatalf("active lease should remain claimable after stale mutation rejection: claimed=%v err=%v", claimedAgain, err)
+	}
+}
+
+func TestPostgresUnknownStoreRescheduleReturnsDatabaseExecutionError(t *testing.T) {
+	dsn := os.Getenv("UMOJA_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("UMOJA_TEST_DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	key := "reschedule-db-error-" + time.Now().UTC().Format("20060102150405.000000000")
+	state := UnknownState{Intent: Intent{ID: key, IdempotencyKey: key, Payload: []byte(`{"intent":"reschedule-db-error"}`)}, PrimaryRail: "yellow_card", ObservedStatus: Unknown, NextAttemptAt: time.Now().UTC()}
+	store := &PostgresUnknownStateStore{DB: db, LeaseDuration: time.Minute}
+	cleanup := func() {
+		cleanupDB, openErr := sql.Open("postgres", dsn)
+		if openErr == nil {
+			_, _ = cleanupDB.ExecContext(ctx, `DELETE FROM provider_reconciliation_decision WHERE idempotency_key=$1`, key)
+			_, _ = cleanupDB.ExecContext(ctx, `DELETE FROM provider_unknown_reconciliation WHERE idempotency_key=$1`, key)
+			_ = cleanupDB.Close()
+		}
+	}
+	defer cleanup()
+	if err := store.EnqueueUnknown(ctx, state); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	claimed, ok, err := store.Claim(ctx, key, time.Now().UTC())
+	if err != nil || !ok {
+		db.Close()
+		t.Fatalf("claim ok=%v err=%v", ok, err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Reschedule(ctx, claimed, time.Now().UTC().Add(time.Minute), "database unavailable"); err == nil {
+		t.Fatal("closed database must return an execution error")
+	}
+}
+
+func TestPostgresUnknownStoreRescheduleReturnsLeaseLostWhenRowAlreadyResolved(t *testing.T) {
+	dsn := os.Getenv("UMOJA_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("UMOJA_TEST_DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.PingContext(ctx); err != nil {
+		t.Fatal(err)
+	}
+	key := "reschedule-resolved-" + time.Now().UTC().Format("20060102150405.000000000")
+	state := UnknownState{Intent: Intent{ID: key, IdempotencyKey: key, Payload: []byte(`{"intent":"reschedule-resolved"}`)}, PrimaryRail: "yellow_card", ObservedStatus: Unknown, NextAttemptAt: time.Now().UTC()}
+	store := &PostgresUnknownStateStore{DB: db, LeaseDuration: time.Minute}
+	defer func() {
+		_, _ = db.ExecContext(ctx, `DELETE FROM provider_reconciliation_decision WHERE idempotency_key=$1`, key)
+		_, _ = db.ExecContext(ctx, `DELETE FROM provider_unknown_reconciliation WHERE idempotency_key=$1`, key)
+	}()
+	if err := store.EnqueueUnknown(ctx, state); err != nil {
+		t.Fatal(err)
+	}
+	claimed, ok, err := store.Claim(ctx, key, time.Now().UTC())
+	if err != nil || !ok {
+		t.Fatalf("claim ok=%v err=%v", ok, err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE provider_unknown_reconciliation SET resolved_at=now() WHERE idempotency_key=$1`, key); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Reschedule(ctx, claimed, time.Now().UTC().Add(time.Minute), "already resolved"); err != ErrLeaseLost {
+		t.Fatalf("error=%v, want ErrLeaseLost", err)
+	}
 }

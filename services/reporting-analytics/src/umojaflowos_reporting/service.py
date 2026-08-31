@@ -6,6 +6,7 @@ import hmac
 import os
 import threading
 import time
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -246,7 +247,14 @@ def configure_event_evidence_ledger(redis_url: str) -> None:
     EVENT_EVIDENCE_LEDGER = ledger
 
 
-app = FastAPI(title="UmojaFlowOS Reporting Analytics", version="1.0.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    configure_event_evidence_ledger_from_environment()
+    configure_regulatory_channel_from_environment()
+    yield
+
+
+app = FastAPI(title="UmojaFlowOS Reporting Analytics", version="1.0.0", lifespan=lifespan)
 
 # Envelope identity published in docs/service-contracts.md and pinned by the
 # TypeScript control plane with strict literals. Changing any of these strings is
@@ -338,7 +346,6 @@ EVENT_EVIDENCE_LEDGER: EventEvidenceLedger = UnavailableEventEvidenceLedger()
 REGULATORY_CHANNEL: AuthorisedRegulatoryChannel | None = None
 
 
-@app.on_event("startup")
 def configure_event_evidence_ledger_from_environment() -> None:
     """Opt in only when deployment supplies an explicit Redis URL.
 
@@ -353,7 +360,6 @@ def configure_event_evidence_ledger_from_environment() -> None:
     configure_event_evidence_ledger(redis_url)
 
 
-@app.on_event("startup")
 def configure_regulatory_channel_from_environment() -> None:
     global REGULATORY_CHANNEL
     try:
