@@ -13,6 +13,7 @@ route:
         - component="mojaloop-signer"
         - severity="critical"
       receiver: umoja-signer-critical-pagerduty
+      group_wait: 10s
       continue: false
     - matchers:
         - service="payment-engine"
@@ -20,6 +21,21 @@ route:
         - severity="warning"
       receiver: umoja-signer-warning-slack
       continue: false
+
+inhibit_rules:
+  - source_matchers:
+      - service="payment-engine"
+      - component="mojaloop-signer"
+      - severity="critical"
+    target_matchers:
+      - service="payment-engine"
+      - component="mojaloop-signer"
+      - alertname="UmojaMojaloopSignerRetryPressure"
+      - severity="warning"
+    equal:
+      - service
+      - component
+      - environment
 
 receivers:
   - name: umoja-signer-critical-pagerduty

@@ -9,9 +9,9 @@ tests:
       - series: 'umoja_signer_retry_exhausted_total{service="payment-engine",component="mojaloop-signer"}'
         values: '0 0 0 0 0 0 1 1 1 1 1 1 1'
       - series: 'umoja_signer_retries_total{service="payment-engine",component="mojaloop-signer"}'
-        values: '0 0 0 1 2 3 4 5 6 7 8 9 10'
+        values: '0 1 2 3 4 5 6 7 8 9 10 11 12'
       - series: 'umoja_signer_attempts_total{service="payment-engine",component="mojaloop-signer"}'
-        values: '0 1 2 4 6 8 10 12 14 16 18 20 22'
+        values: '0 5 10 15 20 25 30 35 40 45 50 55 60'
       - series: 'umoja_signer_non_retryable_errors_total{service="payment-engine",component="mojaloop-signer"}'
         values: '0 0 0 0 1 1 1 2 2 2 3 3 3'
     alert_rule_test:
@@ -37,7 +37,7 @@ tests:
               service: payment-engine
             exp_annotations:
               summary: Elevated Mojaloop signer retry pressure
-              description: At least 20 percent of recent signer attempts are retries, indicating degraded HSM or signing-service health.
+              description: At least 20 percent of at least 25 recent signer attempts are retries, indicating degraded HSM or signing-service health.
               runbook: https://github.com/munisp/UmojaFlowOS/blob/main/docs/mojaloop_signer_operations.md
               runbook_url: https://github.com/munisp/UmojaFlowOS/blob/main/docs/mojaloop_signer_operations.md
               dashboard_url: https://github.com/munisp/UmojaFlowOS/blob/main/infra/monitoring/grafana/dashboards/mojaloop-signer-observability.json
