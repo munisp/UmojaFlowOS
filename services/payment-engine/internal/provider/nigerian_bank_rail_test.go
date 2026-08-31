@@ -81,3 +81,54 @@ func TestNigerianBankRailUnknownStatusBlocksFallback(t *testing.T) {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 }
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestNigerianBankRailSubmitTimeoutFailsClosed(t *testing.T) {
+	client, err := NewNigerianBankRailClient(NigerianBankRailConfig{
+		BaseURL: "http://127.0.0.1:18081", BearerToken: "test-token", AllowInsecureLoopback: true,
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return nil, context.DeadlineExceeded
+		})},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := client.Submit(context.Background(), validNigerianRailIntent(t))
+	if err == nil || result.Status != "" || result.RetryableWithoutBusinessEffect {
+		t.Fatalf("timeout must fail closed: result=%+v err=%v", result, err)
+	}
+}
+
+func TestNigerianBankRailLookupTimeoutFailsClosed(t *testing.T) {
+	client, err := NewNigerianBankRailClient(NigerianBankRailConfig{
+		BaseURL: "http://127.0.0.1:18081", BearerToken: "test-token", AllowInsecureLoopback: true,
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			return nil, context.DeadlineExceeded
+		})},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Query(context.Background(), validNigerianRailIntent(t))
+	if err == nil || !strings.Contains(err.Error(), "unavailable") {
+		t.Fatalf("lookup timeout must remain unresolved: err=%v", err)
+	}
+}
+
+func TestNigerianBankRailRejectsInvalidAccountNumber(t *testing.T) {
+	intent := validNigerianRailIntent(t)
+	var payload NigerianBankTransfer
+	if err := json.Unmarshal(intent.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	for _, account := range []string{"123456789", "12345678901", "12345abcde", ""} {
+		payload.AccountNumber = account
+		intent.Payload, _ = json.Marshal(payload)
+		if _, err := decodeNigerianTransfer(intent); err == nil {
+			t.Fatalf("account number %q should be rejected", account)
+		}
+	}
+}
