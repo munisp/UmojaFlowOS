@@ -1,0 +1,41 @@
+name: payment-engine-go
+
+on:
+  pull_request:
+    paths:
+      - "services/payment-engine/**"
+      - "database/postgresql/**"
+      - ".github/workflows/payment-engine-go.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/payment-engine/**"
+      - "database/postgresql/**"
+      - ".github/workflows/payment-engine-go.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: services/payment-engine
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: services/payment-engine/go.mod
+          cache-dependency-path: services/payment-engine/go.sum
+
+      - name: Install TigerBeetle native build prerequisites
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential
+
+      - name: Run full payment-engine tests with TigerBeetle cgo client
+        env:
+          CGO_ENABLED: "1"
+        run: go test ./...

@@ -92,3 +92,52 @@ func TestUnknownReconciliationConfirmedNonSubmissionDoesNotSubmitSecondary(t *te
 		t.Fatalf("unexpected effects: decisions=%d submit_calls=%d", len(store.decisions), provider.submitCalls)
 	}
 }
+
+
+type leaseLossStore struct {
+	state       UnknownState
+	decisionErr error
+	reschedErr  error
+}
+
+func (s *leaseLossStore) Claim(context.Context, string, time.Time) (UnknownState, bool, error) {
+	s.state.Attempts++
+	s.state.LeaseToken = "lease-a"
+	return s.state, true, nil
+}
+func (s *leaseLossStore) RecordDecision(context.Context, ReconciliationResult) error { return s.decisionErr }
+func (s *leaseLossStore) Reschedule(context.Context, UnknownState, time.Time, string) error { return s.reschedErr }
+
+func TestUnknownReconciliationLeaseLossDuringDecisionNeverSettles(t *testing.T) {
+	store := &leaseLossStore{
+		state:       UnknownState{Intent: Intent{ID: "lease-decision", IdempotencyKey: "lease-decision-key"}},
+		decisionErr: ErrLeaseLost,
+	}
+	provider := &reconciliationRail{query: Submission{Status: Settled, ProviderRef: "provider-settled"}}
+	worker := ReconciliationWorker{Store: store, Now: func() time.Time { return time.Unix(100, 0).UTC() }}
+	result, err := worker.Reconcile(context.Background(), "lease-decision-key", provider)
+	if err != ErrLeaseLost || result.SettlementAllowed || provider.submitCalls != 0 {
+		t.Fatalf("lease loss must fail closed: result=%+v err=%v submits=%d", result, err, provider.submitCalls)
+	}
+}
+
+func TestUnknownReconciliationLeaseLossDuringRescheduleNeverFallsBack(t *testing.T) {
+	store := &leaseLossStore{
+		state:      UnknownState{Intent: Intent{ID: "lease-reschedule", IdempotencyKey: "lease-reschedule-key"}},
+		reschedErr: ErrLeaseLost,
+	}
+	provider := &reconciliationRail{query: Submission{Status: Unknown}}
+	worker := ReconciliationWorker{Store: store, Now: func() time.Time { return time.Unix(100, 0).UTC() }, RetryAfter: time.Second}
+	result, err := worker.Reconcile(context.Background(), "lease-reschedule-key", provider)
+	if err != ErrLeaseLost || result.SettlementAllowed || provider.submitCalls != 0 {
+		t.Fatalf("lease loss must fail closed: result=%+v err=%v submits=%d", result, err, provider.submitCalls)
+	}
+}
+
+func TestCoordinatorRejectsMissingSecondaryAfterSafeFailure(t *testing.T) {
+	primary := &fakeRail{name: "yellow_card", submit: Submission{Status: Failed, RetryableWithoutBusinessEffect: true}}
+	_, err := NewCoordinator().Execute(context.Background(), Intent{ID: "missing-secondary", IdempotencyKey: "missing-secondary-key"}, primary, nil)
+	if err == nil || primary.calls != 1 {
+		t.Fatalf("missing secondary must fail closed: err=%v primary_calls=%d", err, primary.calls)
+	}
+}
