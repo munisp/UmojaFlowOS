@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 pub mod eventing;
 pub mod multirail_failover;
+pub mod yellowcard_adapter;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Posting {

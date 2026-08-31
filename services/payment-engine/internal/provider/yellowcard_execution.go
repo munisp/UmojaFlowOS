@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -171,6 +173,49 @@ func validateYellowCardSend(send YellowCardSend) error {
 		}
 	}
 	return nil
+}
+
+// QuerySend performs only Yellow Card's documented lookup-by-sequenceId read.
+// It is safe to call after a transport failure because it never creates or
+// modifies a provider transaction.
+func (c *YellowCardClient) QuerySend(ctx context.Context, sequenceID string) (YellowCardSendResult, error) {
+	if c == nil || c.baseURL == nil || c.signer == nil || strings.TrimSpace(sequenceID) == "" {
+		return YellowCardSendResult{}, errors.New("Yellow Card lookup is not configured")
+	}
+	endpoint := *c.baseURL
+	endpoint.Path = strings.TrimRight(endpoint.Path, "/") + "/payments/sequence-id/" + url.PathEscape(sequenceID)
+	endpoint.RawPath = ""
+	timestamp := c.now().UTC().Format(time.RFC3339Nano)
+	digest := sha256.Sum256(nil)
+	message := []byte(timestamp + endpoint.EscapedPath() + http.MethodGet + base64.StdEncoding.EncodeToString(digest[:]))
+	apiKey, signature, err := c.signer.SignYellowCard(ctx, message)
+	if err != nil || strings.TrimSpace(apiKey) == "" || strings.TrimSpace(signature) == "" {
+		return YellowCardSendResult{}, errors.New("Yellow Card lookup signing is unavailable")
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return YellowCardSendResult{}, fmt.Errorf("create Yellow Card lookup request: %w", err)
+	}
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("X-YC-Timestamp", timestamp)
+	request.Header.Set("Authorization", "YcHmacV1 "+apiKey+":"+signature)
+	response, err := c.http.Do(request)
+	if err != nil {
+		return YellowCardSendResult{}, errors.New("Yellow Card lookup endpoint is unavailable")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64*1024))
+		return YellowCardSendResult{}, fmt.Errorf("Yellow Card lookup was not accepted: HTTP %d", response.StatusCode)
+	}
+	var decoded yellowCardSendResponse
+	if err := json.NewDecoder(io.LimitReader(response.Body, 256*1024)).Decode(&decoded); err != nil {
+		return YellowCardSendResult{}, errors.New("Yellow Card lookup response was not valid JSON")
+	}
+	if strings.TrimSpace(decoded.ID) == "" || decoded.SequenceID != sequenceID || strings.TrimSpace(decoded.Status) == "" {
+		return YellowCardSendResult{}, errors.New("Yellow Card lookup response does not match the requested sequence")
+	}
+	return YellowCardSendResult{Reference: decoded.ID, SequenceID: decoded.SequenceID, Status: decoded.Status, ExpiresAt: decoded.ExpiresAt}, nil
 }
 
 // SubmitSend creates a provider request that awaits acceptance. It never sets

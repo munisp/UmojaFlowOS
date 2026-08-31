@@ -2,6 +2,9 @@ package multirail
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -10,21 +13,22 @@ import (
 // classified as having had no business effect. It is evidence for reconciliation,
 // not an instruction to submit on another rail.
 type UnknownState struct {
-	Intent          Intent
-	PrimaryRail     string
-	ProviderRef     string
-	ObservedStatus  Status
-	Attempts        int
-	NextAttemptAt   time.Time
-	LastError       string
+	Intent         Intent
+	PrimaryRail    string
+	ProviderRef    string
+	ObservedStatus Status
+	Attempts       int
+	NextAttemptAt  time.Time
+	LastError      string
+	LeaseToken     string
 }
 
 type ReconciliationDecision string
 
 const (
-	DecisionProviderAccepted      ReconciliationDecision = "provider_accepted_no_settlement_authority"
+	DecisionProviderAccepted       ReconciliationDecision = "provider_accepted_no_settlement_authority"
 	DecisionConfirmedNonSubmission ReconciliationDecision = "confirmed_non_submission"
-	DecisionAwaitingEvidence      ReconciliationDecision = "awaiting_provider_evidence"
+	DecisionAwaitingEvidence       ReconciliationDecision = "awaiting_provider_evidence"
 	DecisionQuarantined            ReconciliationDecision = "quarantined_reconciliation_failure"
 )
 
@@ -39,6 +43,8 @@ type ReconciliationResult struct {
 	Attempt           int
 	DecidedAt         time.Time
 	Reason            string
+	EvidenceDigest    string
+	LeaseToken        string
 }
 
 // UnknownStateStore must provide durable, atomic, append-only decision storage.
@@ -80,7 +86,7 @@ func (w ReconciliationWorker) Reconcile(ctx context.Context, key string, provide
 		w.MaxAttempts = 12
 	}
 	if claimed.Attempts >= w.MaxAttempts {
-		result := w.result(claimed, DecisionQuarantined, StatusUnknown, now().UTC(), "maximum reconciliation attempts exceeded")
+		result := w.result(claimed, DecisionQuarantined, Unknown, now().UTC(), "maximum reconciliation attempts exceeded")
 		if err := w.Store.RecordDecision(ctx, result); err != nil {
 			return ReconciliationResult{}, err
 		}
@@ -97,7 +103,7 @@ func (w ReconciliationWorker) Reconcile(ctx context.Context, key string, provide
 		if err := w.Store.Reschedule(ctx, claimed, next, reason); err != nil {
 			return ReconciliationResult{}, err
 		}
-		return w.result(claimed, DecisionAwaitingEvidence, StatusUnknown, now().UTC(), reason), ErrReconciliationUnavailable
+		return w.result(claimed, DecisionAwaitingEvidence, Unknown, now().UTC(), reason), ErrReconciliationUnavailable
 	}
 
 	decision := DecisionQuarantined
@@ -131,10 +137,26 @@ func (w ReconciliationWorker) retryDelay(attempt int) time.Duration {
 	return base
 }
 
+func evidenceDigest(s UnknownState, d ReconciliationDecision, status Status, at time.Time, reason string) string {
+	payload, _ := json.Marshal(struct {
+		IntentID       string                 `json:"intent_id"`
+		IdempotencyKey string                 `json:"idempotency_key"`
+		PrimaryRail    string                 `json:"primary_rail"`
+		ProviderRef    string                 `json:"provider_ref"`
+		Decision       ReconciliationDecision `json:"decision"`
+		Status         Status                 `json:"status"`
+		Attempt        int                    `json:"attempt"`
+		Reason         string                 `json:"reason"`
+	}{s.Intent.ID, s.Intent.IdempotencyKey, s.PrimaryRail, s.ProviderRef, d, status, s.Attempts, reason})
+	digest := sha256.Sum256(payload)
+	return hex.EncodeToString(digest[:])
+}
+
 func (w ReconciliationWorker) result(s UnknownState, d ReconciliationDecision, status Status, at time.Time, reason string) ReconciliationResult {
 	return ReconciliationResult{
 		IntentID: s.Intent.ID, IdempotencyKey: s.Intent.IdempotencyKey, PrimaryRail: s.PrimaryRail,
-		ProviderRef: s.ProviderRef, Decision: d, ObservedStatus: status,
-		SettlementAllowed: false, Attempt: s.Attempts + 1, DecidedAt: at, Reason: reason,
+		ProviderRef: s.ProviderRef, Decision: d, ObservedStatus: status, LeaseToken: s.LeaseToken,
+		SettlementAllowed: false, Attempt: s.Attempts, DecidedAt: at, Reason: reason,
+		EvidenceDigest: evidenceDigest(s, d, status, at, reason),
 	}
 }

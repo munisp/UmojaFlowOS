@@ -30,10 +30,20 @@ func (s *reconciliationStore) Reschedule(_ context.Context, _ UnknownState, next
 	return nil
 }
 
-type reconciliationRail struct{ query Submission; queryErr error; submitCalls int }
+type reconciliationRail struct {
+	query       Submission
+	queryErr    error
+	submitCalls int
+}
+
 func (r *reconciliationRail) Name() string { return "yellow_card" }
-func (r *reconciliationRail) Submit(context.Context, Intent) (Submission, error) { r.submitCalls++; return Submission{}, nil }
-func (r *reconciliationRail) Query(context.Context, Intent) (Submission, error) { return r.query, r.queryErr }
+func (r *reconciliationRail) Submit(context.Context, Intent) (Submission, error) {
+	r.submitCalls++
+	return Submission{}, nil
+}
+func (r *reconciliationRail) Query(context.Context, Intent) (Submission, error) {
+	return r.query, r.queryErr
+}
 
 func TestQueryFailedWithoutExplicitSafeRetryBlocksFallback(t *testing.T) {
 	primary := &fakeRail{name: "yellow_card", submitErr: context.DeadlineExceeded, query: Submission{Status: Failed, RetryableWithoutBusinessEffect: false}}

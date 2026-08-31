@@ -3,7 +3,7 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS provider_unknown_reconciliation (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     idempotency_key TEXT NOT NULL UNIQUE,
-    intent_id UUID NOT NULL,
+    intent_id TEXT NOT NULL,
     primary_rail TEXT NOT NULL,
     provider_reference TEXT,
     observed_status TEXT NOT NULL CHECK (observed_status IN ('unknown','submitted','pending','settled','failed','held')),
@@ -23,7 +23,7 @@ CREATE INDEX IF NOT EXISTS provider_unknown_reconciliation_due_idx
 CREATE TABLE IF NOT EXISTS provider_reconciliation_decision (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     idempotency_key TEXT NOT NULL,
-    intent_id UUID NOT NULL,
+    intent_id TEXT NOT NULL,
     primary_rail TEXT NOT NULL,
     provider_reference TEXT,
     decision TEXT NOT NULL CHECK (decision IN (
