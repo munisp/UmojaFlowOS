@@ -278,3 +278,58 @@ func TestYellowCardSigningMaterialUsesManagedReferencesOnly(t *testing.T) {
 		t.Fatalf("expected usable signer with non-sensitive version references, material=%#v err=%v", material, err)
 	}
 }
+
+func TestWebhookRuntimeRejectsUnsafeEnvironmentMatrix(t *testing.T) {
+	base := map[string]string{
+		"UMOJA_YELLOWCARD_WEBHOOK_ENABLED":                        "true",
+		"UMOJA_YELLOWCARD_ENABLED":                                "true",
+		"UMOJA_YELLOWCARD_FAIL_CLOSED":                            "true",
+		"UMOJA_YELLOWCARD_WEBHOOK_FAIL_CLOSED":                    "true",
+		"UMOJA_YELLOWCARD_WEBHOOK_CAN_SETTLE":                     "false",
+		"UMOJA_YELLOWCARD_ENVIRONMENT":                            "production",
+		"UMOJA_YELLOWCARD_TLS_REQUIRED":                           "true",
+		"UMOJA_YELLOWCARD_WEBHOOK_TLS_REQUIRED":                   "true",
+		"UMOJA_YELLOWCARD_ALLOW_INSECURE_LOOPBACK":                "false",
+		"UMOJA_YELLOWCARD_WEBHOOK_PUBLIC_URL":                     "https://payments.example/webhooks/yellowcard",
+		"UMOJA_YELLOWCARD_WEBHOOK_MAX_AGE_SECONDS":                "300",
+		"UMOJA_YELLOWCARD_WEBHOOK_BODY_MAX_BYTES":                 "1048576",
+		"UMOJA_YELLOWCARD_WEBHOOK_ALLOWED_CIDRS":                  "203.0.113.0/24",
+		"UMOJA_YELLOWCARD_WEBHOOK_SIGNATURE_HEADER":               "X-YC-Signature",
+		"UMOJA_YELLOWCARD_WEBHOOK_TIMESTAMP_HEADER":               "X-YC-Timestamp",
+		"UMOJA_YELLOWCARD_WEBHOOK_SECRET_REFERENCE":               "file:///secrets/current",
+		"UMOJA_PROVIDER_MATERIAL_ROOT":                            t.TempDir(),
+		"UMOJA_YELLOWCARD_REPLAY_REDIS_PASSWORD_SECRET_REFERENCE": "file:///secrets/redis-password",
+		"UMOJA_YELLOWCARD_REPLAY_REDIS_CA_BUNDLE_PATH":            filepath.Join(t.TempDir(), "ca.pem"),
+		"UMOJA_YELLOWCARD_REPLAY_REDIS_ADDRESS":                   "redis.example:6380",
+		"UMOJA_YELLOWCARD_WEBHOOK_EVIDENCE_DIRECTORY":             t.TempDir(),
+		"UMOJA_YELLOWCARD_WEBHOOK_RECONCILIATION_QUEUE_DIRECTORY": t.TempDir(),
+	}
+	cases := []struct {
+		name  string
+		key   string
+		value string
+		want  string
+	}{
+		{"provider disabled", "UMOJA_YELLOWCARD_ENABLED", "false", "provider enabled"},
+		{"settlement enabled", "UMOJA_YELLOWCARD_WEBHOOK_CAN_SETTLE", "true", "settlement disabled"},
+		{"non production", "UMOJA_YELLOWCARD_ENVIRONMENT", "staging", "production HTTPS"},
+		{"insecure transport", "UMOJA_YELLOWCARD_TLS_REQUIRED", "false", "production HTTPS"},
+		{"bad public URL", "UMOJA_YELLOWCARD_WEBHOOK_PUBLIC_URL", "http://payments.example/webhooks/yellowcard", "exact HTTPS"},
+		{"bad max age", "UMOJA_YELLOWCARD_WEBHOOK_MAX_AGE_SECONDS", "not-an-integer", "max age"},
+		{"bad body limit", "UMOJA_YELLOWCARD_WEBHOOK_BODY_MAX_BYTES", "not-an-integer", "body limit"},
+		{"bad CIDR", "UMOJA_YELLOWCARD_WEBHOOK_ALLOWED_CIDRS", "0.0.0.0/0", "catch-all"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			values := make(map[string]string, len(base)+1)
+			for key, value := range base {
+				values[key] = value
+			}
+			values[tc.key] = tc.value
+			_, err := WebhookRuntimeFromEnvironment(func(key string) string { return values[key] })
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error=%v, want text %q", err, tc.want)
+			}
+		})
+	}
+}
