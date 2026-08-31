@@ -6,12 +6,16 @@ on:
       - "services/payment-engine/**"
       - "database/postgresql/**"
       - ".github/workflows/payment-engine-go.yml"
+      - "infra/monitoring/mojaloop-signer-alerts.yml"
+      - "tests/load/mojaloop_payment_metrics.js"
   push:
     branches: [main]
     paths:
       - "services/payment-engine/**"
       - "database/postgresql/**"
       - ".github/workflows/payment-engine-go.yml"
+      - "infra/monitoring/mojaloop-signer-alerts.yml"
+      - "tests/load/mojaloop_payment_metrics.js"
 
 permissions:
   contents: read
@@ -39,3 +43,11 @@ jobs:
         env:
           CGO_ENABLED: "1"
         run: go test ./...
+
+      - name: Install Prometheus promtool
+        run: |
+          curl -fsSL -o /tmp/prometheus.tar.gz https://github.com/prometheus/prometheus/releases/download/v2.55.1/prometheus-2.55.1.linux-amd64.tar.gz
+          tar -xzf /tmp/prometheus.tar.gz -C /tmp
+
+      - name: Validate Mojaloop signer alert rules
+        run: /tmp/prometheus-2.55.1.linux-amd64/promtool check rules ../../infra/monitoring/mojaloop-signer-alerts.yml

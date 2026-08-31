@@ -3,7 +3,7 @@ groups:
     interval: 30s
     rules:
       - alert: UmojaMojaloopSignerRetryExhausted
-        expr: increase(signer_retry_exhausted_total[5m]) > 0
+        expr: increase(umoja_signer_retry_exhausted_total[5m]) > 0
         for: 0m
         labels:
           severity: critical
@@ -16,11 +16,11 @@ groups:
 
       - alert: UmojaMojaloopSignerRetryPressure
         expr: |
-          increase(signer_retries_total[5m]) >= 5
-          and increase(signer_attempts_total[5m]) > 0
+          increase(umoja_signer_retries_total[5m]) >= 5
+          and increase(umoja_signer_attempts_total[5m]) > 0
           and (
-            increase(signer_retries_total[5m])
-            / increase(signer_attempts_total[5m])
+            increase(umoja_signer_retries_total[5m])
+            / increase(umoja_signer_attempts_total[5m])
           ) >= 0.20
         for: 2m
         labels:
@@ -33,7 +33,7 @@ groups:
           runbook: docs/mojaloop_signer_operations.md
 
       - alert: UmojaMojaloopSignerNonRetryableBurst
-        expr: increase(signer_non_retryable_errors_total[5m]) >= 3
+        expr: increase(umoja_signer_non_retryable_errors_total[5m]) >= 3
         for: 1m
         labels:
           severity: critical
