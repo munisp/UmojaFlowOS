@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS provider_unknown_reconciliation (
 );
 
 CREATE INDEX IF NOT EXISTS provider_unknown_reconciliation_due_idx
-    ON provider_unknown_reconciliation (next_attempt_at)
+    ON provider_unknown_reconciliation (next_attempt_at, lease_until)
     WHERE resolved_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS provider_reconciliation_decision (
@@ -40,5 +40,16 @@ CREATE TABLE IF NOT EXISTS provider_reconciliation_decision (
     decided_at TIMESTAMPTZ NOT NULL,
     UNIQUE (idempotency_key, attempt)
 );
+
+-- A terminal outcome is immutable and may be recorded only once per payment
+-- intent. Inconclusive evidence is not stored in the decision table; it remains
+-- represented by the rescheduled queue row.
+CREATE UNIQUE INDEX IF NOT EXISTS provider_reconciliation_terminal_once_idx
+    ON provider_reconciliation_decision (idempotency_key)
+    WHERE decision IN (
+        'provider_accepted_no_settlement_authority',
+        'confirmed_non_submission',
+        'quarantined_reconciliation_failure'
+    );
 
 COMMIT;
