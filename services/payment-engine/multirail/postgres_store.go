@@ -205,13 +205,25 @@ func (s *PostgresUnknownStateStore) RecordDecision(ctx context.Context, result R
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `
-		UPDATE provider_unknown_reconciliation
-		   SET resolved_at=$1, lease_until=NULL, lease_token=NULL, updated_at=$1
-		 WHERE idempotency_key=$2 AND attempts=$3 AND lease_token=$4::uuid AND resolved_at IS NULL`,
+	resolution, err := tx.ExecContext(ctx, `
+			UPDATE provider_unknown_reconciliation
+			   SET resolved_at=$1, lease_until=NULL, lease_token=NULL, updated_at=$1
+			 WHERE idempotency_key=$2 AND attempts=$3 AND lease_token=$4::uuid AND resolved_at IS NULL`,
 		result.DecidedAt.UTC(), result.IdempotencyKey, result.Attempt, result.LeaseToken)
 	if err != nil {
 		return err
+	}
+	if affected, _ := resolution.RowsAffected(); affected != 1 {
+		var resolvedAt sql.NullTime
+		var existingDigest string
+		if queryErr := tx.QueryRowContext(ctx, `
+				SELECT q.resolved_at, d.evidence_digest
+				  FROM provider_unknown_reconciliation q
+				  LEFT JOIN provider_reconciliation_decision d
+				    ON d.idempotency_key=q.idempotency_key AND d.attempt=$2
+				 WHERE q.idempotency_key=$1`, result.IdempotencyKey, result.Attempt).Scan(&resolvedAt, &existingDigest); queryErr != nil || !resolvedAt.Valid || existingDigest != result.EvidenceDigest {
+			return ErrLeaseLost
+		}
 	}
 	return tx.Commit()
 }
