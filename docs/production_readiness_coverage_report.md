@@ -82,3 +82,16 @@ The platform should therefore remain **Technical GO for the tested paths but not
 - `artifacts/targeted-go-tests.log`
 - `services/payment-engine/multirail/postgres_store_unit_test.go`
 - `services/payment-engine/internal/provider/yellowcard_webhook_test.go`
+
+
+## Coverage update: risk-compliance-core and webhook integration
+
+After installing `cargo-llvm-cov 0.9.0`, targeted screening tests raised risk-compliance-core line coverage to **82.51%**, exceeding the proposed 80% line threshold. The measured region/function/line summary is **79.95% / 78.53% / 82.51%**. Function coverage remains below 80%, so the service is above the line gate but not above a combined line-and-function gate. The largest remaining file-level gap is `src/screening.rs`, especially live provider request/response branches; `eventing.rs` also retains transport failure branches.
+
+The new Rust tests cover blank and oversized screening fields, malformed and insecure endpoint forms, HTTP loopback policy, managed file-secret root binding, missing/short/escaped secret material, and fail-closed environment construction.
+
+The payment engine now includes a local TLS RESP integration harness for the Redis replay store and filesystem integration tests for immutable evidence and reconciliation queue records. The harness verifies successful TLS reservation, existing-key null-bulk behavior, authentication/protocol failure handling, invalid dependency rejection, duplicate evidence idempotency, payload conflict rejection, queue creation, and blank-directory rejection. The provider integration package passes under the race detector.
+
+The post-integration Go aggregate is **58.9% statement coverage**. The webhook-specific functions improved to approximately **66.7% for RESP writing, 59.1% for RESP parsing, and 76.9% for durable evidence writing**. `WebhookRuntimeFromEnvironment` remains at 44.2% because a fully successful construction requires a valid managed secret tree, a valid Redis CA bundle, and a production-like Redis address; the next staging test should exercise that constructor with an ephemeral CA and TLS Redis service. The PostgreSQL store’s SQL branches likewise require coverage from the existing real-database integration suite and a coverage-enabled PostgreSQL job; pure unit tests intentionally do not fake transaction semantics.
+
+These results improve technical evidence but do not raise the payment engine to the proposed 80% aggregate gate. CBN live activation remains dependent on authorized staging evidence, provider permissions, independent approvals, and written regulatory authorization.
