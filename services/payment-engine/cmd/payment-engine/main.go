@@ -151,6 +151,10 @@ func newHandlerWithSignerMetrics(now func() time.Time, webhook http.Handler, pos
 			SignerNonRetryableTotal:   signerMetricSnapshot(metrics.signerRetryMetrics).NonRetryableErrorsTotal,
 		})
 	})
+	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+		writePrometheusMetrics(w, metrics.signerRetryMetrics)
+	})
 	if webhook != nil {
 		mux.Handle("POST /v1/providers/yellowcard/webhooks", webhook)
 	}
@@ -260,6 +264,14 @@ func newHandlerWithSignerMetrics(now func() time.Time, webhook http.Handler, pos
 	return mux
 }
 
+func writePrometheusMetrics(w http.ResponseWriter, signerMetrics *provider.SignerRetryMetrics) {
+	snapshot := signerMetricSnapshot(signerMetrics)
+	fmt.Fprintf(w, "# HELP umoja_signer_attempts_total Total signing attempts sent to the delegated signer.\n# TYPE umoja_signer_attempts_total counter\numoja_signer_attempts_total %d\n", snapshot.AttemptsTotal)
+	fmt.Fprintf(w, "# HELP umoja_signer_retries_total Total retries after transient signer failures.\n# TYPE umoja_signer_retries_total counter\numoja_signer_retries_total %d\n", snapshot.RetriesTotal)
+	fmt.Fprintf(w, "# HELP umoja_signer_retry_exhausted_total Total signing calls that exhausted their retry budget.\n# TYPE umoja_signer_retry_exhausted_total counter\numoja_signer_retry_exhausted_total %d\n", snapshot.RetryExhaustedTotal)
+	fmt.Fprintf(w, "# HELP umoja_signer_non_retryable_errors_total Total non-retryable signer failures.\n# TYPE umoja_signer_non_retryable_errors_total counter\numoja_signer_non_retryable_errors_total %d\n", snapshot.NonRetryableErrorsTotal)
+}
+
 func signerMetricSnapshot(metrics *provider.SignerRetryMetrics) provider.SignerRetryMetricsSnapshot {
 	if metrics == nil {
 		return provider.SignerRetryMetricsSnapshot{}
@@ -271,6 +283,9 @@ func main() {
 	productionProfile := strings.EqualFold(strings.TrimSpace(os.Getenv("UMOJA_ENV")), "production")
 	if _, configErr := provider.LoadNigerianRailConfig(os.Getenv, productionProfile); configErr != nil {
 		panic(configErr)
+	}
+	if _, signerConfigErr := provider.LoadMojaloopSignerRetryPolicy(os.Getenv); signerConfigErr != nil {
+		panic(signerConfigErr)
 	}
 	ledgerRuntime, err := ledger.RuntimeFromProcessEnv()
 	if err != nil {

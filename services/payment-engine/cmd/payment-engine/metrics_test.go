@@ -113,6 +113,32 @@ func TestMetricsExposeTheConfiguredLedgerRuntimePosture(t *testing.T) {
 	}
 }
 
+func TestPrometheusMetricsExposeSignerRetryCounters(t *testing.T) {
+	signerMetrics := &provider.SignerRetryMetrics{}
+	signerMetrics.AttemptsTotal.Store(7)
+	signerMetrics.RetriesTotal.Store(3)
+	signerMetrics.RetryExhaustedTotal.Store(1)
+	signerMetrics.NonRetryableErrorsTotal.Store(2)
+
+	recorder := httptest.NewRecorder()
+	newHandlerWithSignerMetrics(time.Now, nil, nil, nil, signerMetrics).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("prometheus metrics returned %d", recorder.Code)
+	}
+	body := recorder.Body.String()
+	for _, expected := range []string{
+		"# TYPE umoja_signer_attempts_total counter",
+		"umoja_signer_attempts_total 7",
+		"umoja_signer_retries_total 3",
+		"umoja_signer_retry_exhausted_total 1",
+		"umoja_signer_non_retryable_errors_total 2",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("prometheus output missing %q: %q", expected, body)
+		}
+	}
+}
+
 func TestMetricsExposeSignerRetryCounters(t *testing.T) {
 	signerMetrics := &provider.SignerRetryMetrics{}
 	signerMetrics.AttemptsTotal.Store(7)
