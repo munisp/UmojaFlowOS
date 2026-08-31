@@ -64,3 +64,28 @@ The startup validator must run before the HTTP server reports readiness. Configu
 Before enabling the rail for a Nigerian bank or PSP, the counterparty must be identified, licensed/contracted, and assessed through the repository’s banking-partner and payout-PSP evidence controls. The counterparty must document its actual authentication, idempotency, status, reversal, timeout, webhook, and settlement semantics. Those semantics must be tested in staging and mapped explicitly rather than relying on the generic status table.
 
 The current implementation is production-oriented and provider-neutral, but it is not a bank-specific production connection until those counterparty artifacts, credentials, network controls, startup gates, and staging evidence exist.
+
+## Mojaloop secondary-rail configuration
+
+When Mojaloop is selected as the secondary rail, the payment-engine deployment must provide the following explicit configuration. These variables are separate from the generic Nigerian bank/PSP variables above and must not be silently inferred from them.
+
+| Variable | Required value | Secret | Startup validation |
+|---|---|---:|---|
+| `MOJALOOP_RAIL_ENABLED` | `false` or `true` | No | Defaults to `false`; when `true`, the rail is constructed but remains non-executable until the execution gate is enabled. |
+| `MOJALOOP_RAIL_EXECUTION_ENABLED` | `false` or `true` | No | Defaults to `false`; `true` requires all participant, signer, counterparty, durable-UNKNOWN-store, and staging gates. |
+| `MOJALOOP_BASE_URL` | Absolute provider/switch URL | No | Must be credential-free and HTTPS outside an explicitly declared loopback test profile. |
+| `MOJALOOP_SOURCE_FSP` | Authorized FSPIOP participant identifier | No | Must match the participant identity registered with the Mojaloop switch. |
+| `MOJALOOP_HTTP_TIMEOUT` | Positive bounded duration | No | Must be greater than zero and no greater than the deployment maximum; timeout remains UNKNOWN. |
+| `MOJALOOP_MAX_BODY_BYTES` | Positive bounded integer | No | Must be within the response-size limit; oversized status responses fail closed. |
+| `MOJALOOP_CA_BUNDLE` | Optional trusted CA bundle path | No | Required when the switch or private signing service uses a non-system certificate authority. |
+| `MOJALOOP_SIGNER_ENDPOINT` | HSM or delegated FSPIOP signing service endpoint | No | Required when execution is enabled; must use an authenticated protected channel. |
+| `MOJALOOP_SIGNER_KEY_REFERENCE` | HSM key label or signing-service key reference | No | Required when execution is enabled; raw private keys are prohibited in environment variables, files, and images. |
+| `MOJALOOP_SIGNER_AUDIENCE` | Expected signer-service audience | No | Required when the signing service authenticates requests using audience-bound credentials. |
+
+The startup validator must refuse readiness—not silently disable the rail—when `MOJALOOP_RAIL_EXECUTION_ENABLED=true` and any required value is absent, malformed, insecure, or unreadable. The validator must also refuse startup if Mojaloop is enabled as a secondary rail without a configured primary rail, durable UNKNOWN-state store, and coordinator authority boundary.
+
+A production signing service must receive only the exact method, URI, and canonical request bytes to sign. The payment engine must never load or log private key material. Signer credentials should be provided through a mounted secret or an external secret manager, with file ownership restricted to the payment-engine service account and mode `0400` where file-based injection is used. Signing-service tokens, key references, FSPIOP signatures, ILP packets, conditions, and transfer payloads must be redacted from logs, traces, metrics labels, crash reports, and support bundles.
+
+The Mojaloop rail must remain disabled until the participant registration, FSPIOP signing, source/payee FSP authorization, ILP packet and condition validation, callback/status lookup, timeout, reversal, and reconciliation scenarios pass in staging. A `202 Accepted` response is provisional and must be represented as `Pending`; it is not settlement finality. A GET status response of `404`, any `5xx`, a timeout, an invalid signature response, a transfer-ID mismatch, or an unrecognized transfer state is UNKNOWN and cannot authorize another fallback.
+
+Credential rotation requires two-person approval, provisioning of the replacement signer credential or key reference, a staging canary GET and signed transfer test, and a rolling deployment that preserves the previously verified credential until the replacement succeeds. Failed canaries leave `MOJALOOP_RAIL_EXECUTION_ENABLED=false` and do not revoke the last known-good signer until incident review is complete.

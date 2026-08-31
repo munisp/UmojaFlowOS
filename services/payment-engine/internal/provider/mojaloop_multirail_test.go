@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -98,4 +100,52 @@ func TestMojaloopInstructionFromIntentRejectsExpiredInstruction(t *testing.T) {
 	if _, err := MojaloopInstructionFromIntent(intent); err == nil {
 		t.Fatal("expired instruction was accepted")
 	}
+}
+
+func TestMojaloopStatus404KeepsCoordinatorFailClosed(t *testing.T) {
+	id := "019875da-8fd5-7edb-98ad-57b1744d1c8a"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/transfers":
+			w.WriteHeader(http.StatusInternalServerError)
+		case r.Method == http.MethodGet && r.URL.Path == "/transfers/"+id:
+			w.WriteHeader(http.StatusNotFound)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	client, err := NewFSPIOPMojaloopClient(MojaloopConfig{
+		BaseURL:               server.URL,
+		SourceFSP:             "umojaflowos-ng",
+		Signer:                &fixedMojaloopSigner{signature: "signature"},
+		AllowInsecureLoopback: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	primary, err := NewMojaloopRail(client, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondary := &fallbackProbeRail{}
+	intent := multirail.Intent{ID: id, IdempotencyKey: id, Payload: mojaloopIntentPayload(id)}
+	_, err = multirail.NewCoordinator().Execute(context.Background(), intent, primary, secondary)
+	if !errors.Is(err, multirail.ErrUnknownOutcome) {
+		t.Fatalf("error=%v, want ErrUnknownOutcome", err)
+	}
+	if secondary.calls.Load() != 0 {
+		t.Fatalf("secondary calls=%d, want 0", secondary.calls.Load())
+	}
+}
+
+type fallbackProbeRail struct{ calls atomic.Int32 }
+
+func (r *fallbackProbeRail) Name() string { return "fallback-probe" }
+func (r *fallbackProbeRail) Submit(context.Context, multirail.Intent) (multirail.Submission, error) {
+	r.calls.Add(1)
+	return multirail.Submission{Status: multirail.Submitted}, nil
+}
+func (r *fallbackProbeRail) Query(context.Context, multirail.Intent) (multirail.Submission, error) {
+	return multirail.Submission{Status: multirail.Unknown}, multirail.ErrUnknownOutcome
 }
