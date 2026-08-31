@@ -248,6 +248,10 @@ func newHandlerWithWebhookAndPosting(now func() time.Time, webhook http.Handler,
 }
 
 func main() {
+	productionProfile := strings.EqualFold(strings.TrimSpace(os.Getenv("UMOJA_ENV")), "production")
+	if _, configErr := provider.LoadNigerianRailConfig(os.Getenv, productionProfile); configErr != nil {
+		panic(configErr)
+	}
 	ledgerRuntime, err := ledger.RuntimeFromProcessEnv()
 	if err != nil {
 		panic(err)

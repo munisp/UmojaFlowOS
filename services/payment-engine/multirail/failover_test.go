@@ -131,3 +131,39 @@ func TestConcurrentExecuteRejectsChangedPayloadForSameKey(t *testing.T) {
 		t.Fatalf("expected one provider submission, got %d", got)
 	}
 }
+
+func TestConcurrentExecuteWaiterHonorsContextCancellation(t *testing.T) {
+	rail := &singleFlightRail{started: make(chan struct{}, 1), release: make(chan struct{})}
+	coordinator := NewCoordinator()
+	intent := Intent{ID: "cancel-waiter", IdempotencyKey: "cancel-waiter-key", Payload: []byte(`{"amount":100}`)}
+	leaderDone := make(chan struct{})
+	go func() {
+		_, _ = coordinator.Execute(context.Background(), intent, rail, nil)
+		close(leaderDone)
+	}()
+	<-rail.started
+	waiterCtx, cancel := context.WithCancel(context.Background())
+	waiterDone := make(chan error, 1)
+	go func() {
+		_, err := coordinator.Execute(waiterCtx, intent, rail, nil)
+		waiterDone <- err
+	}()
+	cancel()
+	select {
+	case err := <-waiterDone:
+		if err != context.Canceled {
+			t.Fatalf("waiter error=%v, want context canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("canceled waiter remained blocked")
+	}
+	close(rail.release)
+	select {
+	case <-leaderDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("single-flight leader did not finish")
+	}
+	if got := rail.calls.Load(); got != 1 {
+		t.Fatalf("expected one provider submission, got %d", got)
+	}
+}

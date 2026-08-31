@@ -76,6 +76,9 @@ var ErrExpired = errors.New("payment intent expired")
 var ErrIdempotencyConflict = errors.New("idempotency key is bound to a different payment intent")
 
 func (c *Coordinator) Execute(ctx context.Context, in Intent, primary, secondary Rail) (Result, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if primary == nil {
 		return Result{}, errors.New("primary rail is required")
 	}
@@ -92,8 +95,12 @@ func (c *Coordinator) Execute(ctx context.Context, in Intent, primary, secondary
 		return Result{}, err
 	}
 	if !leader {
-		<-call.done
-		return call.result, call.err
+		select {
+		case <-call.done:
+			return call.result, call.err
+		case <-ctx.Done():
+			return Result{}, ctx.Err()
+		}
 	}
 
 	result, execErr := c.execute(ctx, in, primary, secondary)
