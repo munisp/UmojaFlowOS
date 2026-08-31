@@ -1,0 +1,15 @@
+golang 1.25.0
+rust 1.89.0
+nodejs 20.19.4
+python 3.11.9
+postgres 16.4
+helm 3.16.4
+kubectl 1.31.5
+k6 0.54.0
+prometheus 2.55.1
+alertmanager 0.27.0
+act 0.2.70
+
+# Native requirements: build-essential, pkg-config, libssl-dev, libpq-dev, docker.io, docker-compose-plugin
+
+# Python dependencies are pinned in requirements-ci.txt; frontend dependencies are pinned by pnpm-lock.yaml.

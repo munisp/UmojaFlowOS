@@ -26,3 +26,9 @@ apps/control-plane/.project-config.json
 
 # Generated local/staging evidence bundles can contain operational metadata and must never be committed.
 assurance/evidence/
+
+# Local toolchain downloads and validation output; install via scripts/infra/bootstrap_toolchains.sh.
+.toolchain/
+validation-artifacts/
+artifacts-toolchain-bootstrap.log
+artifacts-staging-verifier-no-cluster.log
