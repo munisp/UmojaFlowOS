@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 import psycopg
+from psycopg import sql as psql_sql
 
 
 def main() -> int:
@@ -16,7 +17,9 @@ def main() -> int:
     assert manifest['scenario_version'] == 'nigeria-cbn-vasp-v1'
     assert manifest['synthetic'] is True
     assert manifest['environment'] == 'local-staging'
-    assert len(manifest['tables']) == 123
+    table_names = [item['table'] for item in manifest['tables']]
+    assert len(table_names) == len(set(table_names))
+    assert manifest['tables']
     assert all(item['row_count'] > 0 for item in manifest['tables'])
     with psycopg.connect(args.database_url) as conn:
         with conn.cursor() as cur:
@@ -33,6 +36,12 @@ def main() -> int:
             payment_orders = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM trade_cases")
             trade_cases = cur.fetchone()[0]
+            actual_empty_tables = []
+            for table_name in table_names:
+                schema_name, relation_name = table_name.split('.', 1)
+                cur.execute(psql_sql.SQL("SELECT COUNT(*) FROM {}.{}").format(psql_sql.Identifier(schema_name), psql_sql.Identifier(relation_name)))
+                if cur.fetchone()[0] == 0:
+                    actual_empty_tables.append(table_name)
             checks = {
                 'orphan_payment_orders': "SELECT COUNT(*) FROM payment_orders p LEFT JOIN customers c ON c.id=p.customer_id WHERE c.id IS NULL",
                 'orphan_trade_cases': "SELECT COUNT(*) FROM trade_cases t LEFT JOIN legal_entities l ON l.id=t.legal_entity_id WHERE l.id IS NULL",
@@ -45,9 +54,11 @@ def main() -> int:
                 'submitted_reporting_packs': "SELECT COUNT(*) FROM cbn_sandbox_reporting_packs WHERE submission_status='submitted'",
             }
             results = {}
-            for name, sql in checks.items():
-                cur.execute(sql)
+            for name, query in checks.items():
+                cur.execute(query)
                 results[name] = cur.fetchone()[0]
+    if actual_empty_tables:
+        results['actual_empty_tables'] = actual_empty_tables
     failures = {k: v for k, v in results.items() if v != 0}
     print(json.dumps({'manifest_summary': {'scenario_version': manifest['scenario_version'], 'environment': manifest['environment'], 'synthetic': manifest['synthetic'], 'table_count': len(manifest['tables']), 'generated_at': manifest['generated_at']}, 'migrations': migrations, 'seed_metadata_rows': seed_rows, 'payment_orders': payment_orders, 'trade_cases': trade_cases, 'checks': results, 'status': 'PASS' if not failures else 'FAIL', 'failures': failures}, indent=2, sort_keys=True))
     return 0 if not failures and migrations > 0 and payment_orders > 0 and trade_cases > 0 else 1

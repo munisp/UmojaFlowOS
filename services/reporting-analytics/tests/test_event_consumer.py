@@ -7,12 +7,24 @@ The successful path is covered in the Redis integration tests once the real
 ledger is attached; no in-memory recorder is substituted here.
 """
 
+import pytest
 from fastapi.testclient import TestClient
 
+import umojaflowos_reporting.service as service
 from umojaflowos_reporting.service import app
 
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def unavailable_event_ledger():
+    previous = service.EVENT_EVIDENCE_LEDGER
+    service.EVENT_EVIDENCE_LEDGER = service.UnavailableEventEvidenceLedger()
+    try:
+        yield
+    finally:
+        service.EVENT_EVIDENCE_LEDGER = previous
 
 
 def event(data: dict) -> dict:

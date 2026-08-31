@@ -1,82 +1,71 @@
 # UmojaFlowOS Production-Readiness Scorecard
-
+**Assessment date:** 2026-08-31
+**Scope:** Local PostgreSQL, Redis, service test suites, synthetic Nigerian/CBN staging data, resilience tests, coverage, security controls, and application-level RBAC.
+> This is an engineering readiness assessment. Synthetic data, local tests, and coverage results do not constitute CBN authorization, live-provider approval, legal evidence, or permission to activate customer payments.
 ## Executive decision
-
-The current evidence supports a **conditional Technical GO for tested local and database-backed paths**, but not a universal production GO or regulatory activation GO. The strongest new result is the coverage-enabled PostgreSQL multirail run: with the `integration` build tag and the provisioned `umoja_test` database, the durable UNKNOWN-state store’s principal SQL paths were exercised under real PostgreSQL transactions.
-
-> Coverage thresholds in this scorecard are proposed engineering release gates. They are not CBN-issued standards and cannot substitute for authorized staging evidence, independent approvals, provider permissions, or written regulatory authorization.
-
+UmojaFlowOS is at **Technical GO for the tested local and database-backed paths**, with explicit engineering gates still open. Redis event-ledger tests now execute successfully, PostgreSQL schema-owner separation is verified, 125 insertable database tables have been populated with deterministic synthetic Nigerian/CBN scenarios, the Toxiproxy partition scenario has passed, and the clean-room compliance/RBAC suite passes 44 of 44 targeted tests.
+The platform remains **Regulatory NO-GO for live activation**. Real legal/entity/UBO evidence, provider contracts and permissions, HSM and mTLS ceremonies, live CBN sandbox authorization, external supervisory integrations, independent approvals, and controlled-pilot evidence remain mandatory.
 ## Service scorecard
-
-| Service | Functional evidence | Coverage evidence | Proposed gate | Score | Disposition |
-|---|---|---|---|---:|---|
-| Payment engine, Go | Race-enabled packages pass; PostgreSQL integration scenarios pass; Toxiproxy scenario skipped because no proxy URL is configured | Full aggregate **58.9% statements**; multirail PostgreSQL-tagged run **73.8%**; `PostgresUnknownStateStore`: Enqueue 82.6%, Claim 87.5%, Reschedule 62.5%, RecordDecision 84.6% | ≥80% aggregate statements plus database and distributed resilience evidence | **6.8/10** | **Conditional GO for tested paths; below aggregate gate** |
-| Document intelligence, Python | Complete suite passes after PaddleOCR/Docling installation; Ollama transport mocks pass | **86% branch-aware** | ≥85% branch-aware | **9.0/10** | **GO on measured coverage gate** |
-| Reporting analytics, Python | **88 passed, 2 skipped**; dependency stack installed; deprecation warnings remain | **83% branch-aware** | ≥80% branch-aware and reviewed skips | **8.0/10** | **GO on measured coverage; review skips/warnings** |
-| Risk-compliance core, Rust | `cargo test --locked --all-features` passes | **82.51% lines**, 79.95% regions, 78.53% functions | ≥80% lines; function target tracked separately | **8.3/10** | **GO on line gate; function coverage below 80%** |
-| Ledger gateway, Rust | `cargo test --locked --all-features` passes | 87.55% lines, 80.36% functions, 81.08% regions | ≥80% lines and functions | **9.0/10** | **GO on measured gate** |
-| Control plane | 506 passed, 149 skipped across 108 files; explicit DB contract suite previously passed 111 tests with 16 skips | No unified microservice coverage gate in this run | Green suite; skips reviewed | **8.0/10** | **Conditional GO; external/live skips remain** |
-
-## PostgreSQL coverage evidence
-
-The first coverage command used an incorrect selector and ran no tests, producing a misleading 0% profile. That artifact is superseded. The corrected command used the repository’s `integration` build tag and the provisioned local database:
-
-```bash
-export UMOJA_TEST_DATABASE_URL='postgresql://.../umoja_test'
-cd services/payment-engine
-go test -race -count=1 -tags=integration \
-  -coverprofile=../../artifacts/coverage/multirail-postgres-integration.coverprofile \
-  ./multirail -run 'Postgres|Unknown|CrossReplica' -v
-```
-
-The corrected run passed the database-backed tests for cross-replica claim/payload binding, duplicate terminal-decision immutability, and stale-lease mutation rejection. The Toxiproxy test was **skipped**, not passed, because `UMOJA_TEST_TOXIPROXY_URL` was absent.
-
-The multirail package profile measured **73.8% statements**. The store-specific results demonstrate that the main durable SQL paths are exercised:
-
-| Function | Coverage |
-|---|---:|
-| `EnqueueUnknown` | 82.6% |
-| `Claim` | 87.5% |
-| `Reschedule` | 62.5% |
-| `RecordDecision` | 84.6% |
-
-The principal remaining SQL gap is `Reschedule`, especially database execution errors and the affected-row-count/lease-loss branch. Additional `RecordDecision` transaction-begin, insert-conflict, resolution-update, and query-error cases should be run against a controlled PostgreSQL fault-injection environment or a SQL-driver test double that preserves query semantics. The existing real-database evidence must remain the authority for row-locking and uniqueness behavior.
-
-## Risk interpretation
-
-The payment engine’s aggregate coverage remains below 80% because the full service includes provider adapters, signer/HSM runtime, workflow construction, webhook runtime, ledger paths, and operational failure handling. The PostgreSQL-tagged multirail run is stronger evidence for the durable store than the aggregate percentage, but it does not establish distributed network resilience because Toxiproxy was unavailable.
-
-Risk-compliance-core now exceeds the proposed 80% line threshold at 82.51%, but its 78.53% function coverage indicates that several functions remain only partially exercised. Screening-provider live request/response branches and eventing transport failure paths are the next focus areas.
-
-Document intelligence meets its proposed branch threshold, including Ollama non-2xx and malformed-JSON handling. Reporting analytics meets its measured threshold, but skipped tests and FastAPI deprecation warnings require explicit review before a production sign-off.
-
-## Release gates and blockers
-
-| Gate | Evidence | Status |
+| Service | Current evidence | Score | Disposition | Open gate |
+|---|---|---:|---|---|
+| Payment engine | Go race tests, real PostgreSQL UNKNOWN-store tests, Toxiproxy partition pass, Redis/TLS webhook tests, 58.9% full statement coverage, 73.8% multirail integration coverage | 7.4/10 | Conditional technical GO | Raise critical SQL/provider/HSM runtime coverage and repeat multi-replica load tests in staging. |
+| Risk-compliance core | Rust 1.89.0, all-feature tests, 82.51% line coverage, 78.53% function coverage | 8.4/10 | Technical GO with follow-up | Add provider transport and eventing failure combinations to raise function coverage. |
+| Ledger gateway | Rust 1.89.0, all-feature tests, 87.55% line and 80.36% function coverage | 9.0/10 | Technical GO | Execute live TigerBeetle reconciliation, DR, and rollback evidence. |
+| Document intelligence | PaddleOCR and Docling installed, 43 tests, 86% branch-aware coverage, Ollama failure paths covered | 9.0/10 | Technical GO | Validate production model provenance, mTLS, resource limits, and data-protection controls. |
+| Reporting analytics | Strict warnings pass; 90 tests pass, including two real Redis ledger tests | 9.0/10 | Technical GO | Repeat against managed Redis/streaming infrastructure and capture persistence/recovery evidence. |
+| Control plane | Clean-room targeted RBAC/compliance suite: 44/44 passed; broad full suite has explicit external skips | 8.2/10 | Conditional technical GO | Execute remaining external/live integrations and resolve full-suite open-handle behavior. |
+**Evidence-weighted technical readiness score: 8.5/10.** This is not a regulatory score.
+## Verified local evidence
+| Control | Result | Meaning |
 |---|---|---|
-| Go payment-engine aggregate ≥80% | 58.9% statements | **NO-GO on proposed threshold** |
-| Durable UNKNOWN-state SQL paths | Real PostgreSQL integration: claim, duplicate decision, stale lease, payload binding | **PASS for executed scenarios** |
-| Reschedule SQL error/lease-loss completeness | 62.5% function coverage; fault-injection cases pending | **OPEN** |
-| Distributed PostgreSQL/network partition evidence | Toxiproxy test skipped | **OPEN** |
-| Rust risk-compliance line ≥80% | 82.51% lines | **PASS**, with function follow-up |
-| Rust ledger line/function ≥80% | 87.55% / 80.36% | **PASS** |
-| Python document-intelligence branch ≥85% | 86% | **PASS** |
-| Python reporting branch ≥80% | 83%; 2 skipped | **PASS WITH REVIEW** |
-| Control-plane functional suite | 506 passed, 149 skipped | **CONDITIONAL** |
-| Live CBN restricted-pilot authorization | Not evidenced in local execution | **NO-GO until authorized evidence exists** |
-
-## Evidence files
-
-- `artifacts/coverage/multirail-postgres-integration.log`
-- `artifacts/coverage/multirail-postgres-integration.txt`
-- `artifacts/coverage/multirail-postgres-integration.coverprofile`
-- `artifacts/coverage/payment-engine-after-webhook.txt`
-- `artifacts/coverage/rust-risk/after-screening.txt`
-- `artifacts/coverage/rust-ledger/final.txt`
-- `artifacts/coverage/document-intelligence-final-aggregate.txt`
-- `artifacts/coverage/reporting-analytics-test.log`
-- `artifacts/multirail-test-list-integration.txt`
-
-## Final score
-
-Using the evidence-weighted service scores above, the simple average is **8.0/10 for technical test readiness**. This score is not a regulatory approval score. The decisive release disposition remains **Technical GO with open engineering gates; Regulatory NO-GO for live activation** until the Go aggregate target, `Reschedule` SQL error coverage, distributed Toxiproxy evidence, skipped-test review, and authorized regulatory evidence are complete.
+| Redis event ledger | 2/2 previously skipped tests passed against Redis 7.0.15 database 15 | Atomic duplicate handling and hashed untrusted event IDs execute against real Redis. |
+| PostgreSQL migration identity | Passed | Migrations use `assurance_schema_owner`; application queries use `umoja_app`; both target `umoja_test` or the clean-room equivalent. |
+| Application DDL boundary | Passed | `umoja_app`: schema `USAGE=true`, schema `CREATE=false`, database `CONNECT=true`, database `CREATE=false`, zero owned objects, no default privileges. |
+| Synthetic platform seed | Passed | 125 insertable tables, three deterministic records per table, local-staging environment only. |
+| Seed integrity | Passed | Zero orphan payment/trade records, invalid market observations, invalid AML subject counts, unauthorized execution assertions, or premature regulatory submissions. |
+| Multirail durability | Passed | Duplicate terminal decisions, stale leases, payload binding, concurrent claims, and Toxiproxy partition behavior. |
+| Clean-room compliance/RBAC | Passed | 44/44 targeted tests across counterparty onboarding, credential RBAC, service contracts, role matrix, SoD, KYC visibility, sandbox boundaries, and migration controls. |
+| Reporting warning hygiene | Passed | `pytest -W error` passes with no socket/resource-leak or deprecation failures. |
+## Production practices implemented
+### Security
+The platform implements non-root restricted Kubernetes deployment profiles, read-only root filesystems, secret-volume injection for mTLS and signer material, fail-closed provider routing, payload SHA-256 binding, immutable evidence decisions, short-lived authorization controls, PostgreSQL role separation, and no-DDL application grants. The seeder refuses `production`, `prod`, and `live` environments and labels generated records as synthetic.
+Redis local testing uses loopback binding, protected mode, a disposable isolated database, no persistence, and no operational data. Production Redis must use TLS, ACLs, secret-managed credentials, network policy, bounded connection/read timeouts, and retention-compatible persistence.
+### Performance and resilience
+The coordinator baseline is approximately 1.25–1.37 million same-key operations per second and 0.27–0.30 million distinct-key operations per second on the sandbox host. These values are not production capacity commitments. Production performance must be measured with PostgreSQL, provider latency, HSM latency, ledger writes, resource limits, replica count, and rate limits enabled.
+Implemented resilience controls include PostgreSQL atomic claims and partial unique indexes, advisory-locked migrations, bounded signer retries, durable UNKNOWN reconciliation, payload binding, Toxiproxy partition testing, and Redis duplicate-event protection. Production tuning should use measured pool sizing, statement/transaction timeouts, lock-wait recording rules, queue-depth SLOs, provider-specific circuit breakers, and load tests at intended pilot limits.
+### Data and test integrity
+The seed verifier now checks actual row counts for every manifest table rather than trusting planned row counts. The synthetic generator handles ledger foreign keys, distinct debit/credit accounts, CBN disclosure/complaint constraints, stakeholder assignment target exclusivity, and stablecoin review roles. The reporting event-consumer tests reset global ledger state around each boundary test to prevent order-dependent false results.
+## Feature, business-rule, and logic completeness
+| Feature domain | Accuracy/completeness assessment | Score | Readiness |
+|---|---|---:|---|
+| Multi-rail payments | Idempotency, payload binding, UNKNOWN state, lease loss, fail-closed fallback, reconciliation, and duplicate terminal decision rules are implemented and exercised. | 8.8/10 | Strong technical readiness; live provider and HSM evidence pending. |
+| Stablecoin orchestration | Route reviews, issuer evidence, compliance gates, treasury buffers, and decision roles are modeled and validated. | 7.9/10 | Conditional; issuer licensing, contracts, reserves, and operational evidence pending. |
+| AML/CFT/CPF | Screening, sanctions/high-risk cases, SAR/STR records, SoD, and escalation structures are present. | 7.9/10 | Conditional; real data feeds, MLRO operation, model validation, and independent assurance pending. |
+| KYC/document intelligence | Upload controls, evidence, model selection, provenance, PaddleOCR/Docling, Ollama policy, and strict failure handling are implemented. | 8.7/10 | Strong technical readiness; production model governance and privacy/legal evidence pending. |
+| Counterparty onboarding | Legal, technical, compliance, treasury, evidence, recertification, and role isolation paths are tested. | 8.7/10 | Strong technical readiness; real counterparties and approvals pending. |
+| CBN sandbox/reporting | Dossiers, test plans, incidents, reporting packs, deadlines, evidence, and submission guards exist. | 7.3/10 | Conditional; authorized CBN interfaces, real records, and submission approval pending. |
+| Treasury/ledger reconciliation | TigerBeetle facts, posting intents, reconciliation runs, discrepancies, buffers, and recommendations are represented. | 8.1/10 | Conditional; live bank/TigerBeetle reconciliation and DR evidence pending. |
+| Observability/incident response | Prometheus metrics, alerts, Grafana dashboards, runbooks, evidence capture, and chaos scenarios exist. | 8.1/10 | Conditional; live alert delivery, SLOs, and response drills pending. |
+| Governance/RBAC | Database role separation, application permission matrices, dual-control structures, and independent approvals are modeled. | 8.8/10 | Strong technical readiness; verified human identities and signed approvals pending. |
+**Business-rule weighted score: 8.2/10.** The lower scores reflect production evidence and governance dependencies, not an assertion that the underlying code is incorrect.
+## Remaining release gates
+| Priority | Gate | Required evidence |
+|---|---|---|
+| P0 | Legal/entity/UBO identity | Verified corporate records, UBO chain, accountable officers, conflicts/recusals, counsel review, and board approval. |
+| P0 | Controlled live perimeter | Written pilot scope, customer eligibility, transaction/exposure caps, provider permissions, rollback authority, and CBN authorization. |
+| P0 | Financial integrity | Live PostgreSQL/TigerBeetle reconciliation, zero unexplained discrepancies, and independently reviewed rollback evidence. |
+| P1 | Provider and signer operations | Contracts, mTLS certificates, HSM key ceremonies, rotation/revocation evidence, provider contacts, and failover drills. |
+| P1 | Observability/SLO | Live Prometheus scraping, Alertmanager routing, PagerDuty/Slack delivery, dashboard review, and alert-response drill. |
+| P1 | Coverage/performance | Go critical-path coverage, Rust function follow-up, multi-replica load, latency budgets, pool/lock measurements, and resource-limit tests. |
+| P1 | External integrations | Live Redis, Keycloak/Vault, OpenSearch/WORM, TigerBeetle, bank/PSP, Mojaloop, and CBN supervisory-feed tests. |
+## Final disposition
+**Technical readiness: 8.5/10.**
+**Business-rule and feature completeness: 8.2/10.**
+**Regulatory/live activation: NO-GO pending authorized evidence.**
+The next best engineering step is a controlled staging run with all external dependencies enabled, followed by targeted Go SQL/runtime coverage and capacity testing. The next governance step is replacing only the synthetic records that authorized Legal, Compliance, and CBN processes approve for use in the actual submission dossier.
+## References
+[1]: https://sandbox.cbn.gov.ng/ "CBN Regulatory Sandbox"
+[2]: https://redis.io/docs/latest/operate/oss_and_stack/management/security/ "Redis security documentation"
+[3]: https://www.postgresql.org/docs/current/ddl-priv.html "PostgreSQL privileges documentation"
+[4]: https://llvm.org/docs/CommandGuide/llvm-cov.html "LLVM coverage documentation"
+[5]: https://github.com/Shopify/toxiproxy "Toxiproxy project"

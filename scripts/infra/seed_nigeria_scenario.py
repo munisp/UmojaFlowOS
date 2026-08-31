@@ -76,6 +76,8 @@ def business_value(table: Table, column: Column, row_no: int, now: datetime, enu
         return ["provider_contact", "cbn_liaison"][row_no % 2]
     if t == "external_stakeholder_assignments" and n == "stakeholder_role":
         return "provider_contact" if row_no == 1 else "cbn_liaison"
+    if t == "stablecoin_orchestration_route_reviews" and n == "decided_role":
+        return "compliance_officer"
     if t == "spend_card_programmes" and n == "programme_reference":
         return f"SCP-NG-{row_no:03d}"
     if t == "supply_chain_finance_programmes" and n == "programme_reference":
@@ -119,7 +121,7 @@ def business_value(table: Table, column: Column, row_no: int, now: datetime, enu
         if n == "debit_account_id":
             return 100000 + row_no
         if n == "credit_account_id":
-            return 100000 + (3 - row_no)
+            return 100001 + (row_no % 3)
         if n == "reconciliation_state":
             return "pending"
         if n == "reconciliation_reference":
@@ -128,7 +130,7 @@ def business_value(table: Table, column: Column, row_no: int, now: datetime, enu
         if n == "debit_account_id":
             return 100000 + row_no
         if n == "credit_account_id":
-            return 100000 + (3 - row_no)
+            return 100001 + (row_no % 3)
         if n == "expected_transfer_id":
             return 900000 + row_no
         if n == "intent_state":
@@ -181,6 +183,15 @@ def business_value(table: Table, column: Column, row_no: int, now: datetime, enu
         if n == "submission_status":
             return "not_submitted"
         if n == "submission_reference":
+            return None
+    if t == "cbn_sandbox_consumer_records":
+        if n == "record_kind":
+            return "disclosure_acceptance" if row_no == 1 else "complaint"
+        if n == "disclosure_version":
+            return "v1" if row_no == 1 else None
+        if n == "status" and row_no == 1:
+            return "recorded"
+        if n in {"resolved_by", "resolved_at", "resolution"} and row_no == 1:
             return None
     if t == "cbn_sandbox_incidents" and n == "notification_status":
         return "not_submitted"
@@ -430,6 +441,13 @@ def synthetic_row(table: Table, row_no: int, now: datetime, enum_values: dict[st
                 value = stable_uuid(f"{table.name}.{col.name}.{row_no}")
         if value is not None:
             row[col.name] = value
+    if table.name == "external_stakeholder_assignments":
+        if row.get("stakeholder_role") == "provider_contact":
+            row["counterparty_id"] = stable_uuid(f"public.counterparties.id.{row_no}")
+            row["dossier_id"] = None
+        elif row.get("stakeholder_role") == "cbn_liaison":
+            row["counterparty_id"] = None
+            row["dossier_id"] = stable_uuid(f"public.cbn_sandbox_dossiers.id.{row_no}")
     return row
 
 
