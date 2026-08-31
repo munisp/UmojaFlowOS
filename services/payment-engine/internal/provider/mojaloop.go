@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/munisp/UmojaFlowOS/services/payment-engine/multirail"
 )
 
 // MojaloopInstruction represents a previously authorised FSPIOP request. It
@@ -32,16 +35,27 @@ type MojaloopInstruction struct {
 	Condition     string
 }
 
+type MojaloopTransferStatus struct {
+	TransferID    string `json:"transferId"`
+	TransferState string `json:"transferState"`
+}
+
 type MojaloopClient interface {
 	// SubmitTransfer returns only an accepted asynchronous request reference.
 	// It never represents clearing, settlement, or provider finality.
 	SubmitTransfer(context.Context, MojaloopInstruction) (string, error)
+	// QueryTransfer is read-only and returns provider-reported transfer state.
+	QueryTransfer(context.Context, MojaloopInstruction) (MojaloopTransferStatus, error)
 }
 
 type DisabledMojaloopClient struct{}
 
 func (DisabledMojaloopClient) SubmitTransfer(context.Context, MojaloopInstruction) (string, error) {
 	return "", errors.New("mojaloop provider is not configured and transfer submission is disabled")
+}
+
+func (DisabledMojaloopClient) QueryTransfer(context.Context, MojaloopInstruction) (MojaloopTransferStatus, error) {
+	return MojaloopTransferStatus{}, errors.New("mojaloop provider is not configured and transfer lookup is disabled")
 }
 
 var (
@@ -77,8 +91,8 @@ func ValidateInstruction(instruction MojaloopInstruction) error {
 	if instruction.Expiration.IsZero() || !instruction.Expiration.After(time.Now().UTC()) {
 		return errors.New("mojaloop expiration must be in the future")
 	}
-	if strings.TrimSpace(instruction.ILPPacket) == "" || strings.TrimSpace(instruction.Condition) == "" {
-		return errors.New("mojaloop instruction requires an authorised Interledger packet and condition")
+	if err := validateILPCryptographicFields(instruction.ILPPacket, instruction.Condition); err != nil {
+		return err
 	}
 	return nil
 }
@@ -147,6 +161,50 @@ type fspiopTransferRequest struct {
 	Condition  string `json:"condition"`
 }
 
+func (c *FSPIOPMojaloopClient) QueryTransfer(ctx context.Context, instruction MojaloopInstruction) (MojaloopTransferStatus, error) {
+	if c == nil || c.baseURL == nil || c.signer == nil || strings.TrimSpace(c.sourceFSP) == "" {
+		return MojaloopTransferStatus{}, errors.New("mojaloop client is not configured")
+	}
+	if err := ValidateInstruction(instruction); err != nil {
+		return MojaloopTransferStatus{}, err
+	}
+	if instruction.PayerFSP != c.sourceFSP {
+		return MojaloopTransferStatus{}, errors.New("mojaloop instruction payer does not match configured source FSP")
+	}
+	requestURI := "/transfers/" + url.PathEscape(instruction.InstructionID)
+	signature, err := c.signer.SignFSPIOP(ctx, http.MethodGet, requestURI, nil)
+	if err != nil || strings.TrimSpace(signature) == "" {
+		return MojaloopTransferStatus{}, errors.New("mojaloop status lookup signature is unavailable")
+	}
+	endpoint := c.baseURL.ResolveReference(&url.URL{Path: requestURI})
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
+	if err != nil {
+		return MojaloopTransferStatus{}, fmt.Errorf("create Mojaloop status request: %w", err)
+	}
+	request.Header.Set("Accept", "application/vnd.interoperability.transfers+json;version=1.1")
+	request.Header.Set("FSPIOP-Source", c.sourceFSP)
+	request.Header.Set("FSPIOP-URI", requestURI)
+	request.Header.Set("FSPIOP-HTTP-Method", http.MethodGet)
+	request.Header.Set("FSPIOP-Signature", signature)
+	response, err := c.http.Do(request)
+	if err != nil {
+		return MojaloopTransferStatus{}, errors.New("mojaloop status endpoint is unavailable")
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64*1024))
+		return MojaloopTransferStatus{}, fmt.Errorf("mojaloop status lookup failed: HTTP %d", response.StatusCode)
+	}
+	var status MojaloopTransferStatus
+	if err := json.NewDecoder(io.LimitReader(response.Body, 64*1024)).Decode(&status); err != nil {
+		return MojaloopTransferStatus{}, errors.New("mojaloop status response was not valid JSON")
+	}
+	if status.TransferID != instruction.InstructionID || strings.TrimSpace(status.TransferState) == "" {
+		return MojaloopTransferStatus{}, errors.New("mojaloop status response is not bound to the requested instruction")
+	}
+	return status, nil
+}
+
 func (c *FSPIOPMojaloopClient) SubmitTransfer(ctx context.Context, instruction MojaloopInstruction) (string, error) {
 	if err := ValidateInstruction(instruction); err != nil {
 		return "", err
@@ -199,4 +257,49 @@ func (c *FSPIOPMojaloopClient) SubmitTransfer(ctx context.Context, instruction M
 		return "", fmt.Errorf("mojaloop transfer request was not accepted: HTTP %d", response.StatusCode)
 	}
 	return instruction.InstructionID, nil
+}
+
+func decodeBase64Octets(value string) ([]byte, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, errors.New("empty encoded value")
+	}
+	for _, encoding := range []*base64.Encoding{base64.RawURLEncoding, base64.URLEncoding, base64.RawStdEncoding, base64.StdEncoding} {
+		if decoded, err := encoding.DecodeString(value); err == nil {
+			return decoded, nil
+		}
+	}
+	return nil, errors.New("value is not valid base64")
+}
+
+func validateILPCryptographicFields(packet, condition string) error {
+	packetBytes, err := decodeBase64Octets(packet)
+	if err != nil || len(packetBytes) < 1 {
+		return errors.New("ILP packet must be nonempty base64-encoded octets")
+	}
+	// ILPv4 Prepare packets have version 4 in the high nibble and packet type
+	// 12 (Prepare) in the low nibble. A different packet type cannot authorize a
+	// transfer submission through this adapter.
+	if packetBytes[0]>>4 != 4 || packetBytes[0]&0x0f != 12 {
+		return errors.New("ILP packet must be an ILPv4 Prepare packet")
+	}
+	conditionBytes, err := decodeBase64Octets(condition)
+	if err != nil || len(conditionBytes) != 32 {
+		return errors.New("ILP execution condition must decode to exactly 32 bytes")
+	}
+	return nil
+}
+
+func normalizeMojaloopTransferState(status MojaloopTransferStatus) (multirail.Submission, error) {
+	state := strings.ToUpper(strings.TrimSpace(status.TransferState))
+	switch state {
+	case "COMMITTED":
+		return multirail.Submission{ProviderRef: status.TransferID, Status: multirail.Settled, Reason: "Mojaloop reports committed transfer"}, nil
+	case "RESERVED", "PREPARED", "RECEIVED", "PROCESSING":
+		return multirail.Submission{ProviderRef: status.TransferID, Status: multirail.Pending, Reason: "Mojaloop reports an in-progress transfer"}, nil
+	case "ABORTED":
+		return multirail.Submission{ProviderRef: status.TransferID, Status: multirail.Failed, RetryableWithoutBusinessEffect: true, Reason: "Mojaloop reports an aborted transfer"}, nil
+	default:
+		return multirail.Submission{ProviderRef: status.TransferID, Status: multirail.Unknown, Reason: "Mojaloop returned an unrecognized transfer state"}, multirail.ErrUnknownOutcome
+	}
 }

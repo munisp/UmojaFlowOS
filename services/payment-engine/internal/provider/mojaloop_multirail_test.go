@@ -11,14 +11,26 @@ import (
 )
 
 type testMojaloopClient struct {
-	calls atomic.Int32
-	last  MojaloopInstruction
+	calls    atomic.Int32
+	last     MojaloopInstruction
+	status   MojaloopTransferStatus
+	queryErr error
 }
 
 func (c *testMojaloopClient) SubmitTransfer(_ context.Context, instruction MojaloopInstruction) (string, error) {
 	c.calls.Add(1)
 	c.last = instruction
 	return instruction.InstructionID, nil
+}
+
+func (c *testMojaloopClient) QueryTransfer(_ context.Context, instruction MojaloopInstruction) (MojaloopTransferStatus, error) {
+	if c.queryErr != nil {
+		return MojaloopTransferStatus{}, c.queryErr
+	}
+	if c.status.TransferID == "" {
+		c.status.TransferID = instruction.InstructionID
+	}
+	return c.status, nil
 }
 
 type yellowCardFailureForMojaloop struct {
@@ -35,7 +47,7 @@ func (r yellowCardFailureForMojaloop) Query(context.Context, multirail.Intent) (
 }
 
 func mojaloopIntentPayload(id string) []byte {
-	return []byte(`{"instructionId":"` + id + `","corridor":"NIGERIA_NGN","amount":"100.25","currency":"NGN","payerFsp":"umojaflowos-ng","payeeFsp":"licensed-counterparty","expiration":"2030-01-01T00:00:00Z","ilpPacket":"AyAD","condition":"lB7gTCD0aA1ESQ0cW9vN4pK8FhSgQdHDitEMlJwoYMc"}`)
+	return []byte(`{"instructionId":"` + id + `","corridor":"NIGERIA_NGN","amount":"100.25","currency":"NGN","payerFsp":"umojaflowos-ng","payeeFsp":"licensed-counterparty","expiration":"2030-01-01T00:00:00Z","ilpPacket":"TAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","condition":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}`)
 }
 
 func TestCoordinatorFallsBackToMojaloopOnlyAfterYellowCardProvesNonSubmission(t *testing.T) {

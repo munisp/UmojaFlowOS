@@ -60,11 +60,19 @@ func (r *MojaloopRail) Submit(ctx context.Context, intent multirail.Intent) (mul
 	return multirail.Submission{ProviderRef: acceptedID, Status: multirail.Pending, Reason: "Mojaloop accepted the signed FSPIOP transfer asynchronously"}, nil
 }
 
-func (r *MojaloopRail) Query(context.Context, multirail.Intent) (multirail.Submission, error) {
-	// MojaloopClient intentionally has no query method yet. Returning UNKNOWN is
-	// safer than inventing a status or treating an asynchronous FSPIOP request as
-	// a confirmed non-submission.
-	return multirail.Submission{Status: multirail.Unknown, Reason: ErrMojaloopStatusQueryUnavailable.Error()}, ErrMojaloopStatusQueryUnavailable
+func (r *MojaloopRail) Query(ctx context.Context, intent multirail.Intent) (multirail.Submission, error) {
+	if r == nil || r.Client == nil || r.Build == nil {
+		return multirail.Submission{Status: multirail.Unknown, Reason: "Mojaloop rail is not configured"}, ErrMojaloopStatusQueryUnavailable
+	}
+	instruction, err := r.Build(intent)
+	if err != nil {
+		return multirail.Submission{Status: multirail.Unknown, Reason: err.Error()}, err
+	}
+	status, err := r.Client.QueryTransfer(ctx, instruction)
+	if err != nil {
+		return multirail.Submission{ProviderRef: status.TransferID, Status: multirail.Unknown, Reason: err.Error()}, err
+	}
+	return normalizeMojaloopTransferState(status)
 }
 
 // MojaloopInstructionFromIntent parses a previously authorized, canonical

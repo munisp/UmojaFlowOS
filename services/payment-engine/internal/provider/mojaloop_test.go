@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -25,6 +26,12 @@ func (s *fixedMojaloopSigner) SignFSPIOP(_ context.Context, method, requestURI s
 	return s.signature, s.err
 }
 
+func validILPPreparePacket() string {
+	packet := make([]byte, 36)
+	packet[0] = 0x4c // ILPv4 Prepare
+	return base64.RawURLEncoding.EncodeToString(packet)
+}
+
 func validMojaloopInstruction() MojaloopInstruction {
 	return MojaloopInstruction{
 		InstructionID: validTransferID,
@@ -34,8 +41,8 @@ func validMojaloopInstruction() MojaloopInstruction {
 		PayerFSP:      "umojaflowos-ng",
 		PayeeFSP:      "licensed-counterparty",
 		Expiration:    time.Now().UTC().Add(5 * time.Minute),
-		ILPPacket:     "AyAD",
-		Condition:     "lB7gTCD0aA1ESQ0cW9vN4pK8FhSgQdHDitEMlJwoYMc",
+		ILPPacket:     validILPPreparePacket(),
+		Condition:     base64.RawURLEncoding.EncodeToString(make([]byte, 32)),
 	}
 }
 
@@ -136,5 +143,47 @@ func TestFSPIOPClientDoesNotClaimSettlementFromAcceptedRequest(t *testing.T) {
 	}
 	if _, err := client.SubmitTransfer(context.Background(), validMojaloopInstruction()); err == nil {
 		t.Fatal("HTTP 200 was treated as a settled or accepted transfer")
+	}
+}
+
+func TestFSPIOPClientQueriesTransferStatusReadOnly(t *testing.T) {
+	signer := &fixedMojaloopSigner{signature: "lookup-signature"}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/transfers/"+validTransferID {
+			t.Fatalf("unexpected lookup request %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("FSPIOP-HTTP-Method") != http.MethodGet || r.Header.Get("FSPIOP-Signature") != "lookup-signature" {
+			t.Fatalf("lookup signature headers missing: %#v", r.Header)
+		}
+		_, _ = w.Write([]byte(`{"transferId":"` + validTransferID + `","transferState":"COMMITTED"}`))
+	}))
+	defer server.Close()
+	client, err := NewFSPIOPMojaloopClient(MojaloopConfig{BaseURL: server.URL, SourceFSP: "umojaflowos-ng", Signer: signer, AllowInsecureLoopback: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, err := client.QueryTransfer(context.Background(), validMojaloopInstruction())
+	if err != nil || status.TransferID != validTransferID || status.TransferState != "COMMITTED" {
+		t.Fatalf("status=%+v err=%v", status, err)
+	}
+}
+
+func TestValidateInstructionRejectsMalformedCryptographicFields(t *testing.T) {
+	for name, mutate := range map[string]func(*MojaloopInstruction){
+		"bad packet encoding": func(instruction *MojaloopInstruction) { instruction.ILPPacket = "not-base64*" },
+		"wrong packet type": func(instruction *MojaloopInstruction) {
+			instruction.ILPPacket = base64.RawURLEncoding.EncodeToString([]byte{0x4d, 0x00})
+		},
+		"wrong condition size": func(instruction *MojaloopInstruction) {
+			instruction.Condition = base64.RawURLEncoding.EncodeToString([]byte{0x01})
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			instruction := validMojaloopInstruction()
+			mutate(&instruction)
+			if err := ValidateInstruction(instruction); err == nil {
+				t.Fatal("malformed cryptographic fields were accepted")
+			}
+		})
 	}
 }
