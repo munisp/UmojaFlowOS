@@ -30,19 +30,24 @@ type serviceMetrics struct {
 	validationsTotal   atomic.Uint64
 	validationsInvalid atomic.Uint64
 	validationsFailed  atomic.Uint64
+	signerRetryMetrics *provider.SignerRetryMetrics
 }
 
 // metricsSnapshot is the wire form. The control plane reads it as-is.
 type metricsSnapshot struct {
-	Service            string `json:"service"`
-	Language           string `json:"language"`
-	UptimeSeconds      int64  `json:"uptime_seconds"`
-	ValidationsTotal   uint64 `json:"validations_total"`
-	ValidationsInvalid uint64 `json:"validations_invalid"`
-	ValidationsFailed  uint64 `json:"validations_failed"`
-	ObservedAt         string `json:"observed_at"`
-	ProviderExecution  string `json:"provider_execution"`
-	LedgerBackend      string `json:"ledger_backend"`
+	Service                   string `json:"service"`
+	Language                  string `json:"language"`
+	UptimeSeconds             int64  `json:"uptime_seconds"`
+	ValidationsTotal          uint64 `json:"validations_total"`
+	ValidationsInvalid        uint64 `json:"validations_invalid"`
+	ValidationsFailed         uint64 `json:"validations_failed"`
+	ObservedAt                string `json:"observed_at"`
+	ProviderExecution         string `json:"provider_execution"`
+	LedgerBackend             string `json:"ledger_backend"`
+	SignerAttemptsTotal       uint64 `json:"signer_attempts_total"`
+	SignerRetriesTotal        uint64 `json:"signer_retries_total"`
+	SignerRetryExhaustedTotal uint64 `json:"signer_retry_exhausted_total"`
+	SignerNonRetryableTotal   uint64 `json:"signer_non_retryable_errors_total"`
 }
 
 type validationRequest struct {
@@ -110,12 +115,16 @@ func parsePostingUint(value string, field string, optional bool) (uint64, error)
 }
 
 func newHandlerWithWebhookAndPosting(now func() time.Time, webhook http.Handler, posting *ledger.PostingService, execution http.Handler, configuredLedgerBackend ...string) http.Handler {
+	return newHandlerWithSignerMetrics(now, webhook, posting, execution, nil, configuredLedgerBackend...)
+}
+
+func newHandlerWithSignerMetrics(now func() time.Time, webhook http.Handler, posting *ledger.PostingService, execution http.Handler, signerRetryMetrics *provider.SignerRetryMetrics, configuredLedgerBackend ...string) http.Handler {
 	ledgerBackend := "disabled_without_deployed_tigerbeetle"
 	if len(configuredLedgerBackend) > 0 && configuredLedgerBackend[0] != "" {
 		ledgerBackend = configuredLedgerBackend[0]
 	}
 	mux := http.NewServeMux()
-	metrics := &serviceMetrics{startedAt: now()}
+	metrics := &serviceMetrics{startedAt: now(), signerRetryMetrics: signerRetryMetrics}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"service": "payment-engine", "status": "healthy", "provider_execution": "disabled_without_verified_provider", "ledger_backend": ledgerBackend})
@@ -127,15 +136,19 @@ func newHandlerWithWebhookAndPosting(now func() time.Time, webhook http.Handler,
 		observed := now()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(metricsSnapshot{
-			Service:            "payment-engine",
-			Language:           "go",
-			UptimeSeconds:      int64(observed.Sub(metrics.startedAt).Seconds()),
-			ValidationsTotal:   metrics.validationsTotal.Load(),
-			ValidationsInvalid: metrics.validationsInvalid.Load(),
-			ValidationsFailed:  metrics.validationsFailed.Load(),
-			ObservedAt:         observed.UTC().Format(time.RFC3339),
-			ProviderExecution:  "disabled_without_verified_provider",
-			LedgerBackend:      ledgerBackend,
+			Service:                   "payment-engine",
+			Language:                  "go",
+			UptimeSeconds:             int64(observed.Sub(metrics.startedAt).Seconds()),
+			ValidationsTotal:          metrics.validationsTotal.Load(),
+			ValidationsInvalid:        metrics.validationsInvalid.Load(),
+			ValidationsFailed:         metrics.validationsFailed.Load(),
+			ObservedAt:                observed.UTC().Format(time.RFC3339),
+			ProviderExecution:         "disabled_without_verified_provider",
+			LedgerBackend:             ledgerBackend,
+			SignerAttemptsTotal:       signerMetricSnapshot(metrics.signerRetryMetrics).AttemptsTotal,
+			SignerRetriesTotal:        signerMetricSnapshot(metrics.signerRetryMetrics).RetriesTotal,
+			SignerRetryExhaustedTotal: signerMetricSnapshot(metrics.signerRetryMetrics).RetryExhaustedTotal,
+			SignerNonRetryableTotal:   signerMetricSnapshot(metrics.signerRetryMetrics).NonRetryableErrorsTotal,
 		})
 	})
 	if webhook != nil {
@@ -247,6 +260,13 @@ func newHandlerWithWebhookAndPosting(now func() time.Time, webhook http.Handler,
 	return mux
 }
 
+func signerMetricSnapshot(metrics *provider.SignerRetryMetrics) provider.SignerRetryMetricsSnapshot {
+	if metrics == nil {
+		return provider.SignerRetryMetricsSnapshot{}
+	}
+	return metrics.Snapshot()
+}
+
 func main() {
 	productionProfile := strings.EqualFold(strings.TrimSpace(os.Getenv("UMOJA_ENV")), "production")
 	if _, configErr := provider.LoadNigerianRailConfig(os.Getenv, productionProfile); configErr != nil {
@@ -276,6 +296,7 @@ func main() {
 			panic(err)
 		}
 	}
+	signerRetryMetrics := &provider.SignerRetryMetrics{}
 	var executionHandler http.Handler
 	executionRuntime, executionErr := provider.YellowCardExecutionRuntimeFromEnvironment(context.Background(), os.Getenv)
 	if executionErr != nil {
@@ -297,7 +318,7 @@ func main() {
 	if port == "" {
 		port = "8081"
 	}
-	if err := http.ListenAndServe(":"+port, newHandlerWithWebhookAndPosting(time.Now, webhookRuntime, posting, executionHandler, ledgerRuntime.Backend)); err != nil {
+	if err := http.ListenAndServe(":"+port, newHandlerWithSignerMetrics(time.Now, webhookRuntime, posting, executionHandler, signerRetryMetrics, ledgerRuntime.Backend)); err != nil {
 		panic(err)
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/provider"
 )
 
 // The point of these tests is that the metrics are *measured*. It would be easy
@@ -108,5 +110,19 @@ func TestMetricsExposeTheConfiguredLedgerRuntimePosture(t *testing.T) {
 	}
 	if health["ledger_backend"] != "configured_reachable_tigerbeetle" {
 		t.Fatalf("health must expose the configured ledger posture, got %#v", health)
+	}
+}
+
+func TestMetricsExposeSignerRetryCounters(t *testing.T) {
+	signerMetrics := &provider.SignerRetryMetrics{}
+	signerMetrics.AttemptsTotal.Store(7)
+	signerMetrics.RetriesTotal.Store(3)
+	signerMetrics.RetryExhaustedTotal.Store(1)
+	signerMetrics.NonRetryableErrorsTotal.Store(2)
+
+	handler := newHandlerWithSignerMetrics(time.Now, nil, nil, nil, signerMetrics)
+	snapshot := metricsFrom(t, handler)
+	if snapshot.SignerAttemptsTotal != 7 || snapshot.SignerRetriesTotal != 3 || snapshot.SignerRetryExhaustedTotal != 1 || snapshot.SignerNonRetryableTotal != 2 {
+		t.Fatalf("signer metrics=%+v", snapshot)
 	}
 }

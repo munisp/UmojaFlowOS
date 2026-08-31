@@ -1,0 +1,45 @@
+groups:
+  - name: umoja_mojaloop_signer
+    interval: 30s
+    rules:
+      - alert: UmojaMojaloopSignerRetryExhausted
+        expr: increase(signer_retry_exhausted_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          component: mojaloop-signer
+          service: payment-engine
+        annotations:
+          summary: Mojaloop signer retry budget exhausted
+          description: A delegated HSM/FSPIOP signing request exhausted its bounded retry budget. Mojaloop execution must remain fail-closed until the signer service is healthy.
+          runbook: docs/mojaloop_signer_operations.md
+
+      - alert: UmojaMojaloopSignerRetryPressure
+        expr: |
+          increase(signer_retries_total[5m]) >= 5
+          and increase(signer_attempts_total[5m]) > 0
+          and (
+            increase(signer_retries_total[5m])
+            / increase(signer_attempts_total[5m])
+          ) >= 0.20
+        for: 2m
+        labels:
+          severity: warning
+          component: mojaloop-signer
+          service: payment-engine
+        annotations:
+          summary: Elevated Mojaloop signer retry pressure
+          description: At least 20 percent of recent signer attempts are retries, indicating degraded HSM or signing-service health.
+          runbook: docs/mojaloop_signer_operations.md
+
+      - alert: UmojaMojaloopSignerNonRetryableBurst
+        expr: increase(signer_non_retryable_errors_total[5m]) >= 3
+        for: 1m
+        labels:
+          severity: critical
+          component: mojaloop-signer
+          service: payment-engine
+        annotations:
+          summary: Mojaloop signer non-retryable error burst
+          description: Multiple signer requests failed without retry because the errors were classified as authorization, validation, or configuration failures.
+          runbook: docs/mojaloop_signer_operations.md
