@@ -15,7 +15,7 @@ describe.skipIf(!runIntegration)("local PostgreSQL canonical schema", () => {
   it("connects through the local peer-authenticated role and exposes the canonical table set", async () => {
     const readiness = await getPostgresReadiness();
     expect(readiness.connected).toBe(true);
-    expect(readiness.database).toBe("umojaflowos_dev");
+    expect(readiness.database).toBe(process.env.POSTGRES_TEST_DATABASE ?? "umoja_test");
     // The schema grows through immutable PostgreSQL migrations. The local
     // baseline must contain at least the earliest validated canonical set.
     expect(readiness.tableCount).toBeGreaterThanOrEqual(45);

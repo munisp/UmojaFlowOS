@@ -22,7 +22,7 @@ function getPool() {
       ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL })
       : new Pool({
           host: "/var/run/postgresql",
-          database: "umojaflowos_dev",
+          database: process.env.POSTGRES_TEST_DATABASE ?? "umoja_test",
           user: process.env.POSTGRES_LOCAL_USER ?? "ubuntu",
         });
   }

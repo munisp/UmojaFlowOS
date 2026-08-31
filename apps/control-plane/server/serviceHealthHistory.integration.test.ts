@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { afterAll, describe, expect, it } from "vitest";
 import { closePostgresPool, getPool } from "./postgres";
+import { postgresTestSchemaOwnerPsqlArguments } from "./testPostgres";
 import type { ServiceStatus } from "./serviceHealth";
 import { listServiceHealthHistory, recordServiceHealthSamples, summariseServiceAvailability } from "./serviceHealthHistory";
 
@@ -32,7 +33,7 @@ const healthy = (service: ServiceStatus["service"], latency: number, counters: R
  * asserted below.
  */
 function purge() {
-  execFileSync("sudo", ["-u", "postgres", "psql", "-q", "-d", "umojaflowos_dev", "-c", "DELETE FROM service_health_samples"], { stdio: "ignore" });
+  execFileSync("psql", ["-q", ...postgresTestSchemaOwnerPsqlArguments(), "-c", "DELETE FROM service_health_samples"], { stdio: "ignore" });
 }
 
 run("service health history", () => {

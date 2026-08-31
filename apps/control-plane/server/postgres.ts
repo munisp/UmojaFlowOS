@@ -6,7 +6,7 @@ import { storageCreateUploadUrl, storageGetSignedUrl } from "./storage";
 
 const localDevelopmentConfig = {
   host: "/var/run/postgresql",
-  database: "umojaflowos_dev",
+  database: process.env.POSTGRES_TEST_DATABASE ?? "umoja_test",
   user: process.env.POSTGRES_LOCAL_USER ?? "ubuntu",
 };
 

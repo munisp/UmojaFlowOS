@@ -234,6 +234,17 @@ DELETE FROM counterparty_authorizations WHERE counterparty_id IN (SELECT id FROM
 DELETE FROM beneficiaries WHERE customer_id IN (SELECT id FROM fixture_customers);
 DELETE FROM regulatory_deadlines WHERE id IN (SELECT id FROM fixture_deadlines);
 DELETE FROM regulatory_reports WHERE id IN (SELECT id FROM fixture_reports);
+DELETE FROM cbn_sandbox_reporting_packs WHERE dossier_id IN (SELECT id FROM cbn_sandbox_dossiers WHERE legal_entity_id IN (SELECT id FROM fixture_entities));
+DELETE FROM cbn_sandbox_incidents WHERE dossier_id IN (SELECT id FROM cbn_sandbox_dossiers WHERE legal_entity_id IN (SELECT id FROM fixture_entities));
+DELETE FROM cbn_sandbox_consumer_records WHERE dossier_id IN (SELECT id FROM cbn_sandbox_dossiers WHERE legal_entity_id IN (SELECT id FROM fixture_entities));
+DELETE FROM cbn_sandbox_evidence_assessments WHERE dossier_id IN (SELECT id FROM cbn_sandbox_dossiers WHERE legal_entity_id IN (SELECT id FROM fixture_entities));
+DELETE FROM cbn_sandbox_test_plans WHERE dossier_id IN (SELECT id FROM cbn_sandbox_dossiers WHERE legal_entity_id IN (SELECT id FROM fixture_entities));
+DELETE FROM cbn_sandbox_evidence_items WHERE dossier_id IN (SELECT id FROM cbn_sandbox_dossiers WHERE legal_entity_id IN (SELECT id FROM fixture_entities));
+DELETE FROM vasp_travel_rule_route_assessments WHERE dossier_id IN (SELECT id FROM cbn_sandbox_dossiers WHERE legal_entity_id IN (SELECT id FROM fixture_entities));
+DELETE FROM vasp_travel_rule_evidence_items WHERE dossier_id IN (SELECT id FROM cbn_sandbox_dossiers WHERE legal_entity_id IN (SELECT id FROM fixture_entities));
+DELETE FROM vasp_regulatory_evidence_items WHERE profile_id IN (SELECT id FROM vasp_regulatory_profiles WHERE dossier_id IN (SELECT id FROM cbn_sandbox_dossiers WHERE legal_entity_id IN (SELECT id FROM fixture_entities)));
+DELETE FROM vasp_regulatory_profiles WHERE dossier_id IN (SELECT id FROM cbn_sandbox_dossiers WHERE legal_entity_id IN (SELECT id FROM fixture_entities));
+DELETE FROM cbn_sandbox_dossiers WHERE legal_entity_id IN (SELECT id FROM fixture_entities);
 DELETE FROM counterparty_authorizations WHERE legal_entity_id IN (SELECT id FROM fixture_entities);
 DELETE FROM alert_policies WHERE id IN (SELECT id FROM fixture_alert_policies);
 DELETE FROM corridor_policies WHERE id IN (SELECT id FROM fixture_corridor_policies);

@@ -3,6 +3,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { createCbnSandboxDossier } from "./cbnSandbox";
 import { registerPostgresLegalEntity } from "./legalEntityRegistry";
 import { closePostgresPool, createPostgresCounterparty } from "./postgres";
+import { postgresTestSchemaOwnerPsqlArguments } from "./testPostgres";
 import { assessVaspTravelRuleRoute, createVaspRegulatoryProfile, getVaspSupervisoryReadiness, recordVaspSupervisoryEvidence, recordVaspTravelRuleEvidence, supervisoryEvidenceCategories, travelRuleEvidenceCategories } from "./vaspReadiness";
 
 const run = process.env.POSTGRES_INTEGRATION_TEST === "1" ? describe : describe.skip;
@@ -51,7 +52,7 @@ afterAll(async () => {
     const counterparty = counterpartyId ? `'${counterpartyId}'::uuid` : "NULL::uuid";
     const entity = entityId ? `'${entityId}'::uuid` : "NULL::uuid";
     const sql = `DELETE FROM vasp_travel_rule_route_assessments WHERE dossier_id=${dossier}; DELETE FROM vasp_travel_rule_evidence_items WHERE dossier_id=${dossier}; DELETE FROM vasp_regulatory_evidence_items WHERE profile_id=${profile}; DELETE FROM vasp_regulatory_profiles WHERE id=${profile}; DELETE FROM cbn_sandbox_evidence_assessments WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_reporting_packs WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_incidents WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_consumer_records WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_test_plans WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_evidence_items WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_dossiers WHERE id=${dossier}; DELETE FROM counterparties WHERE id=${counterparty}; DELETE FROM activity_events WHERE actor_subject IN ('${admin.openId}','${compliance.openId}'); DELETE FROM legal_entities WHERE id=${entity};`;
-    execFileSync("sudo", ["-u", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-q", "-d", "umojaflowos_dev", "-c", sql], { stdio: "pipe" });
+    execFileSync("psql", ["-v", "ON_ERROR_STOP=1", "-q", ...postgresTestSchemaOwnerPsqlArguments(), "-c", sql], { stdio: "pipe" });
   }
   await closePostgresPool();
 });

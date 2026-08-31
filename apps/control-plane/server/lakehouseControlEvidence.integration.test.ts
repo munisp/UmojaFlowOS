@@ -4,12 +4,13 @@ import { createServer, type Server } from "node:http";
 
 import { closePostgresPool, getPool } from "./postgres";
 import { drainLakehouseControlEvidence } from "./lakehouseControlEvidence";
+import { postgresTestSchemaOwnerPsqlArguments } from "./testPostgres";
 
 const run = process.env.POSTGRES_INTEGRATION_TEST === "1" ? describe : describe.skip;
 const fixtureCorrelation = "a".repeat(64);
 
 function purge() {
-  execFileSync("sudo", ["-u", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-q", "-d", "umojaflowos_dev", "-c", `DELETE FROM control_evidence_outbox WHERE correlation_sha256='${fixtureCorrelation}'`], { stdio: "ignore" });
+  execFileSync("psql", ["-v", "ON_ERROR_STOP=1", "-q", ...postgresTestSchemaOwnerPsqlArguments(), "-c", `DELETE FROM control_evidence_outbox WHERE correlation_sha256='${fixtureCorrelation}'`], { stdio: "ignore" });
 }
 
 async function listener(handler: (body: unknown, headers: Record<string, string | string[] | undefined>) => { status?: number; response?: unknown }) {

@@ -32,12 +32,14 @@ let pool: Pool | null = null;
 
 function getPool(): Pool {
   if (!pool) {
-    pool = new Pool({
-      host: "/var/run/postgresql",
-      database: "umojaflowos_dev",
-      user: "ubuntu",
-      max: 4,
-    });
+    pool = process.env.POSTGRES_DATABASE_URL
+      ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL, max: 4 })
+      : new Pool({
+          host: "/var/run/postgresql",
+          database: process.env.POSTGRES_TEST_DATABASE ?? "umoja_test",
+          user: process.env.POSTGRES_LOCAL_USER ?? "ubuntu",
+          max: 4,
+        });
   }
   return pool;
 }

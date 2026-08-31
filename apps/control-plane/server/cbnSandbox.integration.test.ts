@@ -3,6 +3,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { assessCbnSandboxEvidenceCompleteness, createCbnSandboxDossier, createCbnSandboxReportingPack, createCbnSandboxTestPlan, getCbnSandboxReadiness, latestCbnSandboxEvidenceAssessment, recordCbnSandboxEvidence, recordCbnSandboxIncident } from "./cbnSandbox";
 import { registerPostgresLegalEntity } from "./legalEntityRegistry";
 import { closePostgresPool, getPool } from "./postgres";
+import { postgresTestSchemaOwnerPsqlArguments } from "./testPostgres";
 
 const run = process.env.POSTGRES_INTEGRATION_TEST === "1" ? describe : describe.skip;
 const actor = { openId: `cbn-sandbox-admin-${crypto.randomUUID()}`, role: "admin" as const };
@@ -36,7 +37,7 @@ afterAll(async () => {
     const dossier = dossierId ? `'${dossierId}'::uuid` : "NULL::uuid";
     const entity = entityId ? `'${entityId}'::uuid` : "NULL::uuid";
     const sql = `DELETE FROM cbn_sandbox_reporting_packs WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_incidents WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_consumer_records WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_evidence_assessments WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_test_plans WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_evidence_items WHERE dossier_id=${dossier}; DELETE FROM cbn_sandbox_dossiers WHERE id=${dossier}; DELETE FROM activity_events WHERE actor_subject='${actor.openId}'; DELETE FROM legal_entities WHERE id=${entity};`;
-    execFileSync("sudo", ["-u", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-q", "-d", "umojaflowos_dev", "-c", sql], { stdio: "pipe" });
+    execFileSync("psql", ["-v", "ON_ERROR_STOP=1", "-q", ...postgresTestSchemaOwnerPsqlArguments(), "-c", sql], { stdio: "pipe" });
   }
   await closePostgresPool();
 });

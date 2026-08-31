@@ -4,7 +4,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BIN_DIR="${ROOT_DIR}/.toolchain/bin"
 CACHE_DIR="${ROOT_DIR}/.toolchain/cache"
-GO_VERSION="1.25.0"
+GO_VERSION="1.25.4"
 RUST_VERSION="1.89.0"
 NODE_VERSION="20.19.4"
 HELM_VERSION="3.16.4"
