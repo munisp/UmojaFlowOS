@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/attestation"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/domain"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/eventing"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/ledger"
@@ -36,6 +37,7 @@ type serviceMetrics struct {
 	validationsInvalid atomic.Uint64
 	validationsFailed  atomic.Uint64
 	signerRetryMetrics *provider.SignerRetryMetrics
+	fabricMetrics      *attestation.Metrics
 }
 
 // metricsSnapshot is the wire form. The control plane reads it as-is.
@@ -129,7 +131,7 @@ func newHandlerWithSignerMetrics(now func() time.Time, webhook http.Handler, pos
 		ledgerBackend = configuredLedgerBackend[0]
 	}
 	mux := http.NewServeMux()
-	metrics := &serviceMetrics{startedAt: now(), signerRetryMetrics: signerRetryMetrics}
+	metrics := &serviceMetrics{startedAt: now(), signerRetryMetrics: signerRetryMetrics, fabricMetrics: attestation.NewMetrics()}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"service": "payment-engine", "status": "healthy", "provider_execution": "disabled_without_verified_provider", "ledger_backend": ledgerBackend})
@@ -159,6 +161,7 @@ func newHandlerWithSignerMetrics(now func() time.Time, webhook http.Handler, pos
 	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 		writePrometheusMetrics(w, metrics.signerRetryMetrics)
+		metrics.fabricMetrics.WritePrometheus(w)
 	})
 	if webhook != nil {
 		mux.Handle("POST /v1/providers/yellowcard/webhooks", webhook)

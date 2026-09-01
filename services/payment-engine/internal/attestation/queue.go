@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 )
 
@@ -36,6 +35,7 @@ type QueueItem struct {
 type PostgreSQLQueue struct {
 	DB            *sql.DB
 	LeaseDuration time.Duration
+	Metrics       *Metrics
 }
 
 func (q *PostgreSQLQueue) validate() error {
@@ -63,6 +63,9 @@ func (q *PostgreSQLQueue) Enqueue(ctx context.Context, item QueueItem) (bool, er
 		return false, err
 	}
 	n, err := result.RowsAffected()
+	if err == nil && n == 1 && q.Metrics != nil {
+		q.Metrics.QueuePending.Add(1)
+	}
 	return n == 1, err
 }
 
@@ -110,8 +113,18 @@ func (q *PostgreSQLQueue) Claim(ctx context.Context, now time.Time) (QueueItem, 
 	if err = tx.Commit(); err != nil {
 		return QueueItem{}, err
 	}
+	previousState := item.State
 	item.State = "running"
 	item.LeaseUntil = leaseUntil
+	if q.Metrics != nil {
+		q.Metrics.ClaimsTotal.Add(1)
+		q.Metrics.QueueRunning.Add(1)
+		if previousState == "unknown" {
+			q.Metrics.QueueUnknown.Add(-1)
+		} else {
+			q.Metrics.QueuePending.Add(-1)
+		}
+	}
 	return item, nil
 }
 
@@ -127,7 +140,14 @@ func (q *PostgreSQLQueue) MarkUnknown(ctx context.Context, item QueueItem, next 
 		return err
 	}
 	if n, _ := result.RowsAffected(); n != 1 {
+		if q.Metrics != nil {
+			q.Metrics.LeaseLostTotal.Add(1)
+		}
 		return ErrQueueLeaseLost
+	}
+	if q.Metrics != nil {
+		q.Metrics.QueueRunning.Add(-1)
+		q.Metrics.QueueUnknown.Add(1)
 	}
 	return nil
 }
@@ -147,7 +167,14 @@ func (q *PostgreSQLQueue) MarkComplete(ctx context.Context, item QueueItem, atte
 		return err
 	}
 	if n, _ := result.RowsAffected(); n != 1 {
+		if q.Metrics != nil {
+			q.Metrics.LeaseLostTotal.Add(1)
+		}
 		return ErrQueueLeaseLost
+	}
+	if q.Metrics != nil {
+		q.Metrics.QueueRunning.Add(-1)
+		q.Metrics.QueueUnknown.Add(1)
 	}
 	return nil
 }
@@ -162,8 +189,8 @@ func newLeaseToken() string {
 
 // AdmissionController bounds concurrent calls to Fabric across one process.
 type AdmissionController struct {
-	sem  chan struct{}
-	once sync.Once
+	sem     chan struct{}
+	metrics *Metrics
 }
 
 func NewAdmissionController(limit int) (*AdmissionController, error) {
@@ -173,12 +200,22 @@ func NewAdmissionController(limit int) (*AdmissionController, error) {
 	return &AdmissionController{sem: make(chan struct{}, limit)}, nil
 }
 
+func (a *AdmissionController) SetMetrics(metrics *Metrics) {
+	a.metrics = metrics
+	if metrics != nil && a.sem != nil {
+		metrics.AdmissionLimit.Store(int64(cap(a.sem)))
+	}
+}
+
 func (a *AdmissionController) Acquire(ctx context.Context) error {
 	if a == nil || a.sem == nil {
 		return errors.New("Fabric admission controller is not configured")
 	}
 	select {
 	case a.sem <- struct{}{}:
+		if a.metrics != nil {
+			a.metrics.AdmissionInUse.Add(1)
+		}
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -191,6 +228,9 @@ func (a *AdmissionController) Release() {
 	}
 	select {
 	case <-a.sem:
+		if a.metrics != nil {
+			a.metrics.AdmissionInUse.Add(-1)
+		}
 	default:
 	}
 }

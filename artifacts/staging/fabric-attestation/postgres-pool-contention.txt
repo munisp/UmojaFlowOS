@@ -1,0 +1,5 @@
+=== RUN   TestPostgresPoolContentionIsBoundedAndCancellationFailsClosed
+    pool_contention_test.go:81: SIMULATED pool workers=100 max_open=8 max_active=8 canceled_waiters=100
+--- PASS: TestPostgresPoolContentionIsBoundedAndCancellationFailsClosed (0.01s)
+PASS
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/attestation	0.016s
