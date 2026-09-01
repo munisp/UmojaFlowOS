@@ -1,0 +1,23 @@
+{
+  "title": "UmojaFlowOS Compliance and OTel Health",
+  "uid": "umoja-compliance-otel",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "utc",
+  "tags": ["umoja", "compliance", "opentelemetry", "tenant-safe"],
+  "templating": {"list": [{"name": "tenant", "label": "Tenant", "type": "query", "datasource": {"type": "prometheus", "uid": "prometheus"}, "query": "label_values(tenant_id)", "includeAll": false, "multi": false, "refresh": 1}]},
+  "panels": [
+    {"id": 1, "type": "stat", "title": "Collector Up", "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0}, "targets": [{"expr": "min(up{job=\"otel-collector\"})", "refId": "A"}], "fieldConfig": {"defaults": {"min": 0, "max": 1, "thresholds": {"steps": [{"color": "red", "value": 0}, {"color": "green", "value": 1}]}}, "overrides": []}},
+    {"id": 2, "type": "stat", "title": "Critical Alerts", "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0}, "targets": [{"expr": "count(ALERTS{alertstate=\"firing\",severity=\"critical\"})", "refId": "A"}], "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color": "green"}, {"color": "red", "value": 1}]}}, "overrides": []}},
+    {"id": 3, "type": "stat", "title": "Telemetry Loss", "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0}, "targets": [{"expr": "sum(otelcol_exporter_send_failed_spans) + sum(otelcol_exporter_send_failed_metric_points)", "refId": "A"}], "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color": "green"}, {"color": "red", "value": 1}]}}, "overrides": []}},
+    {"id": 4, "type": "stat", "title": "Services Reporting", "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0}, "targets": [{"expr": "count(count by (service_name) (up{environment=\"staging\"}))", "refId": "A"}], "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color": "red"}, {"color": "green", "value": 1}]}}, "overrides": []}},
+    {"id": 5, "type": "timeseries", "title": "Telemetry Receive Rate", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5}, "targets": [{"expr": "sum by (signal) (rate(otelcol_receiver_accepted_spans[5m]))", "refId": "A", "legendFormat": "spans"}, {"expr": "sum by (signal) (rate(otelcol_receiver_accepted_metric_points[5m]))", "refId": "B", "legendFormat": "metrics"}], "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []}},
+    {"id": 6, "type": "timeseries", "title": "Trace Export Health", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5}, "targets": [{"expr": "sum(rate(otelcol_exporter_sent_spans[5m]))", "refId": "A", "legendFormat": "sent"}, {"expr": "sum(rate(otelcol_exporter_send_failed_spans[5m]))", "refId": "B", "legendFormat": "failed"}], "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []}},
+    {"id": 7, "type": "timeseries", "title": "TigerBeetle Integrity Signals", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13}, "targets": [{"expr": "umoja_tigerbeetle_unknown_transfers{tenant_id=~\"$tenant\"}", "refId": "A", "legendFormat": "unknown"}, {"expr": "rate(umoja_tigerbeetle_reconciliation_mismatch_total{tenant_id=~\"$tenant\"}[5m])", "refId": "B", "legendFormat": "reconciliation mismatch"}], "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}},
+    {"id": 8, "type": "timeseries", "title": "Compliance Service Request Errors", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13}, "targets": [{"expr": "sum by (service_name) (rate(http_server_request_duration_seconds_count{http_status_code=~\"4..|5..\",tenant_id=~\"$tenant\"}[5m]))", "refId": "A", "legendFormat": "{{service_name}}"}], "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []}},
+    {"id": 9, "type": "table", "title": "Firing Safety Alerts", "gridPos": {"h": 8, "w": 24, "x": 0, "y": 21}, "targets": [{"expr": "ALERTS{alertstate=\"firing\",environment=\"staging\"}", "refId": "A", "format": "table", "instant": true}], "fieldConfig": {"defaults": {}, "overrides": []}}
+  ],
+  "time": {"from": "now-30m", "to": "now"},
+  "refresh": "10s",
+  "annotations": {"list": []}
+}
