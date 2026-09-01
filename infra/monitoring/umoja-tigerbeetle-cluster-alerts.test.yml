@@ -1,0 +1,118 @@
+rule_files:
+  - umoja-tigerbeetle-cluster-alerts.yml
+
+tests:
+  - name: quorum-loss-pages-and-unsafe-fence-pages
+    interval: 30s
+    input_series:
+      - series: 'umoja_tigerbeetle_cluster_quorum_healthy{cluster_id="42",environment="production"}'
+        values: '0 0 0 0 0'
+      - series: 'umoja_tigerbeetle_cluster_node_view_divergent{cluster_id="42",environment="production"}'
+        values: '1 1 1 1 1'
+      - series: 'umoja_tigerbeetle_settlement_fence_active{cluster_id="42",environment="production"}'
+        values: '0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: UmojaTigerBeetleQuorumLost
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              urgency: page
+              service: tigerbeetle
+              compliance_domain: ledger_integrity
+              action: fence_settlement
+              cluster_id: "42"
+              environment: production
+            exp_annotations:
+              summary: TigerBeetle quorum is lost
+              description: The ledger exporter reports no trusted TigerBeetle quorum. Fence settlement and do not retry UNKNOWN operations.
+              runbook_url: https://docs.example.invalid/runbooks/tigerbeetle-split-brain
+      - eval_time: 1m
+        alertname: UmojaTigerBeetleNodeViewDivergence
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              urgency: page
+              service: tigerbeetle
+              compliance_domain: ledger_integrity
+              action: fence_settlement
+              cluster_id: "42"
+              environment: production
+            exp_annotations:
+              summary: TigerBeetle node views are divergent
+              description: At least one node reports a cluster membership or consensus view that differs from the trusted view. Do not promote or restart nodes until evidence is captured.
+              runbook_url: https://docs.example.invalid/runbooks/tigerbeetle-split-brain
+      - eval_time: 1m
+        alertname: UmojaTigerBeetleUnsafeWriteFence
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              urgency: page
+              service: tigerbeetle
+              compliance_domain: ledger_integrity
+              action: emergency_fence
+              cluster_id: "42"
+              environment: production
+            exp_annotations:
+              summary: Settlement fence is inactive during TigerBeetle instability
+              description: The ledger is unhealthy or divergent while the settlement fence is inactive. Invoke the emergency settlement fence and investigate immediately.
+              runbook_url: https://docs.example.invalid/runbooks/tigerbeetle-split-brain
+
+  - name: payment-safety-alerts
+    interval: 30s
+    input_series:
+      - series: 'umoja_payment_unknown_state_total{ledger="tigerbeetle",environment="production"}'
+        values: '0 1 1 2 2 3 3 4 4 5 5 6'
+      - series: 'umoja_ledger_reconciliation_mismatches_total{ledger="tigerbeetle",environment="production"}'
+        values: '0 0 1 1 1 2 2 3 3 4 4 5'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: UmojaTigerBeetleUnknownTransfersGrowing
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              urgency: page
+              service: payment-engine
+              compliance_domain: ledger_integrity
+              action: reconcile_before_retry
+              ledger: tigerbeetle
+              environment: production
+            exp_annotations:
+              summary: TigerBeetle UNKNOWN payment states are increasing
+              description: New UNKNOWN payment outcomes were recorded. Hold operations and reconcile by idempotency key before any retry or rail fallback.
+              runbook_url: https://docs.example.invalid/runbooks/tigerbeetle-split-brain
+      - eval_time: 3m
+        alertname: UmojaTigerBeetleReconciliationMismatch
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              urgency: page
+              service: ledger-reconciliation
+              compliance_domain: ledger_integrity
+              action: suspend_settlement
+              ledger: tigerbeetle
+              environment: production
+            exp_annotations:
+              summary: PostgreSQL and TigerBeetle reconciliation mismatch
+              description: At least one unexplained ledger/projection mismatch was recorded. Suspend settlement and open a financial-integrity incident.
+              runbook_url: https://docs.example.invalid/runbooks/tigerbeetle-split-brain
+
+  - name: telemetry-absence-is-unsafe
+    interval: 30s
+    input_series:
+      - series: 'umoja_tigerbeetle_cluster_quorum_healthy{cluster_id="42",environment="production"}'
+        values: '_ _ _ _ _ _ _ _ _ _ _'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: UmojaTigerBeetleClusterTelemetryAbsent
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              urgency: page
+              service: tigerbeetle
+              compliance_domain: ledger_integrity
+              action: suspend_settlement
+            exp_annotations:
+              summary: TigerBeetle safety telemetry is absent
+              description: Required quorum, node-view, or settlement-fence telemetry is not present. Treat observability loss as unsafe and suspend settlement until restored.
+              runbook_url: https://docs.example.invalid/runbooks/tigerbeetle-split-brain
