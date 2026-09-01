@@ -11,8 +11,9 @@ import argparse
 import json
 import shutil
 import subprocess
+from collections import deque
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable, Iterator
 
 try:
     import yaml
@@ -109,30 +110,69 @@ def run(command: list[str], *, allow_failure: bool = False) -> tuple[int, str]:
     return result.returncode, result.stdout
 
 
-def _json_access_log_lines(text: str) -> list[dict[str, Any]]:
-    records: list[dict[str, Any]] = []
-    for line in text.splitlines():
+def _iter_json_access_log_lines(lines: Iterable[str]) -> Iterator[dict[str, Any]]:
+    """Decode one JSON record at a time; malformed lines are discarded."""
+    for line in lines:
         try:
             value = json.loads(line)
         except json.JSONDecodeError:
             continue
         if isinstance(value, dict):
-            records.append(value)
-    return records
+            yield value
 
 
-def _assert_envoy_status(records: list[dict[str, Any]], expected_code: int, denied: bool) -> None:
-    matching = [record for record in records if str(record.get("response_code", "")) == str(expected_code)]
-    if not matching:
-        raise CheckFailure(f"no structured Envoy access-log record with response_code={expected_code}")
-    if denied:
-        details = " ".join(str(record.get(key, "")) for record in matching for key in ("response_code_details", "response_flags", "istio_policy_status"))
-        if "rbac" not in details.lower() and "denied" not in details.lower():
-            raise CheckFailure("403 record did not identify Envoy RBAC denial in response_code_details/response_flags/istio_policy_status")
-    else:
-        details = " ".join(str(record.get(key, "")) for record in matching for key in ("response_code_details", "response_flags", "istio_policy_status"))
-        if "rbac_access_denied" in details.lower() or "denied" in details.lower():
+def _json_access_log_lines(text: str) -> list[dict[str, Any]]:
+    """Compatibility helper for unit tests; live mode uses the streaming iterator."""
+    return list(_iter_json_access_log_lines(text.splitlines()))
+
+
+def _assert_envoy_status(records: Iterable[dict[str, Any]], expected_code: int, denied: bool) -> None:
+    found = False
+    for record in records:
+        if str(record.get("response_code", "")) != str(expected_code):
+            continue
+        found = True
+        details = " ".join(str(record.get(key, "")) for key in ("response_code_details", "response_flags", "istio_policy_status"))
+        if denied:
+            if "rbac" not in details.lower() and "denied" not in details.lower():
+                raise CheckFailure("403 record did not identify Envoy RBAC denial in response_code_details/response_flags/istio_policy_status")
+        elif "rbac_access_denied" in details.lower() or "denied" in details.lower():
             raise CheckFailure("allowlisted request was marked as an RBAC denial")
+        if found:
+            return
+    raise CheckFailure(f"no structured Envoy access-log record with response_code={expected_code}")
+
+
+def _stream_command(command: list[str]) -> Iterator[str]:
+    """Yield stdout incrementally and propagate kubectl failure after EOF."""
+    process = subprocess.Popen(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    assert process.stdout is not None
+    try:
+        for line in process.stdout:
+            yield line
+    finally:
+        process.stdout.close()
+        return_code = process.wait()
+    if return_code:
+        raise CheckFailure(f"streaming command failed ({return_code}): {' '.join(command)}")
+
+
+def _inspect_envoy_logs(lines: Iterable[str], max_samples: int = 64) -> tuple[deque[dict[str, Any]], bool, bool]:
+    """Stream logs with bounded memory and stop once 200 allow + 403 RBAC are seen."""
+    sample: deque[dict[str, Any]] = deque(maxlen=max_samples)
+    saw_allow = False
+    saw_deny = False
+    for record in _iter_json_access_log_lines(lines):
+        sample.append(record)
+        code = str(record.get("response_code", ""))
+        details = " ".join(str(record.get(key, "")) for key in ("response_code_details", "response_flags", "istio_policy_status")).lower()
+        if code == "200" and "rbac_access_denied" not in details and "denied" not in details:
+            saw_allow = True
+        if code == "403" and ("rbac" in details or "denied" in details):
+            saw_deny = True
+        if saw_allow and saw_deny:
+            break
+    return sample, saw_allow, saw_deny
 
 
 def live_checks(args: argparse.Namespace) -> list[str]:
@@ -174,13 +214,13 @@ def live_checks(args: argparse.Namespace) -> list[str]:
         raise CheckFailure(f"denied probe failed without a structured authorization signal:\n{denied_output}")
     output.append("unallowlisted plaintext probe failed with an authorization signal")
 
-    _, access_logs = run(["kubectl", "-n", args.namespace, "logs", "deploy/payment-engine", "-c", "istio-proxy", "--since=2m"], allow_failure=True)
-    records = _json_access_log_lines(access_logs)
-    if not records:
-        raise CheckFailure("payment-engine istio-proxy emitted no JSON access-log records; structured RBAC verification is unavailable")
-    _assert_envoy_status(records, 200, denied=False)
-    _assert_envoy_status(records, 403, denied=True)
-    output.append("structured Envoy access logs proved 200 allow and 403 RBAC deny")
+    access_log_stream = _stream_command(["kubectl", "-n", args.namespace, "logs", "deploy/payment-engine", "-c", "istio-proxy", "--since=2m"])
+    _, saw_allow, saw_deny = _inspect_envoy_logs(access_log_stream)
+    if not saw_allow:
+        raise CheckFailure("payment-engine istio-proxy emitted no structured 200 allow record")
+    if not saw_deny:
+        raise CheckFailure("payment-engine istio-proxy emitted no structured 403 RBAC denial record")
+    output.append("streamed Envoy access logs proved 200 allow and 403 RBAC deny with bounded memory")
     return output
 
 

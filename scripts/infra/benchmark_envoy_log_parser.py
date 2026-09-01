@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import time
 from pathlib import Path
@@ -18,14 +19,16 @@ spec.loader.exec_module(module)
 record = json.dumps({"response_code": 200, "response_code_details": "via_upstream", "response_flags": "-", "route_name": "settlement-grpc"})
 lines = "\n".join([record] * 100_000)
 start = time.perf_counter()
-records = module._json_access_log_lines(lines)
+sample, saw_allow, saw_deny = module._inspect_envoy_logs(io.StringIO(lines), max_samples=64)
 elapsed = time.perf_counter() - start
-module._assert_envoy_status(records, 200, denied=False)
+if not saw_allow or saw_deny:
+    raise SystemExit("unexpected streaming parser result")
 print(json.dumps({
-    "records": len(records),
+    "records": 100_000,
+    "bounded_sample_size": len(sample),
     "input_bytes": len(lines.encode()),
     "elapsed_seconds": round(elapsed, 6),
-    "records_per_second": round(len(records) / elapsed),
+    "records_per_second": round(100_000 / elapsed),
     "megabytes_per_second": round(len(lines.encode()) / elapsed / 1_000_000, 3),
     "note": "synthetic repeated JSON lines; excludes kubectl transport and cluster log delivery",
 }, indent=2))

@@ -1,0 +1,223 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vector-envoy-archive
+  namespace: observability
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vector-envoy-archive
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "namespaces"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vector-envoy-archive
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vector-envoy-archive
+subjects:
+  - kind: ServiceAccount
+    name: vector-envoy-archive
+    namespace: observability
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vector-envoy-object-storage
+  namespace: observability
+type: Opaque
+stringData:
+  VECTOR_S3_ACCESS_KEY: REPLACE_FROM_SECRETS_MANAGER
+  VECTOR_S3_SECRET_KEY: REPLACE_FROM_SECRETS_MANAGER
+  VECTOR_S3_ENDPOINT: https://minio.observability.svc:9000
+  VECTOR_S3_BUCKET: umoja-worm-evidence
+  VECTOR_S3_REGION: us-east-1
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vector-envoy-archive
+  namespace: observability
+data:
+  vector.toml: |
+    data_dir = "/var/lib/vector"
+
+    [sources.kubernetes]
+    type = "kubernetes_logs"
+    auto_partial_merge = true
+    exclude_paths_glob_patterns = ["/var/log/pods/observability_vector-envoy-archive*/*/*.log"]
+
+    [transforms.envoy_only]
+    type = "filter"
+    inputs = ["kubernetes"]
+    condition = '.kubernetes.container_name == "istio-proxy" and .kubernetes.namespace_name == "umoja-payment"'
+
+    [transforms.envoy_normalize]
+    type = "remap"
+    inputs = ["envoy_only"]
+    source = '''
+    .archive_schema = "umoja.envoy.access.v1"
+    .observed_at = now()
+    .tenant_id = .kubernetes.pod_labels."umoja.io/tenant" ?? "platform"
+    .namespace = .kubernetes.namespace_name
+    .pod = .kubernetes.pod_name
+    .container = .kubernetes.container_name
+    .node = .kubernetes.pod_node_name
+    .raw = parse_json(.message) ?? {"parse_error": true, "message": .message}
+    .response_code = to_int(.raw.response_code) ?? null
+    .response_code_details = .raw.response_code_details ?? null
+    .response_flags = .raw.response_flags ?? null
+    .istio_policy_status = .raw.istio_policy_status ?? null
+    .trace_id = .raw.trace_id ?? null
+    .request_id = .raw.request_id ?? null
+    .route_name = .raw.route_name ?? null
+    .source_principal = .raw.source_principal ?? null
+    del(.message)
+    del(.raw.authorization)
+    del(.raw.access_token)
+    del(.raw.refresh_token)
+    del(.raw.private_key)
+    del(.raw.secret)
+    del(.raw.request_body)
+    del(.raw.response_body)
+    del(.raw.destination)
+    .event = {
+      "response_code": .response_code,
+      "response_code_details": .response_code_details,
+      "response_flags": .response_flags,
+      "istio_policy_status": .istio_policy_status,
+      "trace_id": .trace_id,
+      "request_id": .request_id,
+      "route_name": .route_name,
+      "source_principal": .source_principal
+    }
+    del(.response_code)
+    del(.response_code_details)
+    del(.response_flags)
+    del(.istio_policy_status)
+    del(.trace_id)
+    del(.request_id)
+    del(.route_name)
+    del(.source_principal)
+    '''
+
+    [sinks.worm_object_storage]
+    type = "aws_s3"
+    inputs = ["envoy_normalize"]
+    bucket = "${VECTOR_S3_BUCKET}"
+    region = "${VECTOR_S3_REGION}"
+    endpoint = "${VECTOR_S3_ENDPOINT}"
+    key_prefix = "envoy-access/%Y/%m/%d/%H/"
+    compression = "gzip"
+    encoding.codec = "json"
+    batch.max_events = 1000
+    batch.timeout_secs = 10
+    request.concurrency = 1
+    request.retry_attempts = 10
+    request.retry_initial_backoff_secs = 1
+    request.retry_max_duration_secs = 300
+
+    [sinks.worm_object_storage.buffer]
+    type = "disk"
+    max_size = 10737418240
+    when_full = "block"
+
+    [sinks.worm_object_storage.auth]
+    strategy = "aws"
+    access_key_id = "${VECTOR_S3_ACCESS_KEY}"
+    secret_access_key = "${VECTOR_S3_SECRET_KEY}"
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: vector-envoy-archive
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: vector-envoy-archive
+    app.kubernetes.io/part-of: umojaflowos
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vector-envoy-archive
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vector-envoy-archive
+        app.kubernetes.io/part-of: umojaflowos
+      annotations:
+        sidecar.istio.io/inject: "false"
+    spec:
+      serviceAccountName: vector-envoy-archive
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vector
+          image: timberio/vector:0.43.1-distroless
+          imagePullPolicy: IfNotPresent
+          args: ["--config", "/etc/vector/vector.toml"]
+          envFrom:
+            - secretRef:
+                name: vector-envoy-object-storage
+          ports:
+            - name: api
+              containerPort: 8686
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: api
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: api
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/vector
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/vector
+      volumes:
+        - name: config
+          configMap:
+            name: vector-envoy-archive
+        - name: data
+          emptyDir:
+            sizeLimit: 10Gi

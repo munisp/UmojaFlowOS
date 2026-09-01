@@ -32,6 +32,17 @@ class StructuredEnvoyAssertionsTest(unittest.TestCase):
                 denied=False,
             )
 
+    def test_streaming_sample_is_bounded_and_stops_after_both_classes(self):
+        def lines():
+            yield '{"response_code": 200, "response_code_details": "via_upstream"}'
+            yield '{"response_code": 403, "response_code_details": "rbac_access_denied_matched"}'
+            raise AssertionError("stream should stop after required evidence classes")
+
+        sample, saw_allow, saw_deny = MODULE._inspect_envoy_logs(lines(), max_samples=1)
+        self.assertTrue(saw_allow)
+        self.assertTrue(saw_deny)
+        self.assertLessEqual(len(sample), 1)
+
     def test_403_requires_rbac_signal(self):
         with self.assertRaises(MODULE.CheckFailure):
             MODULE._assert_envoy_status(
