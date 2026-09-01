@@ -1,0 +1,5 @@
+=== RUN   TestFabricCommitLatencyAndMVCCConflictSimulation100Concurrent
+    fabric_commit_benchmark_test.go:82: SIMULATED fabric workers=100 commit_latency=5ms successes=1 mvcc_conflicts=99 conflict_rate=99.00% avg_observed_latency=5.322377ms
+--- PASS: TestFabricCommitLatencyAndMVCCConflictSimulation100Concurrent (0.01s)
+PASS
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/attestation	0.011s

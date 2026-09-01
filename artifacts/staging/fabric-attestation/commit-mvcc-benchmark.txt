@@ -1,0 +1,7 @@
+goos: linux
+goarch: amd64
+pkg: github.com/munisp/UmojaFlowOS/services/payment-engine/internal/attestation
+cpu: Intel(R) Xeon(R) Processor @ 2.50GHz
+BenchmarkFabricCommitLatencySimulation100Concurrent-6   	       3	   5608995 ns/op
+PASS
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/attestation	0.030s

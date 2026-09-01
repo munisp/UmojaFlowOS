@@ -80,6 +80,25 @@ func TestUnknownReconciliationReschedulesInconclusiveProvider(t *testing.T) {
 	}
 }
 
+func TestUnknownCommitReconciliationIsReadOnlyAndIdempotent(t *testing.T) {
+	store := &reconciliationStore{state: UnknownState{Intent: Intent{ID: "fabric-timeout", IdempotencyKey: "fabric-timeout-key"}, PrimaryRail: "fabric", Attempts: 1}}
+	provider := &reconciliationRail{query: Submission{Status: Settled, ProviderRef: "fabric-attestation-1"}}
+	worker := ReconciliationWorker{Store: store, Now: func() time.Time { return time.Unix(100, 0).UTC() }}
+	first, err := worker.Reconcile(context.Background(), "fabric-timeout-key", provider)
+	if err != nil || first.Decision != DecisionProviderAccepted || first.SettlementAllowed {
+		t.Fatalf("timeout reconciliation must remain non-authoritative: result=%+v err=%v", first, err)
+	}
+	if provider.submitCalls != 0 {
+		t.Fatalf("reconciliation performed a duplicate submit: %d", provider.submitCalls)
+	}
+	if _, err := worker.Reconcile(context.Background(), "fabric-timeout-key", provider); err != ErrReconciliationUnavailable {
+		t.Fatalf("second reconciliation should be idempotently unavailable after claim, err=%v", err)
+	}
+	if provider.submitCalls != 0 || len(store.decisions) != 1 {
+		t.Fatalf("repeated reconciliation changed side effects: submits=%d decisions=%d", provider.submitCalls, len(store.decisions))
+	}
+}
+
 func TestUnknownReconciliationConfirmedNonSubmissionDoesNotSubmitSecondary(t *testing.T) {
 	store := &reconciliationStore{state: UnknownState{Intent: Intent{ID: "i3", IdempotencyKey: "k3"}, PrimaryRail: "yellow_card"}}
 	provider := &reconciliationRail{query: Submission{Status: Failed, RetryableWithoutBusinessEffect: true}}
@@ -93,7 +112,6 @@ func TestUnknownReconciliationConfirmedNonSubmissionDoesNotSubmitSecondary(t *te
 	}
 }
 
-
 type leaseLossStore struct {
 	state       UnknownState
 	decisionErr error
@@ -105,8 +123,12 @@ func (s *leaseLossStore) Claim(context.Context, string, time.Time) (UnknownState
 	s.state.LeaseToken = "lease-a"
 	return s.state, true, nil
 }
-func (s *leaseLossStore) RecordDecision(context.Context, ReconciliationResult) error { return s.decisionErr }
-func (s *leaseLossStore) Reschedule(context.Context, UnknownState, time.Time, string) error { return s.reschedErr }
+func (s *leaseLossStore) RecordDecision(context.Context, ReconciliationResult) error {
+	return s.decisionErr
+}
+func (s *leaseLossStore) Reschedule(context.Context, UnknownState, time.Time, string) error {
+	return s.reschedErr
+}
 
 func TestUnknownReconciliationLeaseLossDuringDecisionNeverSettles(t *testing.T) {
 	store := &leaseLossStore{
