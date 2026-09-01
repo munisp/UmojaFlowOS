@@ -15,7 +15,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -105,6 +105,27 @@ def verify_manifest(manifest_path: Path, expected_sha: str | None = None) -> lis
     if environment not in {"staging", "production"}:
         raise EvidenceValidationError("environment must be staging or production")
     parse_iso8601(document.get("created_at"), "created_at")
+
+    worm = document.get("worm")
+    if not isinstance(worm, dict):
+        raise EvidenceValidationError("worm binding must be an object")
+    bucket = worm.get("bucket")
+    prefix = worm.get("object_key_prefix")
+    lock_mode = worm.get("object_lock_mode")
+    retain_until = worm.get("retain_until")
+    if not isinstance(bucket, str) or not re.fullmatch(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$", bucket):
+        raise EvidenceValidationError("worm.bucket must be a valid non-empty lowercase bucket name")
+    if not isinstance(prefix, str) or not prefix or prefix.startswith("/") or prefix.endswith("/") or ".." in Path(prefix).parts:
+        raise EvidenceValidationError("worm.object_key_prefix must be a safe relative prefix")
+    if lock_mode not in {"COMPLIANCE", "GOVERNANCE"}:
+        raise EvidenceValidationError("worm.object_lock_mode must be COMPLIANCE or GOVERNANCE")
+    parse_iso8601(retain_until, "worm.retain_until")
+    if datetime.fromisoformat(retain_until.replace("Z", "+00:00")) <= datetime.now(timezone.utc):
+        raise EvidenceValidationError("worm.retain_until must be in the future")
+
+    reconciliation = document.get("reconciliation")
+    if not isinstance(reconciliation, dict) or not re.fullmatch(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$", str(reconciliation.get("run_id", ""))):
+        raise EvidenceValidationError("reconciliation.run_id must be a valid non-empty run identifier")
 
     artifacts = document.get("artifacts")
     if not isinstance(artifacts, list):

@@ -26,7 +26,7 @@ func TestReleaseManifestGateValidatesFourSignedRolesAndArtifact(t *testing.T) {
 		t.Fatal(err)
 	}
 	roles := []string{"release_manager", "security_owner", "compliance_owner", "operations_owner"}
-	manifest := releaseManifest{ReleaseSHA: release, Environment: "staging", CreatedAt: "2026-09-01T00:00:00Z", Artifacts: make([]releaseArtifact, 0, 9)}
+	manifest := releaseManifest{ReleaseSHA: release, Environment: "staging", CreatedAt: "2026-09-01T00:00:00Z", Worm: releaseWorm{Bucket: "umoja-release-evidence", ObjectKeyPrefix: "releases/example", ObjectLockMode: "COMPLIANCE", RetainUntil: "2027-09-01T00:00:00Z"}, Reconciliation: releaseReconciliation{RunID: "staging-reconciliation-example"}, Artifacts: make([]releaseArtifact, 0, 9)}
 	for i := 1; i <= 9; i++ {
 		id := "E-0" + string(rune('0'+i))
 		sha := hex.EncodeToString(make([]byte, 32))
@@ -59,7 +59,7 @@ func TestReleaseManifestGateValidatesFourSignedRolesAndArtifact(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	gate, err := NewReleaseManifestGate(filepath.Join(dir, "manifest.json"), sigDir, "staging")
+	gate, err := NewReleaseManifestGate(filepath.Join(dir, "manifest.json"), sigDir, "staging", "umoja-release-evidence")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestReleaseManifestGateValidatesFourSignedRolesAndArtifact(t *testing.T) {
 }
 
 func TestReleaseManifestGateRejectsTamperedSignatureAndArtifact(t *testing.T) {
-	gate, err := NewReleaseManifestGate("/missing/manifest.json", "/missing/signatures", "staging")
+	gate, err := NewReleaseManifestGate("/missing/manifest.json", "/missing/signatures", "staging", "umoja-release-evidence")
 	if err != nil {
 		t.Fatal(err)
 	}

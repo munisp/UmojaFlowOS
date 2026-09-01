@@ -1,0 +1,110 @@
+name: release-manifest-signature-gate
+
+on:
+  pull_request:
+    paths:
+      - 'infra/kubernetes/**'
+      - 'infra/service-mesh/**'
+      - 'deploy/**'
+      - '.github/workflows/**'
+      - 'assurance/release_evidence_manifest.schema.json'
+      - 'assurance/release_evidence_manifest.json'
+      - 'assurance/release_signatures/**'
+      - 'scripts/infra/verify_release_manifest_signatures.py'
+  push:
+    branches: [main]
+    paths:
+      - 'infra/kubernetes/**'
+      - 'infra/service-mesh/**'
+      - 'deploy/**'
+      - '.github/workflows/**'
+      - 'assurance/release_evidence_manifest.schema.json'
+      - 'assurance/release_evidence_manifest.json'
+      - 'assurance/release_signatures/**'
+      - 'scripts/infra/verify_release_manifest_signatures.py'
+  workflow_dispatch:
+    inputs:
+      manifest_path:
+        description: Repository-relative signed release manifest path
+        required: true
+        default: assurance/release_evidence_manifest.json
+        type: string
+      signatures_dir:
+        description: Repository-relative detached Ed25519 sidecar directory
+        required: true
+        default: assurance/release_signatures
+        type: string
+      expected_sha:
+        description: Expected immutable 40-character release SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-manifest-signature-gate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify four-role release manifest before deployment changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select immutable release SHA and manifest paths
+        id: inputs
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_MANIFEST: ${{ inputs.manifest_path }}
+          INPUT_SIGNATURES: ${{ inputs.signatures_dir }}
+          INPUT_SHA: ${{ inputs.expected_sha }}
+          COMMIT_SHA: ${{ github.sha }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -Eeuo pipefail
+          if [ "$EVENT_NAME" = workflow_dispatch ]; then
+            manifest="$INPUT_MANIFEST"
+            signatures="$INPUT_SIGNATURES"
+            expected="$INPUT_SHA"
+          else
+            manifest="assurance/release_evidence_manifest.json"
+            signatures="assurance/release_signatures"
+            expected="${PR_SHA:-$COMMIT_SHA}"
+          fi
+          printf 'manifest=%s\n' "$manifest" >> "$GITHUB_OUTPUT"
+          printf 'signatures=%s\n' "$signatures" >> "$GITHUB_OUTPUT"
+          printf 'expected=%s\n' "$expected" >> "$GITHUB_OUTPUT"
+          test "$expected" != "" && printf '%s' "$expected" | grep -Eq '^[a-f0-9]{40}$'
+
+      - name: Require signed release bundle for deployment-manifest changes
+        env:
+          MANIFEST: ${{ steps.inputs.outputs.manifest }}
+          SIGNATURES: ${{ steps.inputs.outputs.signatures }}
+          EXPECTED_SHA: ${{ steps.inputs.outputs.expected }}
+        run: |
+          set -Eeuo pipefail
+          test -f "$MANIFEST" || { echo "missing signed release manifest: $MANIFEST" >&2; exit 1; }
+          test -d "$SIGNATURES" || { echo "missing detached signature directory: $SIGNATURES" >&2; exit 1; }
+          for role in release_manager security_owner compliance_owner operations_owner; do
+            test -f "$SIGNATURES/$role.json" || { echo "missing detached signature sidecar: $role.json" >&2; exit 1; }
+          done
+          python3 scripts/infra/verify_release_manifest_signatures.py \
+            --manifest "$MANIFEST" \
+            --schema assurance/release_evidence_manifest.schema.json \
+            --signatures-dir "$SIGNATURES" \
+            --expected-sha "$EXPECTED_SHA"
+
+      - name: Verify deployment manifests remain immutable-digest based
+        run: |
+          set -Eeuo pipefail
+          if git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | grep -Eq '^(infra/kubernetes|infra/service-mesh|deploy)/.*\.(yaml|yml)$'; then
+            files=$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | grep -E '^(infra/kubernetes|infra/service-mesh|deploy)/.*\.(yaml|yml)$' || true)
+            printf '%s\n' "$files" | xargs grep -HnE 'image:.*(@sha256:[a-f0-9]{64}|REPLACE_WITH_RELEASE_DIGEST)' >/dev/null || {
+              echo 'changed deployment manifests must declare an immutable sha256 image reference' >&2
+              exit 1
+            }
+          fi

@@ -3,7 +3,7 @@
   "title": "UmojaFlowOS Production Release Evidence Manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["release_sha", "environment", "created_at", "artifacts", "approvals"],
+  "required": ["release_sha", "environment", "created_at", "artifacts", "approvals", "worm", "reconciliation"],
   "properties": {
     "release_sha": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
     "environment": {"type": "string", "enum": ["staging", "production"]},
@@ -39,6 +39,25 @@
           "release_sha": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
           "approved_at": {"type": "string", "format": "date-time"}
         }
+      }
+    },
+    "worm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bucket", "object_key_prefix", "object_lock_mode", "retain_until"],
+      "properties": {
+        "bucket": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"},
+        "object_key_prefix": {"type": "string", "minLength": 1, "pattern": "^[^/].*[^/]$"},
+        "object_lock_mode": {"type": "string", "enum": ["COMPLIANCE", "GOVERNANCE"]},
+        "retain_until": {"type": "string", "format": "date-time"}
+      }
+    },
+    "reconciliation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id"],
+      "properties": {
+        "run_id": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"}
       }
     }
   }

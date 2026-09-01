@@ -25,14 +25,17 @@ type ReleaseManifestGate struct {
 	ManifestPath  string
 	SignaturesDir string
 	Environment   string
+	WormBucket    string
 }
 
 type releaseManifest struct {
-	ReleaseSHA  string            `json:"release_sha"`
-	Environment string            `json:"environment"`
-	CreatedAt   string            `json:"created_at"`
-	Artifacts   []releaseArtifact `json:"artifacts"`
-	Approvals   []releaseApproval `json:"approvals"`
+	ReleaseSHA     string                `json:"release_sha"`
+	Environment    string                `json:"environment"`
+	CreatedAt      string                `json:"created_at"`
+	Artifacts      []releaseArtifact     `json:"artifacts"`
+	Approvals      []releaseApproval     `json:"approvals"`
+	Worm           releaseWorm           `json:"worm"`
+	Reconciliation releaseReconciliation `json:"reconciliation"`
 }
 type releaseArtifact struct {
 	EvidenceID string `json:"evidence_id"`
@@ -46,6 +49,15 @@ type releaseApproval struct {
 	ReleaseSHA string `json:"release_sha"`
 	ApprovedAt string `json:"approved_at"`
 }
+type releaseWorm struct {
+	Bucket          string `json:"bucket"`
+	ObjectKeyPrefix string `json:"object_key_prefix"`
+	ObjectLockMode  string `json:"object_lock_mode"`
+	RetainUntil     string `json:"retain_until"`
+}
+type releaseReconciliation struct {
+	RunID string `json:"run_id"`
+}
 type approvalSidecar struct {
 	Role           string `json:"role"`
 	Subject        string `json:"subject"`
@@ -56,11 +68,11 @@ type approvalSidecar struct {
 	Signature      string `json:"signature"`
 }
 
-func NewReleaseManifestGate(manifestPath, signaturesDir, environment string) (*ReleaseManifestGate, error) {
-	if strings.TrimSpace(manifestPath) == "" || strings.TrimSpace(signaturesDir) == "" || strings.TrimSpace(environment) == "" {
+func NewReleaseManifestGate(manifestPath, signaturesDir, environment, wormBucket string) (*ReleaseManifestGate, error) {
+	if strings.TrimSpace(manifestPath) == "" || strings.TrimSpace(signaturesDir) == "" || strings.TrimSpace(environment) == "" || strings.TrimSpace(wormBucket) == "" {
 		return nil, fmt.Errorf("%w: manifest, signatures directory, and environment are required", ErrReleaseManifestGate)
 	}
-	return &ReleaseManifestGate{ManifestPath: manifestPath, SignaturesDir: signaturesDir, Environment: environment}, nil
+	return &ReleaseManifestGate{ManifestPath: manifestPath, SignaturesDir: signaturesDir, Environment: environment, WormBucket: wormBucket}, nil
 }
 
 func (g *ReleaseManifestGate) Verify(ctx context.Context, item QueueItem) error {
@@ -119,6 +131,16 @@ func (g *ReleaseManifestGate) readAndValidateManifest(item QueueItem) ([]byte, r
 	}
 	if _, err := time.Parse(time.RFC3339, manifest.CreatedAt); err != nil {
 		return nil, manifest, fmt.Errorf("%w: invalid created_at", ErrReleaseManifestGate)
+	}
+	if manifest.Worm.Bucket != g.WormBucket || manifest.Worm.ObjectKeyPrefix == "" || strings.HasPrefix(manifest.Worm.ObjectKeyPrefix, "/") || strings.Contains(manifest.Worm.ObjectKeyPrefix, "..") || (manifest.Worm.ObjectLockMode != "COMPLIANCE" && manifest.Worm.ObjectLockMode != "GOVERNANCE") {
+		return nil, manifest, fmt.Errorf("%w: WORM binding failed", ErrReleaseManifestGate)
+	}
+	retainUntil, err := time.Parse(time.RFC3339, manifest.Worm.RetainUntil)
+	if err != nil || !retainUntil.After(time.Now().UTC()) {
+		return nil, manifest, fmt.Errorf("%w: WORM retention timestamp is invalid or expired", ErrReleaseManifestGate)
+	}
+	if len(manifest.Reconciliation.RunID) < 8 {
+		return nil, manifest, fmt.Errorf("%w: reconciliation run ID is missing or invalid", ErrReleaseManifestGate)
 	}
 	seen := map[string]bool{}
 	for _, a := range manifest.Artifacts {

@@ -149,7 +149,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	manifestGate, err := attestation.NewReleaseManifestGate(getenv("UMOJA_RELEASE_MANIFEST_PATH"), getenv("UMOJA_RELEASE_SIGNATURES_DIR"), getenvDefault(getenv, "UMOJA_ENV", "staging"))
+	manifestGate, err := attestation.NewReleaseManifestGate(getenv("UMOJA_RELEASE_MANIFEST_PATH"), getenv("UMOJA_RELEASE_SIGNATURES_DIR"), getenvDefault(getenv, "UMOJA_ENV", "staging"), storageBucket)
 	if err != nil {
 		panic(err)
 	}
