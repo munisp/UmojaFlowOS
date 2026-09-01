@@ -56,6 +56,7 @@ type Worker struct {
 	Queue        *PostgreSQLQueue
 	Attestor     *Client
 	Evidence     EvidenceLoader
+	ManifestGate *ReleaseManifestGate
 	Admission    *AdmissionController
 	PollInterval time.Duration
 	RetryDelay   time.Duration
@@ -64,7 +65,7 @@ type Worker struct {
 }
 
 func (w *Worker) validate() error {
-	if w == nil || w.Queue == nil || w.Attestor == nil || w.Evidence == nil || w.Admission == nil {
+	if w == nil || w.Queue == nil || w.Attestor == nil || w.Evidence == nil || w.ManifestGate == nil || w.Admission == nil {
 		return errors.New("Fabric queue worker dependencies are required")
 	}
 	if w.Now == nil {
@@ -119,6 +120,9 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 		return true, err
 	}
 	defer w.Admission.Release()
+	if err := w.ManifestGate.Verify(ctx, item); err != nil {
+		return true, w.hold(item, err)
+	}
 	if item.State == "unknown" {
 		return true, w.reconcile(ctx, item)
 	}

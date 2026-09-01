@@ -44,6 +44,11 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      volumes:
+        - name: release-evidence
+          persistentVolumeClaim:
+            claimName: umoja-release-evidence
+            readOnly: true
       containers:
         - name: queue-worker
           image: ghcr.io/munisp/umojaflowos-payment-engine@sha256:REPLACE_WITH_RELEASE_DIGEST
@@ -82,6 +87,10 @@ spec:
                 secretKeyRef:
                   name: umoja-object-storage-credentials
                   key: UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY
+            - name: UMOJA_RELEASE_MANIFEST_PATH
+              value: /var/run/umoja/release/manifest.json
+            - name: UMOJA_RELEASE_SIGNATURES_DIR
+              value: /var/run/umoja/release/signatures
             - name: UMOJA_FABRIC_QUEUE_DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -121,6 +130,10 @@ spec:
               value: grpc
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: service.namespace=umojaflowos,deployment.environment=staging
+          volumeMounts:
+            - name: release-evidence
+              mountPath: /var/run/umoja/release
+              readOnly: true
           ports:
             - name: metrics
               containerPort: 8081

@@ -141,7 +141,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	worker := &attestation.Worker{Queue: queue, Attestor: mustClient(gateway), Evidence: evidenceLoader, Admission: admission, PollInterval: pollInterval, RetryDelay: retryDelay, Now: time.Now, Logger: log.Default()}
+	manifestGate, err := attestation.NewReleaseManifestGate(getenv("UMOJA_RELEASE_MANIFEST_PATH"), getenv("UMOJA_RELEASE_SIGNATURES_DIR"), getenvDefault(getenv, "UMOJA_ENV", "staging"))
+	if err != nil {
+		panic(err)
+	}
+	worker := &attestation.Worker{Queue: queue, Attestor: mustClient(gateway), Evidence: evidenceLoader, ManifestGate: manifestGate, Admission: admission, PollInterval: pollInterval, RetryDelay: retryDelay, Now: time.Now, Logger: log.Default()}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
