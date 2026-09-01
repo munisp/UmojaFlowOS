@@ -1,0 +1,15 @@
+{
+  "context": "kind-umoja-staging",
+  "namespace": "umoja-payment",
+  "metric": "umoja_fabric_queue_depth",
+  "status": "FAIL",
+  "live_cluster_evidence": false,
+  "checks": [
+    {
+      "name": "required_tools",
+      "status": "FAIL",
+      "detail": "missing: kubectl"
+    }
+  ],
+  "reason": "live Kind/Kubernetes validation cannot run without kubectl"
+}
