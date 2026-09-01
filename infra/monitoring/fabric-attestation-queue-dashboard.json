@@ -1,0 +1,116 @@
+{
+  "title": "UmojaFlowOS Fabric Attestation Queue",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {"list": [
+    {"name": "namespace", "type": "query", "query": "label_values(umoja_fabric_queue_depth, namespace)", "includeAll": true, "multi": true, "current": {"text": "All", "value": ["$__all"]}},
+    {"name": "pod", "type": "query", "query": "label_values(umoja_fabric_queue_depth{namespace=~\"$namespace\"}, pod)", "includeAll": true, "multi": true, "current": {"text": "All", "value": ["$__all"]}}
+  ]},
+  "annotations": {"list": [{"name": "Deployments", "type": "dashboard", "enable": true, "iconColor": "#5794F2", "tags": ["deployment", "rollback", "fabric"]}]},
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Queue Depth",
+      "description": "Pending plus running plus UNKNOWN Fabric attestation jobs.",
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "targets": [{"expr": "sum(umoja_fabric_queue_depth{namespace=~\"$namespace\"})", "legendFormat": "jobs"}],
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1000}, {"color": "red", "value": 5000}]}, "unit": "short"}}
+    },
+    {
+      "id": 2,
+      "type": "gauge",
+      "title": "Admission Utilization",
+      "description": "Fabric Gateway admission slots currently occupied.",
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "targets": [{"expr": "100 * sum(umoja_fabric_admission_in_use{namespace=~\"$namespace\"}) / clamp_min(sum(umoja_fabric_admission_limit{namespace=~\"$namespace\"}), 1)", "legendFormat": "percent"}],
+      "fieldConfig": {"defaults": {"min": 0, "max": 100, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 70}, {"color": "red", "value": 90}], "unit": "percent"}}}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Queue State by Class",
+      "description": "Pending, running, UNKNOWN, and complete work by namespace.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [{"expr": "sum by (state) (umoja_fabric_queue_depth{namespace=~\"$namespace\"})", "legendFormat": "{{state}}"}],
+      "fieldConfig": {"defaults": {"unit": "short", "custom": {"stacking": {"mode": "normal"}}}}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Claim and Lease Loss Rate",
+      "description": "Claim throughput and stale/competing worker lease failures.",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "targets": [
+        {"expr": "sum(rate(umoja_fabric_queue_claims_total{namespace=~\"$namespace\"}[5m]))", "legendFormat": "claims/s"},
+        {"expr": "sum(rate(umoja_fabric_queue_lease_lost_total{namespace=~\"$namespace\"}[5m]))", "legendFormat": "lease lost/s"},
+        {"expr": "sum(rate(umoja_fabric_queue_claim_errors_total{namespace=~\"$namespace\"}[5m]))", "legendFormat": "claim errors/s"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ops"}}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Lease Age and Expiration",
+      "description": "Oldest active lease and expiration rate. A growing age indicates stuck Fabric calls or stalled workers.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {"expr": "max(umoja_fabric_queue_oldest_lease_age_seconds{namespace=~\"$namespace\"})", "legendFormat": "oldest lease age"},
+        {"expr": "sum(rate(umoja_fabric_queue_lease_expired_total{namespace=~\"$namespace\"}[5m]))", "legendFormat": "expired leases/s"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Fabric Commit Latency",
+      "description": "End-to-end submit and commit-status latency. Use p95/p99 to tune the 30-second timeout.",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(umoja_fabric_commit_latency_seconds_bucket{namespace=~\"$namespace\"}[5m])))", "legendFormat": "p95"},
+        {"expr": "histogram_quantile(0.99, sum by (le) (rate(umoja_fabric_commit_latency_seconds_bucket{namespace=~\"$namespace\"}[5m])))", "legendFormat": "p99"},
+        {"expr": "sum(rate(umoja_fabric_commit_timeout_total{namespace=~\"$namespace\"}[5m]))", "legendFormat": "timeouts/s"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "MVCC Conflict Frequency",
+      "description": "Fabric validation conflicts and conflict percentage over all submit outcomes.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {"expr": "sum(rate(umoja_fabric_mvcc_conflicts_total{namespace=~\"$namespace\"}[5m]))", "legendFormat": "conflicts/s"},
+        {"expr": "100 * sum(rate(umoja_fabric_mvcc_conflicts_total{namespace=~\"$namespace\"}[5m])) / clamp_min(sum(rate(umoja_fabric_submissions_total{namespace=~\"$namespace\"}[5m])), 1e-9)", "legendFormat": "conflict %"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "percent"}}
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "UNKNOWN Backlog and Reconciliation",
+      "description": "Timeouts must create UNKNOWN state and read-only reconciliation, never blind retry submissions.",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 21},
+      "targets": [
+        {"expr": "sum(umoja_fabric_unknown_queue_depth{namespace=~\"$namespace\"})", "legendFormat": "UNKNOWN jobs"},
+        {"expr": "sum(rate(umoja_fabric_reconciliation_attempts_total{namespace=~\"$namespace\"}[5m]))", "legendFormat": "reconciliation/s"},
+        {"expr": "sum(rate(umoja_fabric_reconciliation_decision_conflicts_total{namespace=~\"$namespace\"}[5m]))", "legendFormat": "decision conflicts/s"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}}
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Pool and Queue Contention",
+      "description": "Database pool utilization and wait time correlated with queue saturation.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "targets": [
+        {"expr": "sum by (pod) (umoja_postgres_pool_in_use{namespace=~\"$namespace\", pod=~\"$pod\"})", "legendFormat": "{{pod}} in use"},
+        {"expr": "sum by (pod) (umoja_postgres_pool_wait_seconds_total{namespace=~\"$namespace\", pod=~\"$pod\"})", "legendFormat": "{{pod}} wait"},
+        {"expr": "sum by (pod) (umoja_fabric_queue_claim_duration_seconds{namespace=~\"$namespace\", pod=~\"$pod\"})", "legendFormat": "{{pod}} claim"}
+      ]
+    }
+  ]
+}
