@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: umoja-evidence-object-storage
+  namespace: umoja-payment
+  labels:
+    app.kubernetes.io/name: fabric-attestation-queue-worker
+    app.kubernetes.io/component: evidence-storage
+    app.kubernetes.io/part-of: umojaflowos
+data:
+  UMOJA_OBJECT_STORAGE_ENDPOINT: s3.example.internal
+  UMOJA_OBJECT_STORAGE_BUCKET: umoja-release-evidence
+  UMOJA_OBJECT_STORAGE_REGION: us-east-1
+  UMOJA_OBJECT_STORAGE_USE_SSL: "true"
+---
+# Credentials are provisioned by Vault/External Secrets/Sealed Secrets. This
+# object is a binding contract, not a checked-in secret value.
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: umoja-evidence-object-storage-credentials
+  namespace: umoja-payment
+  labels:
+    app.kubernetes.io/name: fabric-attestation-queue-worker
+    app.kubernetes.io/component: evidence-storage
+    app.kubernetes.io/part-of: umojaflowos
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: umoja-vault
+    kind: ClusterSecretStore
+  target:
+    name: umoja-object-storage-credentials
+    creationPolicy: Owner
+  data:
+    - secretKey: UMOJA_OBJECT_STORAGE_ACCESS_KEY_ID
+      remoteRef:
+        key: production/umoja/evidence-object-storage
+        property: access_key_id
+    - secretKey: UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY
+      remoteRef:
+        key: production/umoja/evidence-object-storage
+        property: secret_access_key

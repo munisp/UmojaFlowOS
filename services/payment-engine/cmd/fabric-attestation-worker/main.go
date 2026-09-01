@@ -131,7 +131,17 @@ func main() {
 		panic(err)
 	}
 	queue := &attestation.PostgreSQLQueue{DB: db, LeaseDuration: leaseDuration, Metrics: metrics}
-	worker := &attestation.Worker{Queue: queue, Attestor: mustClient(gateway), Evidence: attestation.FileEvidenceLoader{}, Admission: admission, PollInterval: pollInterval, RetryDelay: retryDelay, Now: time.Now, Logger: log.Default()}
+	storageEndpoint := getenvDefault(getenv, "UMOJA_OBJECT_STORAGE_ENDPOINT", getenvDefault(getenv, "UMOJA_STORAGE_ENDPOINT", ""))
+	storageBucket := getenvDefault(getenv, "UMOJA_OBJECT_STORAGE_BUCKET", getenvDefault(getenv, "UMOJA_STORAGE_BUCKET", ""))
+	storageAccessKey := getenvDefault(getenv, "UMOJA_OBJECT_STORAGE_ACCESS_KEY_ID", getenvDefault(getenv, "UMOJA_STORAGE_ACCESS_KEY", ""))
+	storageSecretKey := getenvDefault(getenv, "UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY", getenvDefault(getenv, "UMOJA_STORAGE_SECRET_KEY", ""))
+	storageRegion := getenvDefault(getenv, "UMOJA_OBJECT_STORAGE_REGION", "us-east-1")
+	useSSL := !strings.EqualFold(strings.TrimSpace(getenv("UMOJA_OBJECT_STORAGE_USE_SSL")), "false")
+	evidenceLoader, err := attestation.NewObjectStorageEvidenceLoader(storageEndpoint, storageAccessKey, storageSecretKey, storageRegion, storageBucket, useSSL)
+	if err != nil {
+		panic(err)
+	}
+	worker := &attestation.Worker{Queue: queue, Attestor: mustClient(gateway), Evidence: evidenceLoader, Admission: admission, PollInterval: pollInterval, RetryDelay: retryDelay, Now: time.Now, Logger: log.Default()}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

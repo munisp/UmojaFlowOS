@@ -52,6 +52,36 @@ spec:
           env:
             - name: UMOJA_ENV
               value: staging
+            - name: UMOJA_OBJECT_STORAGE_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: umoja-evidence-object-storage
+                  key: UMOJA_OBJECT_STORAGE_ENDPOINT
+            - name: UMOJA_OBJECT_STORAGE_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: umoja-evidence-object-storage
+                  key: UMOJA_OBJECT_STORAGE_BUCKET
+            - name: UMOJA_OBJECT_STORAGE_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: umoja-evidence-object-storage
+                  key: UMOJA_OBJECT_STORAGE_REGION
+            - name: UMOJA_OBJECT_STORAGE_USE_SSL
+              valueFrom:
+                configMapKeyRef:
+                  name: umoja-evidence-object-storage
+                  key: UMOJA_OBJECT_STORAGE_USE_SSL
+            - name: UMOJA_OBJECT_STORAGE_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: umoja-object-storage-credentials
+                  key: UMOJA_OBJECT_STORAGE_ACCESS_KEY_ID
+            - name: UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: umoja-object-storage-credentials
+                  key: UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY
             - name: UMOJA_FABRIC_QUEUE_DATABASE_URL
               valueFrom:
                 secretKeyRef:
