@@ -1,0 +1,8 @@
+{
+  "records": 100000,
+  "input_bytes": 11999999,
+  "elapsed_seconds": 0.312251,
+  "records_per_second": 320256,
+  "megabytes_per_second": 38.431,
+  "note": "synthetic repeated JSON lines; excludes kubectl transport and cluster log delivery"
+}
