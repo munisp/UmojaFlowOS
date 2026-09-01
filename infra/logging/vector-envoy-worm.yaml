@@ -58,6 +58,11 @@ data:
   vector.toml: |
     data_dir = "/var/lib/vector"
 
+    [api]
+    enabled = true
+    address = "0.0.0.0:8686"
+    playground = false
+
     [sources.kubernetes]
     type = "kubernetes_logs"
     auto_partial_merge = true
@@ -143,6 +148,27 @@ data:
     access_key_id = "${VECTOR_S3_ACCESS_KEY}"
     secret_access_key = "${VECTOR_S3_SECRET_KEY}"
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vector-envoy-archive
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: vector-envoy-archive
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "8686"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: vector-envoy-archive
+  ports:
+    - name: metrics
+      port: 8686
+      targetPort: api
+      protocol: TCP
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -214,6 +240,9 @@ spec:
               readOnly: true
             - name: data
               mountPath: /var/lib/vector
+            - name: host-logs
+              mountPath: /var/log
+              readOnly: true
       volumes:
         - name: config
           configMap:
@@ -221,3 +250,7 @@ spec:
         - name: data
           emptyDir:
             sizeLimit: 10Gi
+        - name: host-logs
+          hostPath:
+            path: /var/log
+            type: Directory

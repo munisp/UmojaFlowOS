@@ -1,0 +1,7 @@
+PASS	valid allow	expected=True	actual=True
+PASS	valid RBAC deny	expected=True	actual=True
+PASS	malformed JSON	expected=False	actual=False
+PASS	JSON scalar	expected=False	actual=False
+PASS	sensitive fields	expected=True	actual=True
+PASS	missing status	expected=True	actual=True
+PASS	all 6 Vector normalization compatibility cases

@@ -1,0 +1,156 @@
+groups:
+  - name: umoja.vector.envoy_worm
+    interval: 30s
+    rules:
+      - alert: UmojaVectorArchiveDown
+        expr: up{job="vector-envoy-archive"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: vector-envoy-archive
+          tenant_scope: platform
+        annotations:
+          summary: Vector Envoy archive agent is unavailable
+          description: No Vector archive target is scrapeable for two minutes; Envoy evidence may not be leaving the node.
+          runbook_url: https://github.com/munisp/UmojaFlowOS/blob/main/docs/envoy_log_streaming_to_object_storage_architecture.md
+
+      - alert: UmojaVectorArchiveBufferHigh
+        expr: |
+          (
+            vector_buffer_size_bytes{component_name="worm_object_storage"}
+            / vector_buffer_capacity_bytes{component_name="worm_object_storage"}
+          ) >= 0.60
+        for: 5m
+        labels:
+          severity: warning
+          service: vector-envoy-archive
+          tenant_scope: platform
+        annotations:
+          summary: Vector WORM sink buffer exceeds 60 percent
+          description: Object-storage delivery is accumulating; investigate endpoint latency, retries, and node disk capacity.
+          runbook_url: https://github.com/munisp/UmojaFlowOS/blob/main/docs/envoy_log_streaming_to_object_storage_architecture.md
+
+      - alert: UmojaVectorArchiveBufferCritical
+        expr: |
+          (
+            vector_buffer_size_bytes{component_name="worm_object_storage"}
+            / vector_buffer_capacity_bytes{component_name="worm_object_storage"}
+          ) >= 0.80
+        for: 2m
+        labels:
+          severity: critical
+          service: vector-envoy-archive
+          tenant_scope: platform
+        annotations:
+          summary: Vector WORM sink buffer exceeds 80 percent
+          description: Evidence delivery is close to exhausting the local spool; preserve the queue and fail closed rather than dropping events.
+          runbook_url: https://github.com/munisp/UmojaFlowOS/blob/main/docs/envoy_log_streaming_to_object_storage_architecture.md
+
+      - alert: UmojaVectorArchiveBufferFull
+        expr: vector_buffer_size_bytes{component_name="worm_object_storage"} >= vector_buffer_capacity_bytes{component_name="worm_object_storage"}
+        for: 1m
+        labels:
+          severity: critical
+          service: vector-envoy-archive
+          tenant_scope: platform
+        annotations:
+          summary: Vector WORM sink buffer is full
+          description: The archive sink is applying backpressure at capacity; do not restart the agent without preserving the spool.
+          runbook_url: https://github.com/munisp/UmojaFlowOS/blob/main/docs/envoy_log_streaming_to_object_storage_architecture.md
+
+      - alert: UmojaVectorArchiveDiskPressure
+        expr: |
+          (
+            node_filesystem_avail_bytes{mountpoint="/var/lib/vector"}
+            / node_filesystem_size_bytes{mountpoint="/var/lib/vector"}
+          ) < 0.20
+        for: 5m
+        labels:
+          severity: warning
+          service: vector-envoy-archive
+          tenant_scope: platform
+        annotations:
+          summary: Vector spool filesystem has less than 20 percent free space
+          description: Disk pressure threatens the fail-closed archive buffer; expand or drain storage under incident control.
+          runbook_url: https://github.com/munisp/UmojaFlowOS/blob/main/docs/envoy_log_streaming_to_object_storage_architecture.md
+
+      - alert: UmojaVectorArchiveDiskCritical
+        expr: |
+          (
+            node_filesystem_avail_bytes{mountpoint="/var/lib/vector"}
+            / node_filesystem_size_bytes{mountpoint="/var/lib/vector"}
+          ) < 0.10
+        for: 2m
+        labels:
+          severity: critical
+          service: vector-envoy-archive
+          tenant_scope: platform
+        annotations:
+          summary: Vector spool filesystem has less than 10 percent free space
+          description: Stop nonessential log volume and preserve the spool; an evidence drop or node eviction is imminent.
+          runbook_url: https://github.com/munisp/UmojaFlowOS/blob/main/docs/envoy_log_streaming_to_object_storage_architecture.md
+
+      - alert: UmojaVectorArchiveDroppedEvents
+        expr: increase(vector_component_discarded_events_total{component_name="worm_object_storage"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: vector-envoy-archive
+          tenant_scope: platform
+        annotations:
+          summary: Vector discarded Envoy archive events
+          description: Any discarded event is an evidence-integrity incident; preserve logs and open the incident response procedure.
+          runbook_url: https://github.com/munisp/UmojaFlowOS/blob/main/docs/envoy_log_streaming_to_object_storage_architecture.md
+
+      - alert: UmojaVectorArchiveParseFailures
+        expr: increase(vector_component_errors_total{component_name="envoy_normalize"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          service: vector-envoy-archive
+          tenant_scope: platform
+        annotations:
+          summary: Vector Envoy normalization errors detected
+          description: Corrupted or schema-incompatible Envoy records are reaching the transform; inspect samples without exposing sensitive payloads.
+          runbook_url: https://github.com/munisp/UmojaFlowOS/blob/main/docs/envoy_log_streaming_to_object_storage_architecture.md
+
+      - alert: UmojaVectorArchiveS3UploadErrors
+        expr: increase(vector_component_errors_total{component_name="worm_object_storage",component_type="sink"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: vector-envoy-archive
+          tenant_scope: platform
+        annotations:
+          summary: Vector WORM object-storage uploads are failing
+          description: S3-compatible uploads are failing or retrying; verify endpoint TLS, credentials, bucket policy, and object-store health.
+          runbook_url: https://github.com/munisp/UmojaFlowOS/blob/main/docs/envoy_log_streaming_to_object_storage_architecture.md
+
+      - alert: UmojaVectorArchiveS3UploadStalled
+        expr: |
+          (
+            rate(vector_component_sent_events_total{component_name="worm_object_storage"}[10m]) == 0
+          ) and (
+            rate(vector_component_received_events_total{component_name="envoy_normalize"}[10m]) > 0
+          )
+        for: 5m
+        labels:
+          severity: critical
+          service: vector-envoy-archive
+          tenant_scope: platform
+        annotations:
+          summary: Vector is receiving Envoy events but uploading none
+          description: The WORM delivery path is stalled; preserve the disk buffer and do not acknowledge evidence delivery.
+          runbook_url: https://github.com/munisp/UmojaFlowOS/blob/main/docs/envoy_log_streaming_to_object_storage_architecture.md
+
+      - alert: UmojaVectorArchiveRetryStorm
+        expr: rate(vector_component_errors_total{component_name="worm_object_storage",component_type="sink"}[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: vector-envoy-archive
+          tenant_scope: platform
+        annotations:
+          summary: Vector WORM sink is in a retry storm
+          description: Repeated sink failures can exhaust the spool and increase evidence delivery latency; inspect object-storage and network telemetry.
+          runbook_url: https://github.com/munisp/UmojaFlowOS/blob/main/docs/envoy_log_streaming_to_object_storage_architecture.md
