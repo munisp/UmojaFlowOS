@@ -4,8 +4,23 @@ global:
 
 rule_files:
   - /etc/prometheus/rules/mojaloop-signer-alerts.yml
+  - /etc/prometheus/rules/umoja-tigerbeetle-cluster-alerts.yml
+  - /etc/prometheus/rules/otel-collector-compliance-alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
 
 scrape_configs:
+  - job_name: otel-collector
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["otel-collector:8889"]
+        labels:
+          service: otel-collector
+          environment: local
+
   - job_name: payment-engine
     metrics_path: /metrics
     static_configs:

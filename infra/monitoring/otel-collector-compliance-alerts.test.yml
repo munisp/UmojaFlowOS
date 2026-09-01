@@ -1,0 +1,66 @@
+rule_files:
+  - otel-collector-compliance-alerts.yml
+
+tests:
+  - name: collector-down-fires
+    interval: 30s
+    input_series:
+      - series: 'up{job="otel-collector",environment="staging"}'
+        values: '0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: UmojaOTelCollectorDown
+        exp_alerts:
+          - exp_labels:
+              alertname: UmojaOTelCollectorDown
+              job: otel-collector
+              severity: critical
+              service: otel-collector
+              compliance_impact: high
+              environment: staging
+            exp_annotations:
+              summary: "OpenTelemetry Collector is unavailable"
+              description: "Collector scrape is down; telemetry-dependent compliance and settlement controls are not observable."
+              runbook_url: "https://github.com/munisp/UmojaFlowOS/blob/main/docs/otel_tempo_prometheus_alertmanager_staging_runbook.md"
+
+  - name: export-failure-fires
+    interval: 30s
+    input_series:
+      - series: 'otelcol_exporter_send_failed_spans{environment="staging"}'
+        values: '0 0 0 0 0 1 2 3 4 5 6 7 8 9 10 11 12'
+      - series: 'otelcol_exporter_send_failed_metric_points{environment="staging"}'
+        values: '0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: UmojaOTelExportFailures
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: otel-collector
+              compliance_impact: high
+              environment: staging
+            exp_annotations:
+              summary: "OpenTelemetry exports are failing"
+              description: "Collector is failing to export traces or metrics; affected paths must remain fail-closed."
+              runbook_url: "https://github.com/munisp/UmojaFlowOS/blob/main/docs/otel_tempo_prometheus_alertmanager_staging_runbook.md"
+
+  - name: refused-telemetry-fires
+    interval: 30s
+    input_series:
+      - series: 'otelcol_receiver_refused_spans{environment="staging"}'
+        values: '0 0 0 0 0 1 2 3 4 5 6 7 8 9 10 11 12'
+      - series: 'otelcol_receiver_refused_metric_points{environment="staging"}'
+        values: '0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: UmojaComplianceTelemetryMissing
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: otel-collector
+              compliance_impact: high
+              environment: staging
+            exp_annotations:
+              summary: "Compliance telemetry is being refused"
+              description: "Collector is refusing telemetry; do not represent the affected control as observable."
+              runbook_url: "https://github.com/munisp/UmojaFlowOS/blob/main/docs/otel_tempo_prometheus_alertmanager_staging_runbook.md"

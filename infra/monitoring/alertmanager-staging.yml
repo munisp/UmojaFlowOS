@@ -1,0 +1,53 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: staging-audit-sink
+  group_by: [alertname, service, environment, compliance_impact]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - severity="critical"
+        - compliance_impact="high"
+      receiver: novu-critical-compliance
+      continue: true
+    - matchers:
+        - severity="critical"
+      receiver: staging-critical-sink
+      continue: false
+    - matchers:
+        - severity="warning"
+      receiver: staging-warning-sink
+      continue: false
+
+inhibit_rules:
+  - source_matchers: [alertname="UmojaOTelCollectorDown", severity="critical"]
+    target_matchers: [severity="warning"]
+    equal: [service, environment]
+  - source_matchers: [alertname="UmojaCriticalComplianceAlert", severity="critical"]
+    target_matchers: [severity="warning"]
+    equal: [environment, compliance_impact]
+
+receivers:
+  - name: staging-audit-sink
+    webhook_configs:
+      - url: "http://notification-sink:8080/alertmanager"
+        send_resolved: true
+  - name: staging-critical-sink
+    webhook_configs:
+      - url: "http://notification-sink:8080/critical"
+        send_resolved: true
+  - name: staging-warning-sink
+    webhook_configs:
+      - url: "http://notification-sink:8080/warning"
+        send_resolved: true
+  - name: novu-critical-compliance
+    webhook_configs:
+      - url: "${NOVU_ALERTMANAGER_WEBHOOK_URL}"
+        http_config:
+          authorization:
+            type: Bearer
+            credentials: "${NOVU_ALERTMANAGER_WEBHOOK_TOKEN}"
+        send_resolved: true
