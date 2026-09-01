@@ -174,7 +174,8 @@ func (q *PostgreSQLQueue) MarkComplete(ctx context.Context, item QueueItem, atte
 	}
 	if q.Metrics != nil {
 		q.Metrics.QueueRunning.Add(-1)
-		q.Metrics.QueueUnknown.Add(1)
+		q.Metrics.QueueComplete.Add(1)
+		q.Metrics.CompleteTotal.Add(1)
 	}
 	return nil
 }

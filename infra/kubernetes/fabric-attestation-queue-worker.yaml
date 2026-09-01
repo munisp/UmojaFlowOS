@@ -48,7 +48,7 @@ spec:
         - name: queue-worker
           image: ghcr.io/munisp/umojaflowos-payment-engine@sha256:REPLACE_WITH_RELEASE_DIGEST
           imagePullPolicy: IfNotPresent
-          command: ["/app/payment-engine"]
+          command: ["/app/fabric-attestation-worker"]
           env:
             - name: UMOJA_ENV
               value: staging

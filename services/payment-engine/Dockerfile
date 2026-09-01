@@ -18,7 +18,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux go build -o payment-engine ./cmd/payment-engine
+RUN CGO_ENABLED=1 GOOS=linux go build -o payment-engine ./cmd/payment-engine \
+ && CGO_ENABLED=1 GOOS=linux go build -o fabric-attestation-worker ./cmd/fabric-attestation-worker
 
 FROM debian:bookworm-slim AS runtime
 
@@ -29,6 +30,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=builder --chown=app:app /app/payment-engine ./payment-engine
+COPY --from=builder --chown=app:app /app/fabric-attestation-worker ./fabric-attestation-worker
 
 ENV PORT=8081
 EXPOSE 8081

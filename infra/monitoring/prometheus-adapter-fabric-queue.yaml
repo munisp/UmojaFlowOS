@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-adapter-fabric-queue-config
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: prometheus-adapter
+    app.kubernetes.io/component: fabric-queue-metrics
+    app.kubernetes.io/part-of: umojaflowos
+data:
+  config.yaml: |
+    rules:
+      default: false
+      external:
+        - seriesQuery: 'umoja_fabric_queue_depth{namespace!="",state="pending"}'
+          resources:
+            overrides:
+              namespace:
+                resource: namespace
+          name:
+            matches: '^umoja_fabric_queue_depth$'
+            as: umoja_fabric_queue_depth
+          metricsQuery: 'sum(umoja_fabric_queue_depth{state="pending",<<.LabelMatchers>>})'
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-fabric-queue-alerts
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/component: fabric-queue-alerts
+    app.kubernetes.io/part-of: umojaflowos
+data:
+  fabric-queue-alerts.yml: |
+    groups:
+      - name: fabric-attestation-queue
+        interval: 30s
+        rules:
+          - alert: FabricQueueDepthHigh
+            expr: sum(umoja_fabric_queue_depth{state="pending",namespace="umoja-payment"}) > 100
+            for: 5m
+            labels:
+              severity: warning
+              service: fabric-attestation-queue
+            annotations:
+              summary: Fabric attestation queue depth is high
+              runbook: https://github.com/munisp/UmojaFlowOS/blob/main/docs/fabric_queue_postgresql_pool_configuration.md
+          - alert: FabricQueueDepthCritical
+            expr: sum(umoja_fabric_queue_depth{state="pending",namespace="umoja-payment"}) > 500
+            for: 2m
+            labels:
+              severity: critical
+              service: fabric-attestation-queue
+            annotations:
+              summary: Fabric attestation queue depth is critical
+              runbook: https://github.com/munisp/UmojaFlowOS/blob/main/docs/fabric_queue_postgresql_pool_configuration.md
+          - alert: FabricQueueMetricMissing
+            expr: absent(umoja_fabric_queue_depth{state="pending",namespace="umoja-payment"})
+            for: 5m
+            labels:
+              severity: critical
+              service: fabric-attestation-queue
+            annotations:
+              summary: Prometheus cannot observe the pending Fabric queue depth
+              runbook: https://github.com/munisp/UmojaFlowOS/blob/main/docs/fabric_queue_postgresql_pool_configuration.md
