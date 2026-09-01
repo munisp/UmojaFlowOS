@@ -131,7 +131,9 @@ func newHandlerWithSignerMetrics(now func() time.Time, webhook http.Handler, pos
 		ledgerBackend = configuredLedgerBackend[0]
 	}
 	mux := http.NewServeMux()
-	metrics := &serviceMetrics{startedAt: now(), signerRetryMetrics: signerRetryMetrics, fabricMetrics: attestation.NewMetrics()}
+	fabricMetrics := attestation.NewMetrics()
+	fabricMetrics.SetResourceLabels(os.Getenv("POD_NAMESPACE"), os.Getenv("POD_NAME"))
+	metrics := &serviceMetrics{startedAt: now(), signerRetryMetrics: signerRetryMetrics, fabricMetrics: fabricMetrics}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"service": "payment-engine", "status": "healthy", "provider_execution": "disabled_without_verified_provider", "ledger_backend": ledgerBackend})
