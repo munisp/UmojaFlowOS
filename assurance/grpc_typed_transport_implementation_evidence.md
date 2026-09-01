@@ -25,7 +25,7 @@ A local Go test server was added at `services/payment-engine/cmd/settlement-grpc
 
 ## Benchmark interpretation
 
-`BenchmarkSettlementTransportTLSLatency` was run three times with a simulated 2 ms provider latency. The local loopback harness measured approximately **2.45 ms/op for gRPC over TLS** and **2.38 ms/op for HTTP over TLS**. This does not demonstrate that gRPC is slower in production: the benchmark creates a client connection per operation and therefore includes connection/setup overhead. The typed protobuf change removes generic Struct decoding and establishes a stable cross-language contract, but capacity claims require a follow-up benchmark with pooled connections, representative payloads, concurrent workers, TLS termination, and Istio service-mesh latency.
+The pooled benchmark `BenchmarkSettlementPooledConcurrent` reused one gRPC connection and exercised concurrent workers with an injected 10 ms service-mesh-latency budget. Across three samples, the median observed latency was approximately **10.64 ms/op at one worker**, **2.68 ms/op at four workers**, and **0.684 ms/op at sixteen workers**. These are concurrent aggregate-operation timings from a loopback synthetic harness, not per-request tail latency or a production SLO. They show that the shared connection and server can process concurrent work, but do not constitute Istio capacity evidence.
 
 ## Fail-closed acceptance criteria
 
@@ -33,4 +33,4 @@ A malformed request, missing payload digest, mismatched digest, deadline, TLS fa
 
 ## Remaining production gate
 
-Before production enablement, run the pooled-connection gRPC-versus-HTTP benchmark in authorized staging, capture mTLS and Istio authorization evidence, confirm tenant-safe OTel telemetry, validate alert routing, and bind the resulting artifacts to the release SHA and four distinct approvals in the immutable evidence manifest.
+The pooled local benchmark and executable mTLS/authorization tests are complete. The mTLS test proves a TLS 1.3 client certificate is accepted, a missing client certificate is rejected, an allowlisted `control-plane` principal is accepted, and an unallowlisted principal receives `PermissionDenied`. This sandbox has no `kubectl`, `istioctl`, or reachable Kubernetes cluster, so direct Istio sidecar latency, PeerAuthentication, AuthorizationPolicy, and service-account principal evidence remains a staging gate. Before production enablement, run the same suite through the authorized staging mesh, capture OTel telemetry and alert-routing evidence, and bind artifacts to the release SHA and four distinct approvals in the immutable evidence manifest.
