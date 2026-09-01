@@ -1,0 +1,10 @@
+PASS	valid allow 200	expected=True	actual=True
+PASS	valid RBAC deny 403	expected=True	actual=True
+PASS	malformed plus valid allow	expected=True	actual=True
+PASS	missing status code	expected=False	actual=False
+PASS	non-RBAC 403	expected=False	actual=False
+PASS	allow marked RBAC denied	expected=False	actual=False
+PASS	wrong status for allow	expected=False	actual=False
+PASS	wrong status for deny	expected=False	actual=False
+PASS	denial signal in policy status	expected=True	actual=True
+PASS	all 9 Envoy edge cases matched expected behavior
