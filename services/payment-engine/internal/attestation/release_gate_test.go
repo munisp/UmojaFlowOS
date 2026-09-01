@@ -59,11 +59,18 @@ func TestReleaseManifestGateValidatesFourSignedRolesAndArtifact(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	item := QueueItem{ReleaseSHA: release, EvidenceID: "E-01", PayloadDigest: hex.EncodeToString(digest[:])}
+	wrongBucketGate, err := NewReleaseManifestGate(filepath.Join(dir, "manifest.json"), sigDir, "staging", "different-bucket")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := wrongBucketGate.Verify(context.Background(), item); err == nil {
+		t.Fatal("manifest with mismatched WORM bucket was accepted")
+	}
 	gate, err := NewReleaseManifestGate(filepath.Join(dir, "manifest.json"), sigDir, "staging", "umoja-release-evidence")
 	if err != nil {
 		t.Fatal(err)
 	}
-	item := QueueItem{ReleaseSHA: release, EvidenceID: "E-01", PayloadDigest: hex.EncodeToString(digest[:])}
 	if err := gate.Verify(context.Background(), item); err != nil {
 		t.Fatalf("valid manifest rejected: %v", err)
 	}
