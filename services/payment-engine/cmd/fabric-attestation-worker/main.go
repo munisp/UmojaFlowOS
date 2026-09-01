@@ -137,7 +137,15 @@ func main() {
 	storageSecretKey := getenvDefault(getenv, "UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY", getenvDefault(getenv, "UMOJA_STORAGE_SECRET_KEY", ""))
 	storageRegion := getenvDefault(getenv, "UMOJA_OBJECT_STORAGE_REGION", "us-east-1")
 	useSSL := !strings.EqualFold(strings.TrimSpace(getenv("UMOJA_OBJECT_STORAGE_USE_SSL")), "false")
-	evidenceLoader, err := attestation.NewObjectStorageEvidenceLoader(storageEndpoint, storageAccessKey, storageSecretKey, storageRegion, storageBucket, useSSL)
+	var evidenceLoader attestation.EvidenceLoader
+	vaultAddress := strings.TrimSpace(getenv("UMOJA_VAULT_ADDR"))
+	if vaultAddress != "" {
+		provider := &attestation.VaultKV2CredentialProvider{HTTPClient: &http.Client{Timeout: 5 * time.Second}, Address: vaultAddress, Token: getenv("UMOJA_VAULT_TOKEN"), TokenFile: getenv("UMOJA_VAULT_TOKEN_FILE"), SecretPath: getenv("UMOJA_VAULT_OBJECT_STORAGE_SECRET_PATH"), Namespace: getenv("UMOJA_VAULT_NAMESPACE")}
+		evidenceLoader, err = attestation.NewVersionAwareObjectStorageEvidenceLoader(provider, storageEndpoint, storageBucket, storageRegion, getenv("UMOJA_OBJECT_STORAGE_CANARY_KEY"), useSSL)
+	} else {
+		staticLoader, staticErr := attestation.NewObjectStorageEvidenceLoader(storageEndpoint, storageAccessKey, storageSecretKey, storageRegion, storageBucket, useSSL)
+		evidenceLoader, err = staticLoader, staticErr
+	}
 	if err != nil {
 		panic(err)
 	}
