@@ -126,34 +126,36 @@ def verify(manifest_path: Path, schema_path: Path, signatures_dir: Path, expecte
     if missing:
         raise VerificationError(f"required approval roles are missing: {', '.join(missing)}")
 
+    sidecar_errors: list[str] = []
     for role in ROLES:
-        sidecar_path = signatures_dir / f"{role}.json"
-        sidecar = read_json(sidecar_path, f"{role} signature sidecar")
-        unknown = set(sidecar) - SIDECAR_FIELDS
-        if unknown:
-            raise VerificationError(f"{role} sidecar contains unsupported fields: {', '.join(sorted(unknown))}")
-        required = SIDECAR_FIELDS
-        missing_fields = sorted(required - set(sidecar))
-        if missing_fields:
-            raise VerificationError(f"{role} sidecar is missing: {', '.join(missing_fields)}")
-        if sidecar["role"] != role:
-            raise VerificationError(f"{role} sidecar role does not match its filename")
-        approval = approval_by_role[role]
-        if sidecar["subject"] != approval["subject"]:
-            raise VerificationError(f"{role} sidecar subject does not match manifest approval subject")
-        if not constant_time_equal_text(sidecar["release_sha"], release_sha):
-            raise VerificationError(f"{role} sidecar release_sha does not match manifest")
-        if not constant_time_equal_text(sidecar["manifest_sha256"], manifest_digest):
-            raise VerificationError(f"{role} sidecar manifest_sha256 does not match canonical manifest")
-        if sidecar["algorithm"] != "Ed25519":
-            raise VerificationError(f"{role} sidecar algorithm must be Ed25519")
-        public_key = decode_b64(sidecar["public_key"], f"{role}.public_key", 32)
-        signature = decode_b64(sidecar["signature"], f"{role}.signature", 64)
-        signed_payload = canonical + b"\n" + role.encode("utf-8") + b"\n" + sidecar["subject"].encode("utf-8") + b"\n" + release_sha.encode("ascii")
         try:
+            sidecar_path = signatures_dir / f"{role}.json"
+            sidecar = read_json(sidecar_path, f"{role} signature sidecar")
+            unknown = set(sidecar) - SIDECAR_FIELDS
+            if unknown:
+                raise VerificationError(f"unsupported fields: {', '.join(sorted(unknown))}")
+            missing_fields = sorted(SIDECAR_FIELDS - set(sidecar))
+            if missing_fields:
+                raise VerificationError(f"missing fields: {', '.join(missing_fields)}")
+            if sidecar["role"] != role:
+                raise VerificationError("sidecar role does not match its filename")
+            approval = approval_by_role[role]
+            if sidecar["subject"] != approval["subject"]:
+                raise VerificationError("sidecar subject does not match manifest approval subject")
+            if not constant_time_equal_text(sidecar["release_sha"], release_sha):
+                raise VerificationError("sidecar release_sha does not match manifest")
+            if not constant_time_equal_text(sidecar["manifest_sha256"], manifest_digest):
+                raise VerificationError("sidecar manifest_sha256 does not match canonical manifest")
+            if sidecar["algorithm"] != "Ed25519":
+                raise VerificationError("sidecar algorithm must be Ed25519")
+            public_key = decode_b64(sidecar["public_key"], f"{role}.public_key", 32)
+            signature = decode_b64(sidecar["signature"], f"{role}.signature", 64)
+            signed_payload = canonical + b"\n" + role.encode("utf-8") + b"\n" + sidecar["subject"].encode("utf-8") + b"\n" + release_sha.encode("ascii")
             Ed25519PublicKey.from_public_bytes(public_key).verify(signature, signed_payload)
-        except InvalidSignature as exc:
-            raise VerificationError(f"{role} Ed25519 signature verification failed") from exc
+        except (VerificationError, InvalidSignature) as exc:
+            sidecar_errors.append(f"{role}: {exc}")
+    if sidecar_errors:
+        raise VerificationError("one or more detached approvals failed: " + "; ".join(sidecar_errors))
 
 
 def main() -> int:

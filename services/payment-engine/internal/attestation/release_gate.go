@@ -160,39 +160,52 @@ func (g *ReleaseManifestGate) readAndValidateManifest(item QueueItem) ([]byte, r
 
 func (g *ReleaseManifestGate) verifyApprovals(manifest releaseManifest, canonical []byte, manifestDigest string) error {
 	seenRoles, seenSubjects := map[string]bool{}, map[string]bool{}
+	failures := make([]string, 0)
 	for _, a := range manifest.Approvals {
 		if _, ok := requiredApprovalRoles[a.Role]; !ok || seenRoles[a.Role] || a.Subject == "" || seenSubjects[a.Subject] || !constantTimeEqual(a.ReleaseSHA, manifest.ReleaseSHA) {
-			return fmt.Errorf("%w: approval role, subject, or release binding failed", ErrReleaseManifestGate)
+			failures = append(failures, a.Role+": approval role, subject, or release binding failed")
+			continue
 		}
 		if _, err := time.Parse(time.RFC3339, a.ApprovedAt); err != nil {
-			return fmt.Errorf("%w: invalid approval timestamp", ErrReleaseManifestGate)
+			failures = append(failures, a.Role+": invalid approval timestamp")
+			continue
 		}
 		seenRoles[a.Role], seenSubjects[a.Subject] = true, true
-		sidecarData, err := os.ReadFile(filepath.Join(g.SignaturesDir, a.Role+".json"))
-		if err != nil {
-			return fmt.Errorf("%w: missing %s signature sidecar", ErrReleaseManifestGate, a.Role)
-		}
-		var s approvalSidecar
-		if json.Unmarshal(sidecarData, &s) != nil || s.Role != a.Role || s.Subject != a.Subject || !constantTimeEqual(s.ReleaseSHA, manifest.ReleaseSHA) || !constantTimeEqual(s.ManifestSHA256, manifestDigest) || s.Algorithm != "Ed25519" {
-			return fmt.Errorf("%w: invalid %s sidecar binding", ErrReleaseManifestGate, a.Role)
-		}
-		pub, err1 := base64.StdEncoding.DecodeString(s.PublicKey)
-		sig, err2 := base64.StdEncoding.DecodeString(s.Signature)
-		if err1 != nil || err2 != nil || len(pub) != ed25519.PublicKeySize || len(sig) != ed25519.SignatureSize {
-			return fmt.Errorf("%w: invalid %s signature encoding", ErrReleaseManifestGate, a.Role)
-		}
-		payload := append(append(append(append([]byte{}, canonical...), '\n'), []byte(a.Role)...), '\n')
-		payload = append(payload, []byte(a.Subject)...)
-		payload = append(payload, '\n')
-		payload = append(payload, []byte(manifest.ReleaseSHA)...)
-		if !ed25519.Verify(ed25519.PublicKey(pub), payload, sig) {
-			return fmt.Errorf("%w: %s signature verification failed", ErrReleaseManifestGate, a.Role)
+		if err := g.verifyApprovalSidecar(a, manifest, canonical, manifestDigest); err != nil {
+			failures = append(failures, a.Role+": "+err.Error())
 		}
 	}
 	for role := range requiredApprovalRoles {
 		if !seenRoles[role] {
-			return fmt.Errorf("%w: missing %s approval", ErrReleaseManifestGate, role)
+			failures = append(failures, role+": missing approval")
 		}
+	}
+	if len(failures) > 0 {
+		return fmt.Errorf("%w: detached approval verification failed: %s", ErrReleaseManifestGate, strings.Join(failures, "; "))
+	}
+	return nil
+}
+
+func (g *ReleaseManifestGate) verifyApprovalSidecar(a releaseApproval, manifest releaseManifest, canonical []byte, manifestDigest string) error {
+	sidecarData, err := os.ReadFile(filepath.Join(g.SignaturesDir, a.Role+".json"))
+	if err != nil {
+		return fmt.Errorf("missing signature sidecar")
+	}
+	var s approvalSidecar
+	if json.Unmarshal(sidecarData, &s) != nil || s.Role != a.Role || s.Subject != a.Subject || !constantTimeEqual(s.ReleaseSHA, manifest.ReleaseSHA) || !constantTimeEqual(s.ManifestSHA256, manifestDigest) || s.Algorithm != "Ed25519" {
+		return fmt.Errorf("invalid sidecar binding")
+	}
+	pub, err1 := base64.StdEncoding.DecodeString(s.PublicKey)
+	sig, err2 := base64.StdEncoding.DecodeString(s.Signature)
+	if err1 != nil || err2 != nil || len(pub) != ed25519.PublicKeySize || len(sig) != ed25519.SignatureSize {
+		return fmt.Errorf("invalid signature encoding")
+	}
+	payload := append(append(append(append([]byte{}, canonical...), '\n'), []byte(a.Role)...), '\n')
+	payload = append(payload, []byte(a.Subject)...)
+	payload = append(payload, '\n')
+	payload = append(payload, []byte(manifest.ReleaseSHA)...)
+	if !ed25519.Verify(ed25519.PublicKey(pub), payload, sig) {
+		return fmt.Errorf("signature verification failed")
 	}
 	return nil
 }
