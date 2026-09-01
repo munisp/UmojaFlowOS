@@ -1,0 +1,3 @@
+valid fixture: PASS
+tampered signature: FAIL-CLOSED (rejected)
+four-role aggregated failure: PASS

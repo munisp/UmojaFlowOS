@@ -1,0 +1,80 @@
+{
+  "mode": "deterministic_hpa_model",
+  "seconds": 900,
+  "arrival_rate_during_burst_per_second": 100,
+  "burst_seconds": 120,
+  "worker_rate_per_replica_per_second": 16,
+  "initial_replicas": 2,
+  "max_replicas": 8,
+  "target_pending_per_replica": 50,
+  "max_queue_depth": 5344,
+  "final_queue_depth": 0,
+  "final_replicas": 2,
+  "scale_events": 9,
+  "events": [
+    {
+      "second": 60,
+      "action": "scale_up",
+      "replicas": 4,
+      "queue": 4148,
+      "desired": 8
+    },
+    {
+      "second": 90,
+      "action": "scale_up",
+      "replicas": 6,
+      "queue": 5228,
+      "desired": 8
+    },
+    {
+      "second": 120,
+      "action": "scale_up",
+      "replicas": 8,
+      "queue": 5248,
+      "desired": 8
+    },
+    {
+      "second": 300,
+      "action": "scale_down",
+      "replicas": 7,
+      "queue": 0,
+      "desired": 2
+    },
+    {
+      "second": 330,
+      "action": "scale_down",
+      "replicas": 6,
+      "queue": 0,
+      "desired": 2
+    },
+    {
+      "second": 360,
+      "action": "scale_down",
+      "replicas": 5,
+      "queue": 0,
+      "desired": 2
+    },
+    {
+      "second": 390,
+      "action": "scale_down",
+      "replicas": 4,
+      "queue": 0,
+      "desired": 2
+    },
+    {
+      "second": 420,
+      "action": "scale_down",
+      "replicas": 3,
+      "queue": 0,
+      "desired": 2
+    },
+    {
+      "second": 450,
+      "action": "scale_down",
+      "replicas": 2,
+      "queue": 0,
+      "desired": 2
+    }
+  ],
+  "live_cluster_evidence": false
+}
