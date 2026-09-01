@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>OTel Observability</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.slide-container{width:1280px;min-height:720px;background:#0b1424;color:#f4f7fb;font-family:Arial,Helvetica,sans-serif;padding:55px 72px 0}
+.kicker{color:#67d6e8;font-size:13px;letter-spacing:2px;text-transform:uppercase;font-weight:700}
+.h{font-size:39px;letter-spacing:-1px;margin-top:14px}
+.lead{font-size:18px;color:#aebed0;margin-top:12px;max-width:850px}
+.pipeline{display:grid;grid-template-columns:280px 100px 320px 100px 280px;align-items:center;margin-top:64px}
+.stage{min-height:180px;border:1px solid #31516c;background:#101f33;padding:24px}
+.stage.center{border-color:#67d6e8;background:#10283a}
+.stage-title{color:#8fa2b8;text-transform:uppercase;letter-spacing:2px;font-size:11px;margin-bottom:16px}
+.item{font-size:16px;margin-bottom:12px;color:#d6e2ee}
+.item b{color:#67d6e8;display:block;font-size:14px;margin-bottom:4px}
+.arrow{height:2px;background:#31516c;position:relative}
+.arrow:after{content:'›';position:absolute;right:-2px;top:-14px;color:#31516c;font-size:28px}
+.signals{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:54px;border-top:1px solid #243b56;padding-top:32px}
+.signal-box{min-height:120px}
+.signal-box h4{font-size:15px;color:#f0b65a;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+.signal-box p{font-size:14px;color:#b9c7d8;line-height:1.5}
+.footer{margin-top:48px;color:#8fa2b8;font-size:14px}
+.footer b{color:#f4f7fb}
+</style>
+</head>
+<body>
+<div class="slide-container">
+  <div class="kicker">06 · Observability &amp; Evidence</div>
+  <div class="h">OTel makes the migration observable</div>
+  <div class="lead">Every gRPC request is traced and measured. Telemetry provides the empirical proof required for a GO decision at each worker level.</div>
+
+  <div class="pipeline">
+    <div class="stage">
+      <div class="stage-title">Telemetry Sources</div>
+      <div class="item"><b>Envoy Sidecar</b>mTLS, RBAC, and HTTP/2 stats</div>
+      <div class="item"><b>Payment-Engine</b>Typed gRPC and Go runtime metrics</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="stage center">
+      <div class="stage-title">Processing Hub</div>
+      <div class="item"><b>OTLP Collector</b>Tenant-safe attribute filtering, batching, and multi-destination routing</div>
+    </div>
+    <div class="arrow"></div>
+    <div class="stage">
+      <div class="stage-title">Audit Destinations</div>
+      <div class="item"><b>Prometheus</b>SLO monitoring and alerting</div>
+      <div class="item"><b>Tempo</b>End-to-end trace continuity</div>
+    </div>
+  </div>
+
+  <div class="signals">
+    <div class="signal-box">
+      <h4>Transport Health</h4>
+      <p>Active HTTP/2 streams, connection churn, and TLS handshake success/failure rates per replica.</p>
+    </div>
+    <div class="signal-box">
+      <h4>Security Events</h4>
+      <p>Envoy RBAC denials, principal mismatches, and plaintext rejection evidence for audit logs.</p>
+    </div>
+    <div class="signal-box">
+      <h4>Runtime Pressure</h4>
+      <p>Go scheduler latency, GC pause duration, and memory allocation spikes under 256-worker load.</p>
+    </div>
+    <div class="signal-box">
+      <h4>Outcome Integrity</h4>
+      <p>Typed response validation success and UNKNOWN-state frequency during mesh instability.</p>
+    </div>
+  </div>
+
+  <div class="footer"><b>Compliance:</b> OTel Collector enforces tenant isolation; raw payment payloads and credentials are never attached to spans.</div>
+</div>
+</body>
+</html>

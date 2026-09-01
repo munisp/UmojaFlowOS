@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Security Gates</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0} .slide-container{width:1280px;min-height:720px;background:#0b1424;color:#f4f7fb;font-family:Arial,Helvetica,sans-serif;padding:55px 72px 0} .kicker{color:#67d6e8;font-size:13px;letter-spacing:2px;text-transform:uppercase;font-weight:700} .h{font-size:39px;letter-spacing:-1px;margin-top:14px} .lead{font-size:18px;color:#aebed0;margin-top:12px;max-width:850px} .grid{display:grid;grid-template-columns:1fr 1fr;gap:42px;margin-top:64px} .gate{min-height:240px;border-top:1px solid #31516c;padding-top:24px} .gate h3{font-size:24px;color:#f0b65a;margin-bottom:18px} .gate ul{list-style:none} .gate li{margin-bottom:14px;font-size:17px;color:#d6e2ee;padding-left:28px;position:relative} .gate li:before{content:'\f023';font-family:'Font Awesome 6 Free';font-weight:900;position:absolute;left:0;color:#67d6e8;font-size:14px} .negative{margin-top:54px;background:#101f33;border:1px solid #d96b5d;padding:24px 28px;min-height:140px} .negative h4{font-size:14px;text-transform:uppercase;letter-spacing:2px;color:#d96b5d;margin-bottom:12px} .negative p{font-family:monospace;font-size:15px;color:#b9c7d8;line-height:1.6} .footer{margin-top:20px;color:#8fa2b8;font-size:14px} .footer b{color:#f4f7fb}
+</style>
+</head>
+<body>
+<div class="slide-container">
+  <div class="kicker">05 · Security compliance</div>
+  <div class="h">Authentication and authorization are separate gates</div>
+  <div class="lead">A successful TLS handshake proves identity but does not grant access. The gRPC boundary requires both STRICT mesh mTLS and an explicit principal allowlist.</div>
+  <div class="grid">
+    <div class="gate">
+      <h3>Layer 1: Authentication</h3>
+      <ul>
+        <li><strong>STRICT PeerAuthentication:</strong> Rejects all plaintext and mesh-bypass attempts at the pod level.</li>
+        <li><strong>ISTIO_MUTUAL:</strong> Enforces mesh-managed certificates for all internal gRPC traffic.</li>
+        <li><strong>TLS 1.3:</strong> Modern cipher suites only; no legacy protocol fallback permitted.</li>
+      </ul>
+    </div>
+    <div class="gate">
+      <h3>Layer 2: Authorization</h3>
+      <ul>
+        <li><strong>Exact Principals:</strong> Access restricted to specific SPIFFE-like identities (control-plane, reconciliation).</li>
+        <li><strong>Method Constraint:</strong> Only POST operations on port 8443 are permitted by the AuthorizationPolicy.</li>
+        <li><strong>Default Deny:</strong> Any principal not explicitly allowlisted receives a PermissionDenied response.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="negative">
+    <h4>Negative test evidence</h4>
+    <p>
+      $ grpcurl -plaintext payment-engine:8443 list -> REJECTED (STRICT mTLS)<br/>
+      $ grpcurl --cert unallowlisted.crt payment-engine:8443 list -> PERMISSION_DENIED (RBAC)
+    </p>
+  </div>
+  <div class="footer"><b>Control:</b> Handshake evidence and negative authorization logs are required for every release SHA.</div>
+</div>
+</body>
+</html>

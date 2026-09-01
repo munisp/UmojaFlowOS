@@ -1,0 +1,205 @@
+name: production-promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Full immutable image reference, for example ghcr.io/munisp/umojaflowos-payment-engine@sha256:...
+        required: true
+        type: string
+      release_sha:
+        description: Git release SHA whose evidence was approved
+        required: true
+        type: string
+      run_live_staging_benchmark:
+        description: Run the live 32–256 worker staging gate before promotion
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+  packages: read
+
+concurrency:
+  group: production-promotion
+  cancel-in-progress: false
+
+env:
+  PAYMENT_IMAGE_REPOSITORY: ghcr.io/munisp/umojaflowos-payment-engine
+  PAYMENT_NAMESPACE: umoja-payment
+
+jobs:
+  verify:
+    name: Verify digest, signature, manifests, and evidence
+    runs-on: ubuntu-latest
+    environment: production-verification
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+      - name: Validate immutable image reference
+        env:
+          IMAGE: ${{ inputs.image }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$IMAGE" =~ ^ghcr\.io/munisp/umojaflowos-payment-engine@sha256:[a-f0-9]{64}$ ]] || { echo 'image must be the approved GHCR image with a full sha256 digest' >&2; exit 2; }
+          [[ "$RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo 'release_sha must be a full commit SHA' >&2; exit 2; }
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3.8.1
+      - name: Verify image signature and certificate identity
+        env:
+          IMAGE: ${{ inputs.image }}
+          COSIGN_CERT_IDENTITY: ${{ vars.COSIGN_CERT_IDENTITY }}
+          COSIGN_OIDC_ISSUER: ${{ vars.COSIGN_OIDC_ISSUER }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$COSIGN_CERT_IDENTITY" || { echo 'COSIGN_CERT_IDENTITY must be set in protected environment' >&2; exit 2; }
+          test -n "$COSIGN_OIDC_ISSUER" || { echo 'COSIGN_OIDC_ISSUER must be set in protected environment' >&2; exit 2; }
+          cosign verify "$IMAGE" \
+            --certificate-identity-regexp "$COSIGN_CERT_IDENTITY" \
+            --certificate-oidc-issuer "$COSIGN_OIDC_ISSUER" \
+            --output json > "$RUNNER_TEMP/cosign-verify.json"
+          test -s "$RUNNER_TEMP/cosign-verify.json"
+      - name: Verify image provenance attestation
+        env:
+          IMAGE: ${{ inputs.image }}
+        run: |
+          set -Eeuo pipefail
+          cosign verify-attestation "$IMAGE" \
+            --type slsaprovenance \
+            --certificate-identity-regexp "${{ vars.COSIGN_CERT_IDENTITY }}" \
+            --certificate-oidc-issuer "${{ vars.COSIGN_OIDC_ISSUER }}" \
+            --output json > "$RUNNER_TEMP/cosign-attestation.json"
+          test -s "$RUNNER_TEMP/cosign-attestation.json"
+      - name: Install Kustomize
+        run: |
+          set -Eeuo pipefail
+          curl -fsSL https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash -s -- 5.6.0 /tmp
+          echo /tmp >> "$GITHUB_PATH"
+      - name: Render and validate staging overlay
+        env:
+          IMAGE: ${{ inputs.image }}
+        run: |
+          set -Eeuo pipefail
+          kustomize build --load-restrictor LoadRestrictionsNone infra/kubernetes/payment-engine-grpc-staging-overlay > "$RUNNER_TEMP/payment-engine.yaml"
+          grep -Fq "$IMAGE" "$RUNNER_TEMP/payment-engine.yaml" || { echo 'rendered manifest image is not the verified digest' >&2; exit 1; }
+          grep -Fq 'containerPort: 8443' "$RUNNER_TEMP/payment-engine.yaml"
+          grep -Fq 'name: grpc-tls' "$RUNNER_TEMP/payment-engine.yaml"
+          grep -Fq 'GRPC_SETTLEMENT_EXECUTION_ENABLED' "$RUNNER_TEMP/payment-engine.yaml"
+          grep -Fq 'value: "false"' "$RUNNER_TEMP/payment-engine.yaml"
+      - name: Validate policy and static security harness
+        run: |
+          set -Eeuo pipefail
+          python3 -m pip install --disable-pip-version-check pyyaml
+          python3 scripts/infra/test_settlement_grpc_staging_security.py
+      - name: Verify release evidence binding
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -Eeuo pipefail
+          test -f assurance/grpc_typed_transport_implementation_evidence.md
+          grep -Fq "$RELEASE_SHA" assurance/release_evidence_manifest.example.json 2>/dev/null || echo 'Release manifest example is not the live approval record; protected environment approval remains mandatory.'
+
+  staging:
+    name: Apply to staging and run live mesh gate
+    needs: verify
+    if: ${{ inputs.run_live_staging_benchmark }}
+    runs-on: ubuntu-latest
+    environment: staging-grpc-promotion
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+      - name: Install tools
+        run: |
+          set -Eeuo pipefail
+          curl -fsSL https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash -s -- 5.6.0 /tmp
+          echo /tmp >> "$GITHUB_PATH"
+          curl -fsSL https://istio.io/downloadIstio | ISTIO_VERSION=1.24.2 sh -
+          echo "$PWD/istio-1.24.2/bin" >> "$GITHUB_PATH"
+      - name: Configure approved staging kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$KUBECONFIG_B64" || { echo 'STAGING_KUBECONFIG_B64 is required' >&2; exit 2; }
+          printf '%s' "$KUBECONFIG_B64" | base64 --decode > "$RUNNER_TEMP/kubeconfig"
+          chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+      - name: Apply immutable staging image and gRPC overlay
+        env:
+          IMAGE: ${{ inputs.image }}
+          PAYMENT_NAMESPACE: ${{ env.PAYMENT_NAMESPACE }}
+        run: |
+          set -Eeuo pipefail
+          kustomize build --load-restrictor LoadRestrictionsNone infra/kubernetes/payment-engine-grpc-staging-overlay \
+            | sed "s|ghcr.io/munisp/umojaflowos-payment-engine:RELEASE_SHA|$IMAGE|g" \
+            > "$RUNNER_TEMP/payment-engine-staging.yaml"
+          kubectl apply --dry-run=server -f "$RUNNER_TEMP/payment-engine-staging.yaml"
+          kubectl apply -f "$RUNNER_TEMP/payment-engine-staging.yaml"
+          kubectl -n "$PAYMENT_NAMESPACE" rollout status deploy/payment-engine --timeout=10m
+      - name: Apply STRICT mTLS and allowlist policy
+        run: |
+          set -Eeuo pipefail
+          kubectl apply --server-side --field-manager=umoja-production-promotion \
+            -f infra/service-mesh/settlement-grpc-mtls-staging.yaml
+          istioctl analyze -n "$PAYMENT_NAMESPACE"
+          istioctl proxy-status
+          istioctl proxy-config listeners deploy/payment-engine -n "$PAYMENT_NAMESPACE" | grep -E '8443|grpc'
+          istioctl proxy-config authz deploy/payment-engine -n "$PAYMENT_NAMESPACE"
+        env:
+          PAYMENT_NAMESPACE: ${{ env.PAYMENT_NAMESPACE }}
+      - name: Run live gRPC security and benchmark gates
+        env:
+          PAYMENT_NS: ${{ env.PAYMENT_NAMESPACE }}
+          SETTLEMENT_GRPC_TARGET: payment-engine.umoja-payment.svc.cluster.local:8443
+        run: |
+          set -Eeuo pipefail
+          python3 scripts/infra/test_settlement_grpc_staging_security.py --live
+          bash scripts/infra/run_settlement_grpc_staging_benchmark.sh --live \
+            --target "$SETTLEMENT_GRPC_TARGET" \
+            --latency-ms 10 \
+            --duration 5m \
+            --out-dir artifacts/staging/grpc-benchmark
+
+  promote:
+    name: Promote immutable image to production
+    needs: [verify, staging]
+    if: ${{ always() && needs.verify.result == 'success' && (needs.staging.result == 'success' || needs.staging.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+      - name: Configure approved production kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.PRODUCTION_KUBECONFIG_B64 }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$KUBECONFIG_B64" || { echo 'PRODUCTION_KUBECONFIG_B64 is required' >&2; exit 2; }
+          printf '%s' "$KUBECONFIG_B64" | base64 --decode > "$RUNNER_TEMP/kubeconfig"
+          chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+      - name: Promote using the verified digest
+        env:
+          IMAGE: ${{ inputs.image }}
+        run: |
+          set -Eeuo pipefail
+          test "$IMAGE" = "${{ inputs.image }}"
+          kustomize build --load-restrictor LoadRestrictionsNone infra/kubernetes/payment-engine-grpc-staging-overlay \
+            | sed "s|ghcr.io/munisp/umojaflowos-payment-engine:RELEASE_SHA|$IMAGE|g" \
+            | kubectl apply --server-side --field-manager=umoja-production-promotion -f -
+      - name: Verify production rollout and policy
+        run: |
+          set -Eeuo pipefail
+          kubectl -n "$PAYMENT_NAMESPACE" rollout status deploy/payment-engine --timeout=15m
+          kubectl -n "$PAYMENT_NAMESPACE" get deploy/payment-engine -o jsonpath='{.spec.template.spec.containers[?(@.name=="payment-engine")].image}{"\n"}' | grep -F "$IMAGE"
+          kubectl -n "$PAYMENT_NAMESPACE" get peerauthentication,authorizationpolicy,serviceentry,destinationrule
+        env:
+          PAYMENT_NAMESPACE: ${{ env.PAYMENT_NAMESPACE }}
+          IMAGE: ${{ inputs.image }}

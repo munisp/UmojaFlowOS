@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Capacity Validation</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0} .slide-container{width:1280px;min-height:720px;background:#0b1424;color:#f4f7fb;font-family:Arial,Helvetica,sans-serif;padding:55px 72px 0}.k{color:#67d6e8;font-size:13px;letter-spacing:2px;text-transform:uppercase;font-weight:700}.h{font-size:39px;letter-spacing:-1px;margin-top:14px}.lead{font-size:18px;color:#aebed0;margin-top:12px;max-width:900px}.context{margin-top:22px;padding:22px 24px;background:#101f33;border-left:4px solid #67d6e8;font-size:17px;line-height:1.5}.context b{color:#67d6e8}table{width:100%;border-collapse:collapse;margin-top:28px}th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:2px;color:#8fa2b8;padding:14px 20px;border-bottom:1px solid #243b56}td{padding:18px 20px;font-size:17px;border-bottom:1px solid #1a2b40}tr:last-child td{border-bottom:none}.val{color:#f0b65a;font-weight:600}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:34px;margin-top:34px}.signal{border-top:1px solid #31516c;padding-top:18px}.signal h4{font-size:15px;color:#67d6e8;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px}.signal p{font-size:15px;color:#b9c7d8;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="slide-container">
+  <div class="k">07 · Capacity validation</div>
+  <div class="h">32–256 workers find the first real bottleneck</div>
+  <div class="lead">Local 4-to-16 worker scaling achieved 98% efficiency. The staging test matrix targets the range where sidecar, OTel, and CPU saturation typically diverge.</div>
+
+  <div class="context">
+    <b>Scaling context:</b> Moving from 4 to 16 workers achieved <b>3.92x throughput</b> under a 10ms latency budget. Staging must now prove this efficiency holds under full mesh injection and telemetry export.
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Worker level</th>
+        <th>Duration</th>
+        <th>Primary signals</th>
+        <th>Pass criteria</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>32 · 64</td>
+        <td>6 min</td>
+        <td>p95 Latency · Envoy active streams</td>
+        <td class="val">Zero duplicate terminal decisions</td>
+      </tr>
+      <tr>
+        <td>128</td>
+        <td>11.5 min</td>
+        <td>CPU Throttling · OTel queue size</td>
+        <td class="val">Telemetry drop rate &lt; 0.1%</td>
+      </tr>
+      <tr>
+        <td>256</td>
+        <td>12 min</td>
+        <td>Connection churn · DB pool wait</td>
+        <td class="val">Recovery to baseline &lt; 2 min</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="grid">
+    <div class="signal">
+      <h4>Mesh saturation</h4>
+      <p>Envoy pending requests and HTTP/2 stream ceilings. Monitor <b>upstream_rq_pending</b>.</p>
+    </div>
+    <div class="signal">
+      <h4>Runtime pressure</h4>
+      <p>Go scheduler contention and allocation spikes. Monitor <b>goroutines</b> and <b>GC pause</b>.</p>
+    </div>
+    <div class="signal">
+      <h4>Telemetry backpressure</h4>
+      <p>OTel Collector queue overflow and refused spans. Monitor <b>exporter_queue_size</b>.</p>
+    </div>
+  </div>
+</div>
+</body>
+</html>

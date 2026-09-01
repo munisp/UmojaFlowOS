@@ -1,0 +1,100 @@
+{
+  "project_info": {
+    "title": "Payment-Engine gRPC Staging Deployment",
+    "created": 1788281911.404,
+    "last_updated": 1788282005.309,
+    "total_slides": 8
+  },
+  "slides": [
+    {
+      "id": "cover",
+      "state": "edited",
+      "pageNum": 1
+    },
+    {
+      "id": "architecture",
+      "state": "edited",
+      "pageNum": 2
+    },
+    {
+      "id": "namespace",
+      "state": "edited",
+      "pageNum": 3
+    },
+    {
+      "id": "listener",
+      "state": "edited",
+      "pageNum": 4
+    },
+    {
+      "id": "migration",
+      "state": "edited",
+      "pageNum": 5
+    },
+    {
+      "id": "security",
+      "state": "edited",
+      "pageNum": 6
+    },
+    {
+      "id": "telemetry",
+      "state": "edited",
+      "pageNum": 7
+    },
+    {
+      "id": "capacity",
+      "state": "edited",
+      "pageNum": 8
+    }
+  ],
+  "outline": [
+    {
+      "id": "cover",
+      "title": "Payment-Engine gRPC Staging Deployment",
+      "summary": "Stakeholder briefing on the secure 8443 settlement transport, Istio migration, and OTel-backed validation plan.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "architecture",
+      "title": "One Service, Two Controlled Entry Points",
+      "summary": "Show HTTP 8081 retained for rollback and typed gRPC 8443 added for internal settlement, with TLS, Istio sidecar, and OTel Collector paths.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "namespace",
+      "title": "Namespace Alignment Removes a Policy Blind Spot",
+      "summary": "Explain the correction from the legacy umoja namespace to the canonical umoja-payment namespace and the verified workload principals.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "listener",
+      "title": "8443 Is Exposed Only With Fail-Closed Startup",
+      "summary": "Explain the Go startup wiring, mounted server certificates, TLS 1.3, and execution-disabled safeguard until coordinator composition is complete.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "migration",
+      "title": "Migration Applies in Four Gates",
+      "summary": "Present preflight, dry-run, canary apply, and rollback steps with exact validation commands.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "security",
+      "title": "Authentication and Authorization Are Separate Gates",
+      "summary": "Show STRICT mesh mTLS, ISTIO_MUTUAL routing, exact service-account principals, and negative tests for denied callers and plaintext.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "telemetry",
+      "title": "OTel Makes the Migration Observable",
+      "summary": "Show OTLP Collector, Prometheus, Tempo, Envoy, and payment-engine signals used during the worker-limit test.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "capacity",
+      "title": "32–256 Workers Find the First Real Bottleneck",
+      "summary": "Summarize the test matrix, performance signals, pass criteria, and the measured 4-to-16 scaling context.",
+      "image_plan": "Use a suitable image if needed"
+    }
+  ]
+}

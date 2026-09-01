@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Payment-Engine gRPC Staging Deployment</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0} .slide-container{width:1280px;min-height:720px;background:#0b1424;color:#f4f7fb;font-family:Arial,Helvetica,sans-serif;position:relative;padding:72px 82px 0;overflow:hidden}.eyebrow{font-size:15px;letter-spacing:3px;text-transform:uppercase;color:#67d6e8;font-weight:700}.title{font-size:60px;line-height:1.03;letter-spacing:-2px;margin-top:34px;max-width:700px;font-weight:800}.subtitle{font-size:24px;line-height:1.35;color:#b9c7d8;max-width:620px;margin-top:26px}.meta{position:absolute;left:82px;bottom:66px;font-size:16px;color:#8fa2b8;line-height:1.6}.meta strong{color:#f4f7fb;font-weight:600}.rule{width:150px;height:4px;background:#f0b65a;margin-top:38px}.motif{position:absolute;right:78px;top:110px;width:385px;min-height:450px;border-left:1px solid #243b56;padding-left:54px;padding-top:20px}.node{width:250px;min-height:72px;border:1px solid #31516c;background:#101f33;padding:20px 22px;margin:0 0 38px;font-size:17px;letter-spacing:.5px}.node span{display:block;color:#67d6e8;font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-bottom:7px}.connector{height:38px;border-left:2px solid #67d6e8;margin-left:28px;margin-top:-38px;margin-bottom:0}.glow{position:absolute;right:-100px;bottom:-190px;width:520px;min-height:520px;border:1px solid rgba(103,214,232,.2);border-radius:50%}.glow2{position:absolute;right:30px;bottom:-110px;width:290px;min-height:290px;border:1px solid rgba(240,182,90,.25);border-radius:50%}
+</style>
+</head>
+<body>
+<div class="slide-container">
+  <div class="eyebrow">UmojaFlowOS · Staging Security Briefing</div>
+  <div class="title">Payment-Engine<br/>gRPC Staging Deployment</div>
+  <div class="rule"></div>
+  <div class="subtitle">A controlled migration to typed settlement transport on port 8443, protected by Istio STRICT mTLS and observable through OpenTelemetry.</div>
+  <div class="meta"><strong>Architecture, migration runbook &amp; capacity validation</strong><br/>01 September 2026 · Internal staging readiness</div>
+  <div class="motif">
+    <div class="node"><span>Entry point</span>Typed gRPC · 8443</div>
+    <div class="connector"></div>
+    <div class="node"><span>Trust boundary</span>Istio STRICT mTLS</div>
+    <div class="connector"></div>
+    <div class="node"><span>Evidence path</span>OTel Collector → Prometheus / Tempo</div>
+  </div>
+  <div class="glow"></div><div class="glow2"></div>
+</div>
+</body>
+</html>

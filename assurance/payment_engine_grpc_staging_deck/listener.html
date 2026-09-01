@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>8443 Is Exposed Only With Fail-Closed Startup</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0} .slide-container{width:1280px;min-height:720px;background:#0b1424;color:#f4f7fb;font-family:Arial,Helvetica,sans-serif;padding:55px 72px 0}.k{font-size:13px;letter-spacing:2px;color:#67d6e8;text-transform:uppercase;font-weight:700}.h{font-size:39px;margin-top:14px}.lead{margin-top:12px;color:#aebed0;font-size:18px;max-width:900px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:60px;margin-top:32px;margin-bottom:0}.col-title{font-size:14px;text-transform:uppercase;letter-spacing:2px;color:#8fa2b8;margin-bottom:24px;border-bottom:1px solid #243b56;padding-bottom:12px}.item{margin-bottom:28px}.item h3{font-size:22px;color:#f4f7fb;margin-bottom:10px}.item p{font-size:16px;color:#b9c7d8;line-height:1.5}.code-box{background:#101f33;border:1px solid #31516c;padding:20px;font-family:monospace;font-size:14px;color:#d6e2ee;margin-top:12px}.accent{color:#f0b65a;font-weight:700}.cyan{color:#67d6e8}.foot{margin-top:40px;border-top:1px solid #31516c;padding-top:22px;color:#8fa2b8;font-size:14px}.foot b{color:#f4f7fb}
+</style>
+</head>
+<body>
+<div class="slide-container">
+  <div class="k">03 · Runtime Security</div>
+  <div class="h">8443 Is Exposed Only With Fail-Closed Startup</div>
+  <div class="lead">The payment-engine binary enforces transport security at the entry point. Opening the socket does not enable settlement execution.</div>
+
+  <div class="grid">
+    <div class="left">
+      <div class="col-title">Go Runtime Wiring</div>
+      <div class="item">
+        <h3>Concurrent Listener Startup</h3>
+        <p>The binary reads <span class="cyan">GRPC_SETTLEMENT_LISTEN_ADDR</span> to start the gRPC server alongside the existing HTTP server. Graceful shutdown is enforced for both.</p>
+      </div>
+      <div class="item">
+        <h3>Mounted mTLS Material</h3>
+        <p>Certificates are mounted read-only from Kubernetes secrets. The loader enforces strict file permissions and valid chain verification.</p>
+        <div class="code-box">
+          /var/run/umoja-settlement-grpc/ca.crt<br/>
+          /var/run/umoja-settlement-grpc/tls.crt<br/>
+          /var/run/umoja-settlement-grpc/tls.key
+        </div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="col-title">Security Safeguards</div>
+      <div class="item">
+        <h3>TLS 1.3 &amp; Client Auth</h3>
+        <p>The server requires and verifies client certificates. <span class="accent">TLS 1.3</span> is the minimum version, ensuring modern cipher suites and perfect forward secrecy.</p>
+      </div>
+      <div class="item">
+        <h3>Fail-Closed Execution</h3>
+        <p>Until the real settlement coordinator is composed, the handler is hard-coded to return <span class="accent">UNKNOWN</span>. Exposing the port is safe by design.</p>
+        <div class="code-box">
+          GRPC_SETTLEMENT_EXECUTION_ENABLED=false
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot"><b>Posture:</b> Transport optimization is decoupled from execution authority; no ambiguous state can trigger a payment.</div>
+</div>
+</body>
+</html>
