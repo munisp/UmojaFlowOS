@@ -1,0 +1,65 @@
+name: settlement-grpc-sdk-integration
+
+on:
+  pull_request:
+    paths:
+      - 'api/proto/**'
+      - 'services/payment-engine/**'
+      - 'sdk/python/**'
+      - 'sdk/typescript/**'
+      - 'apps/control-plane/**'
+      - '.github/workflows/settlement-grpc-sdk-integration.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'api/proto/**'
+      - 'services/payment-engine/**'
+      - 'sdk/python/**'
+      - 'sdk/typescript/**'
+      - 'apps/control-plane/**'
+
+permissions:
+  contents: read
+
+jobs:
+  sdk-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/payment-engine/go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - name: Install Python gRPC runtime
+        run: python3 -m pip install --disable-pip-version-check grpcio==1.74.0 protobuf==6.32.0
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build typed settlement server
+        working-directory: services/payment-engine
+        run: go build -o /tmp/settlement-grpc-test-server ./cmd/settlement-grpc-test-server
+      - name: Start typed settlement server
+        run: /tmp/settlement-grpc-test-server --addr 127.0.0.1:18443 >/tmp/settlement-grpc-server.log 2>&1 &
+      - name: Run Python SDK integration test
+        env:
+          SETTLEMENT_GRPC_CI: '1'
+          SETTLEMENT_GRPC_TARGET: 127.0.0.1:18443
+          PYTHONPATH: sdk/python
+        run: python3 -m unittest discover -s sdk/python/tests -p 'test_settlement_grpc_integration.py' -v
+      - name: Run TypeScript SDK integration test
+        env:
+          SETTLEMENT_GRPC_CI: '1'
+        working-directory: apps/control-plane
+        run: pnpm exec vitest run server/typedSettlementGrpc.integration.test.ts --reporter=verbose
+      - name: Check generated contract and server health
+        run: |
+          grep -q 'settlement gRPC test server listening' /tmp/settlement-grpc-server.log
+          test -s sdk/python/umoja/settlement/v1/settlement_pb2.py
+          test -s sdk/typescript/umoja/settlement/v1/settlement.ts
