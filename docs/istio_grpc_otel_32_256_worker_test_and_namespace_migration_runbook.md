@@ -247,6 +247,27 @@ Expected scaling should be evaluated from throughput and p95/p99 latency. The 4-
 
 ## 10. Negative authorization and fail-closed checks
 
+Run the enhanced manifest and live security harness before and after each load level. The allowlisted test pod must contain `grpcurl`, the typed protobuf file, a synthetic request JSON file, and the approved client CA/certificate/key at the paths passed to the harness. The denied pod must use a non-allowlisted service account. The command below performs a real typed `Settlement/Execute` call from the allowlisted pod, checks TLS/authz configuration, performs an unallowlisted plaintext probe, and requires structured Envoy JSON access-log records showing both HTTP 200 allow and HTTP 403 RBAC deny:
+
+```bash
+python3 scripts/infra/test_settlement_grpc_staging_security.py \\
+  --live \\
+  --namespace umoja-payment \\
+  --allowed-pod settlement-grpc-loadgen \\
+  --allowed-namespace umoja-control \\
+  --allowed-container grpcurl \\
+  --denied-pod settlement-grpc-denied \\
+  --denied-namespace umoja-payment \\
+  --denied-container grpcurl \\
+  --tls-ca /run/secrets/settlement/ca.crt \\
+  --tls-cert /run/secrets/settlement/client.crt \\
+  --tls-key /run/secrets/settlement/client.key \\
+  --request-file /run/config/settlement-request.json \\
+  --proto /run/config/settlement.proto
+```
+
+The live test is a hard gate: it fails if the allowlisted typed call is not a successful RPC, if the response contains `PERMISSION_DENIED` or `UNAUTHENTICATED`, if the plaintext denied call succeeds, if the denial lacks an explicit `PERMISSION_DENIED`, `403`, or `RBAC` signal, or if the payment-engine Envoy sidecar emits no structured JSON access logs with a 200 allow and a 403 RBAC denial.
+
 Run these tests before and after each load level:
 
 ```bash

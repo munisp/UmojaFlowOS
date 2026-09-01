@@ -11,7 +11,6 @@ import argparse
 import json
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -110,23 +109,78 @@ def run(command: list[str], *, allow_failure: bool = False) -> tuple[int, str]:
     return result.returncode, result.stdout
 
 
+def _json_access_log_lines(text: str) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for line in text.splitlines():
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            records.append(value)
+    return records
+
+
+def _assert_envoy_status(records: list[dict[str, Any]], expected_code: int, denied: bool) -> None:
+    matching = [record for record in records if str(record.get("response_code", "")) == str(expected_code)]
+    if not matching:
+        raise CheckFailure(f"no structured Envoy access-log record with response_code={expected_code}")
+    if denied:
+        details = " ".join(str(record.get(key, "")) for record in matching for key in ("response_code_details", "response_flags", "istio_policy_status"))
+        if "rbac" not in details.lower() and "denied" not in details.lower():
+            raise CheckFailure("403 record did not identify Envoy RBAC denial in response_code_details/response_flags/istio_policy_status")
+    else:
+        details = " ".join(str(record.get(key, "")) for record in matching for key in ("response_code_details", "response_flags", "istio_policy_status"))
+        if "rbac_access_denied" in details.lower() or "denied" in details.lower():
+            raise CheckFailure("allowlisted request was marked as an RBAC denial")
+
+
 def live_checks(args: argparse.Namespace) -> list[str]:
-    for tool in ("kubectl", "istioctl"):
+    for tool in ("kubectl", "istioctl", "grpcurl", "jq"):
         if shutil.which(tool) is None:
             raise CheckFailure(f"{tool} is required for --live")
     output: list[str] = []
+    # These paths are intentionally resolved inside the pre-created test pod,
+    # not on the CI runner. The pod must mount the approved client material,
+    # request fixture, and protobuf source at these paths.
     run(["kubectl", "config", "current-context"])
     run(["kubectl", "-n", args.namespace, "rollout", "status", "deploy/payment-engine", "--timeout=60s"])
     run(["istioctl", "proxy-status"])
     run(["istioctl", "authn", "tls-check", f"{args.allowed_pod}.{args.allowed_namespace}", f"payment-engine.{args.namespace}.svc.cluster.local"])
     run(["istioctl", "x", "authz", "check", "deploy/payment-engine", "-n", args.namespace])
-    _, denied_output = run(
-        ["kubectl", "-n", args.denied_namespace, "exec", args.denied_pod, "-c", args.denied_container, "--", "grpcurl", "-plaintext", f"payment-engine.{args.namespace}.svc.cluster.local:8443", "list"],
-        allow_failure=True,
-    )
-    if "PermissionDenied" not in denied_output and "RBAC" not in denied_output and "denied" not in denied_output.lower():
-        raise CheckFailure("denied-principal probe did not produce an authorization denial")
-    output.append("negative authorization probe produced denial")
+
+    target = f"payment-engine.{args.namespace}.svc.cluster.local:8443"
+    method = "umoja.settlement.v1.Settlement/Execute"
+    allowed_command = [
+        "grpcurl", "-proto", args.proto, "-import-path", str(Path(args.proto).parent),
+        "-cacert", args.tls_ca, "-cert", args.tls_cert, "-key", args.tls_key,
+        "-d", f"@{args.request_file}", target, method,
+    ]
+    allowed_code, allowed_output = run(["kubectl", "-n", args.allowed_namespace, "exec", args.allowed_pod, "-c", args.allowed_container, "--", *allowed_command], allow_failure=True)
+    if allowed_code != 0:
+        raise CheckFailure(f"allowlisted typed Execute call failed; this is not an authorization success:\n{allowed_output}")
+    if "PERMISSION_DENIED" in allowed_output or "UNAUTHENTICATED" in allowed_output:
+        raise CheckFailure(f"allowlisted typed Execute call returned an authorization error:\n{allowed_output}")
+    output.append("allowlisted typed Execute call completed without authorization error")
+
+    denied_command = [
+        "grpcurl", "-proto", args.proto, "-import-path", str(Path(args.proto).parent),
+        "-plaintext", target, "list",
+    ]
+    denied_code, denied_output = run(["kubectl", "-n", args.denied_namespace, "exec", args.denied_pod, "-c", args.denied_container, "--", *denied_command], allow_failure=True)
+    if denied_code == 0:
+        raise CheckFailure("unallowlisted plaintext probe unexpectedly succeeded")
+    if "PERMISSION_DENIED" not in denied_output and "403" not in denied_output and "RBAC" not in denied_output.upper():
+        raise CheckFailure(f"denied probe failed without a structured authorization signal:\n{denied_output}")
+    output.append("unallowlisted plaintext probe failed with an authorization signal")
+
+    _, access_logs = run(["kubectl", "-n", args.namespace, "logs", "deploy/payment-engine", "-c", "istio-proxy", "--since=2m"], allow_failure=True)
+    records = _json_access_log_lines(access_logs)
+    if not records:
+        raise CheckFailure("payment-engine istio-proxy emitted no JSON access-log records; structured RBAC verification is unavailable")
+    _assert_envoy_status(records, 200, denied=False)
+    _assert_envoy_status(records, 403, denied=True)
+    output.append("structured Envoy access logs proved 200 allow and 403 RBAC deny")
     return output
 
 
@@ -141,6 +195,12 @@ def main() -> int:
     parser.add_argument("--denied-pod", default="settlement-grpc-denied")
     parser.add_argument("--denied-namespace", default="umoja-payment")
     parser.add_argument("--denied-container", default="grpcurl")
+    parser.add_argument("--allowed-container", default="grpcurl")
+    parser.add_argument("--tls-ca", default="/run/secrets/settlement/ca.crt", help="approved CA path inside allowed pod")
+    parser.add_argument("--tls-cert", default="/run/secrets/settlement/client.crt", help="approved client certificate path inside allowed pod")
+    parser.add_argument("--tls-key", default="/run/secrets/settlement/client.key", help="approved client key path inside allowed pod")
+    parser.add_argument("--request-file", default="/run/config/settlement-request.json", help="synthetic request path inside allowed pod")
+    parser.add_argument("--proto", default="/run/config/settlement.proto", help="protobuf path inside allowed pod")
     args = parser.parse_args()
     try:
         messages = static_checks(args.rendered, args.policy, args.namespace)
