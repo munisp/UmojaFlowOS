@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -99,7 +100,7 @@ func (g *ReleaseManifestGate) Verify(ctx context.Context, item QueueItem) error 
 			break
 		}
 	}
-	if artifact == nil || artifact.SHA256 != item.PayloadDigest {
+	if artifact == nil || !constantTimeEqual(artifact.SHA256, item.PayloadDigest) {
 		return fmt.Errorf("%w: manifest artifact binding mismatch for %s", ErrReleaseManifestGate, item.EvidenceID)
 	}
 	data, err := os.ReadFile(filepath.Join(filepath.Dir(g.ManifestPath), filepath.Clean(artifact.Path)))
@@ -107,7 +108,7 @@ func (g *ReleaseManifestGate) Verify(ctx context.Context, item QueueItem) error 
 		return fmt.Errorf("%w: read artifact %s: %v", ErrReleaseManifestGate, item.EvidenceID, err)
 	}
 	sum := sha256.Sum256(data)
-	if hex.EncodeToString(sum[:]) != artifact.SHA256 {
+	if !constantTimeEqual(hex.EncodeToString(sum[:]), artifact.SHA256) {
 		return fmt.Errorf("%w: artifact hash mismatch for %s", ErrReleaseManifestGate, item.EvidenceID)
 	}
 	return nil
@@ -126,7 +127,7 @@ func (g *ReleaseManifestGate) readAndValidateManifest(item QueueItem) ([]byte, r
 	if err != nil {
 		return nil, manifest, fmt.Errorf("%w: canonicalize manifest: %v", ErrReleaseManifestGate, err)
 	}
-	if len(manifest.ReleaseSHA) != 40 || !isLowerHex(manifest.ReleaseSHA) || manifest.Environment != g.Environment || manifest.ReleaseSHA != item.ReleaseSHA || len(manifest.Artifacts) < 9 || len(manifest.Approvals) != 4 {
+	if len(manifest.ReleaseSHA) != 40 || !isLowerHex(manifest.ReleaseSHA) || manifest.Environment != g.Environment || !constantTimeEqual(manifest.ReleaseSHA, item.ReleaseSHA) || len(manifest.Artifacts) < 9 || len(manifest.Approvals) != 4 {
 		return nil, manifest, fmt.Errorf("%w: manifest release, environment, artifact, or approval constraints failed", ErrReleaseManifestGate)
 	}
 	if _, err := time.Parse(time.RFC3339, manifest.CreatedAt); err != nil {
@@ -160,7 +161,7 @@ func (g *ReleaseManifestGate) readAndValidateManifest(item QueueItem) ([]byte, r
 func (g *ReleaseManifestGate) verifyApprovals(manifest releaseManifest, canonical []byte, manifestDigest string) error {
 	seenRoles, seenSubjects := map[string]bool{}, map[string]bool{}
 	for _, a := range manifest.Approvals {
-		if _, ok := requiredApprovalRoles[a.Role]; !ok || seenRoles[a.Role] || a.Subject == "" || seenSubjects[a.Subject] || a.ReleaseSHA != manifest.ReleaseSHA {
+		if _, ok := requiredApprovalRoles[a.Role]; !ok || seenRoles[a.Role] || a.Subject == "" || seenSubjects[a.Subject] || !constantTimeEqual(a.ReleaseSHA, manifest.ReleaseSHA) {
 			return fmt.Errorf("%w: approval role, subject, or release binding failed", ErrReleaseManifestGate)
 		}
 		if _, err := time.Parse(time.RFC3339, a.ApprovedAt); err != nil {
@@ -172,7 +173,7 @@ func (g *ReleaseManifestGate) verifyApprovals(manifest releaseManifest, canonica
 			return fmt.Errorf("%w: missing %s signature sidecar", ErrReleaseManifestGate, a.Role)
 		}
 		var s approvalSidecar
-		if json.Unmarshal(sidecarData, &s) != nil || s.Role != a.Role || s.Subject != a.Subject || s.ReleaseSHA != manifest.ReleaseSHA || s.ManifestSHA256 != manifestDigest || s.Algorithm != "Ed25519" {
+		if json.Unmarshal(sidecarData, &s) != nil || s.Role != a.Role || s.Subject != a.Subject || !constantTimeEqual(s.ReleaseSHA, manifest.ReleaseSHA) || !constantTimeEqual(s.ManifestSHA256, manifestDigest) || s.Algorithm != "Ed25519" {
 			return fmt.Errorf("%w: invalid %s sidecar binding", ErrReleaseManifestGate, a.Role)
 		}
 		pub, err1 := base64.StdEncoding.DecodeString(s.PublicKey)
@@ -252,6 +253,13 @@ func marshalCanonical(value any) ([]byte, error) {
 	default:
 		return json.Marshal(v)
 	}
+}
+
+func constantTimeEqual(left, right string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(left), []byte(right)) == 1
 }
 
 func isLowerHex(v string) bool {
