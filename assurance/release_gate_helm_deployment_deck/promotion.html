@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    .slide-container { width: 1280px; min-height: 720px; background: #0b1324; color: #eef5f7; font-family: Arial, Helvetica, sans-serif; padding: 58px 78px 0; position: relative; }
+    .top-rule { height: 4px; width: 70px; background: #55d6c2; }
+    .eyebrow { margin-top: 18px; color: #55d6c2; letter-spacing: 2px; font-size: 14px; font-weight: 700; text-transform: uppercase; }
+    .title { font-size: 42px; line-height: 1.1; margin-top: 12px; }
+    .pipeline { margin-top: 50px; display: flex; flex-direction: column; gap: 20px; }
+    .gate { display: grid; grid-template-columns: 60px 220px 1fr 180px; align-items: center; border-top: 1px solid #294454; padding: 20px 0; }
+    .gate-num { font-size: 28px; font-weight: 800; color: #426678; }
+    .gate-name { font-size: 22px; font-weight: 700; color: #55d6c2; }
+    .gate-details { font-size: 17px; color: #aebfc8; line-height: 1.4; }
+    .gate-status { text-align: right; font-size: 14px; font-weight: 700; letter-spacing: 1px; color: #55d6c2; }
+    .gate-status.protected { color: #f59e0b; }
+    .summary { margin-top: 40px; padding-top: 20px; border-top: 2px solid #55d6c2; font-size: 20px; color: #aebfc8; }
+    .summary strong { color: #eef5f7; }
+    .footer { position: absolute; bottom: 36px; right: 78px; font-size: 13px; color: #607887; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+<div class="slide-container">
+    <div class="top-rule"></div>
+    <div class="eyebrow">Promotion Workflow</div>
+    <div class="title">Promotion is a protected, evidence-led sequence</div>
+
+    <div class="pipeline">
+        <div class="gate">
+            <div class="gate-num">01</div>
+            <div class="gate-name">Verify Signatures</div>
+            <div class="gate-details">Schema validation · Four-role Ed25519 check · Release SHA binding · Artifact digest match</div>
+            <div class="gate-status">AUTOMATED</div>
+        </div>
+        <div class="gate">
+            <div class="gate-num">02</div>
+            <div class="gate-name">Render &amp; Audit</div>
+            <div class="gate-details">Helm template generation · Immutable digest enforcement · Kubernetes admission dry-run</div>
+            <div class="gate-status">AUTOMATED</div>
+        </div>
+        <div class="gate">
+            <div class="gate-num">03</div>
+            <div class="gate-name">Staging Evidence</div>
+            <div class="gate-details">Live mTLS handshake · RBAC denial probe · 32–256 worker benchmark · OTel trace capture</div>
+            <div class="gate-status protected">STAGING ENV</div>
+        </div>
+        <div class="gate">
+            <div class="gate-num">04</div>
+            <div class="gate-name">Production Apply</div>
+            <div class="gate-details">Protected environment approval · Verified immutable digest only · No manual manifest overrides</div>
+            <div class="gate-status protected">PROTECTED</div>
+        </div>
+    </div>
+
+    <div class="summary">
+        <strong>Fail-closed posture:</strong> any missing signature, mismatched digest, or failed staging benchmark blocks the production promotion.
+    </div>
+
+    <div class="footer">07 / 08</div>
+</div>
+</body>
+</html>

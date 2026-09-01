@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { margin: 0; }
+    .slide-container { width: 1280px; min-height: 720px; background: #0b1324; color: #eef5f7; font-family: Arial, Helvetica, sans-serif; padding: 58px 78px 0; position: relative; overflow: hidden; }
+    .top-rule { height: 4px; width: 70px; background: #55d6c2; }
+    .eyebrow { margin-top: 18px; color: #55d6c2; letter-spacing: 2px; font-size: 14px; font-weight: 700; text-transform: uppercase; }
+    .title { font-size: 40px; margin-top: 12px; line-height: 1.1; }
+    .content-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; margin-top: 60px; }
+    .column { border-top: 2px solid #294454; padding-top: 24px; }
+    .column.hardened { border-top-color: #55d6c2; }
+    .column h3 { font-size: 24px; margin-bottom: 20px; color: #eef5f7; }
+    .item { margin-bottom: 32px; }
+    .item b { display: block; color: #55d6c2; font-size: 18px; margin-bottom: 8px; }
+    .item p { color: #aebfc8; font-size: 16px; line-height: 1.5; }
+    .footer { position: absolute; bottom: 36px; right: 78px; color: #607887; font-size: 13px; letter-spacing: 1px; }
+    .bottom-note { margin-top: 40px; border-top: 1px solid #294454; padding-top: 20px; color: #aebfc8; font-size: 18px; }
+    .bottom-note strong { color: #55d6c2; }
+</style>
+</head>
+<body>
+<div class="slide-container">
+    <div class="top-rule"></div>
+    <div class="eyebrow">Security Hardening</div>
+    <h1 class="title">Aggregated Failures Reduce Metadata Timing Leakage</h1>
+
+    <div class="content-grid">
+        <div class="column">
+            <h3>The Timing Risk</h3>
+            <div class="item">
+                <b>Sequential Exit</b>
+                <p>Traditional verification exits on the first invalid role, potentially revealing which approval failed through precise execution timing.</p>
+            </div>
+            <div class="item">
+                <b>Metadata Exposure</b>
+                <p>Data-dependent early exits can leak the internal state of the release bundle to a local observer or side-channel probe.</p>
+            </div>
+        </div>
+
+        <div class="column hardened">
+            <h3>The Hardened Defense</h3>
+            <div class="item">
+                <b>Aggregated Processing</b>
+                <p>All four role sidecars are processed before returning. One aggregate error reports every failure, ensuring uniform timing across roles.</p>
+            </div>
+            <div class="item">
+                <b>Constant-Time Comparisons</b>
+                <p>Fixed-format cryptographic bindings (SHA-256, Release SHA) use constant-time comparison helpers to prevent bit-by-bit leakage.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="bottom-note">
+        <strong>Result:</strong> Uniform failure reporting preserves <strong>fail-closed</strong> behavior while hardening the release gate against timing-based metadata inference.
+    </div>
+
+    <div class="footer">03 / 08</div>
+</div>
+</body>
+</html>

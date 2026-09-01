@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      .slide-container {
+        width: 1280px;
+        min-height: 720px;
+        background: #0b1324;
+        color: #eef5f7;
+        font-family: Arial, Helvetica, sans-serif;
+        padding: 58px 78px 0;
+        position: relative;
+      }
+      .top-rule { height: 4px; width: 70px; background: #55d6c2; }
+      .kicker { margin-top: 18px; color: #55d6c2; letter-spacing: 2px; font-size: 14px; font-weight: 700; text-transform: uppercase; }
+      .title { font-size: 42px; line-height: 1.1; margin-top: 12px; max-width: 900px; }
+
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 60px; }
+      .control-item { border-top: 1px solid #294454; padding-top: 20px; min-height: 140px; }
+      .control-item i { color: #55d6c2; font-size: 24px; margin-bottom: 15px; display: block; }
+      .control-item h3 { font-size: 22px; color: #eef5f7; margin-bottom: 10px; }
+      .control-item p { font-size: 16px; color: #aebfc8; line-height: 1.5; }
+
+      .bottom-note {
+        margin-top: 50px;
+        padding: 20px;
+        border: 1px solid #2c6970;
+        background: rgba(85, 214, 194, 0.05);
+        font-size: 18px;
+        color: #aebfc8;
+      }
+      .bottom-note strong { color: #55d6c2; }
+
+      .footer { position: absolute; bottom: 36px; right: 78px; font-size: 13px; color: #607887; letter-spacing: 1px; }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="top-rule"></div>
+        <div class="kicker">Deployment Automation</div>
+        <div class="title">Helm Encodes the Production Preconditions</div>
+
+        <div class="grid">
+            <div class="control-item">
+                <i class="fas fa-fingerprint"></i>
+                <h3>Immutable Image Gate</h3>
+                <p>Enforces full SHA-256 digests. Rendering fails if mutable tags or placeholders are used, preventing unverified code promotion.</p>
+            </div>
+            <div class="control-item">
+                <i class="fas fa-file-signature"></i>
+                <h3>Signed Evidence PVC</h3>
+                <p>Mandatory read-only mount of the release bundle. Replicas cannot start without the manifest and four detached signatures.</p>
+            </div>
+            <div class="control-item">
+                <i class="fas fa-vault"></i>
+                <h3>Vault & Storage Wiring</h3>
+                <p>Automated binding for version-aware credential refresh and S3/GCS canary validation. No secrets are stored in the chart.</p>
+            </div>
+            <div class="control-item">
+                <i class="fas fa-chart-line"></i>
+                <h3>OTel & Pool Controls</h3>
+                <p>Standardized OTLP endpoints and PostgreSQL pool limits per replica to ensure observability and database stability.</p>
+            </div>
+        </div>
+
+        <div class="bottom-note">
+            <strong>Fail-Closed Rendering:</strong> The chart intentionally lacks default values for security-critical fields, requiring explicit, validated overrides for every production release.
+        </div>
+
+        <div class="footer">04 / 08</div>
+    </div>
+</body>
+</html>

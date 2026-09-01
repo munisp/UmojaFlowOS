@@ -1,0 +1,100 @@
+{
+  "project_info": {
+    "title": "Multi-Replica Release Gate & Helm Deployment",
+    "created": 1788292202.046,
+    "last_updated": 1788292342.259,
+    "total_slides": 8
+  },
+  "slides": [
+    {
+      "id": "cover",
+      "state": "edited",
+      "pageNum": 1
+    },
+    {
+      "id": "problem",
+      "state": "edited",
+      "pageNum": 2
+    },
+    {
+      "id": "architecture",
+      "state": "edited",
+      "pageNum": 3
+    },
+    {
+      "id": "aggregation",
+      "state": "edited",
+      "pageNum": 4
+    },
+    {
+      "id": "helm",
+      "state": "edited",
+      "pageNum": 5
+    },
+    {
+      "id": "dependencies",
+      "state": "edited",
+      "pageNum": 6
+    },
+    {
+      "id": "promotion",
+      "state": "edited",
+      "pageNum": 7
+    },
+    {
+      "id": "decision",
+      "state": "edited",
+      "pageNum": 8
+    }
+  ],
+  "outline": [
+    {
+      "id": "cover",
+      "title": "Multi-Replica Release Gate & Helm Deployment",
+      "summary": "Stakeholder briefing on four-role Ed25519 approval enforcement and secure payment-engine deployment.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "problem",
+      "title": "Deployment Safety Requires More Than an Image",
+      "summary": "Explain why immutable evidence, signatures, runtime bindings, and startup prerequisites must be enforced together.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "architecture",
+      "title": "Four Replicas, One Signed Release Decision",
+      "summary": "Show multiple payment-engine replicas independently validating one canonical manifest, four sidecars, artifact digests, and the WORM binding.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "aggregation",
+      "title": "Aggregated Failures Reduce Metadata Timing Leakage",
+      "summary": "Explain sequential role-validation risk, aggregate processing, constant-time digest comparisons, and fail-closed outcomes.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "helm",
+      "title": "Helm Encodes the Production Preconditions",
+      "summary": "Show the chart’s immutable digest gate, signed evidence PVC, Vault/object-storage wiring, PostgreSQL pool settings, and OTel configuration.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "dependencies",
+      "title": "Runtime Dependencies Are Explicit and Auditable",
+      "summary": "Map PostgreSQL 16, Vault, S3-compatible storage, Istio, OTel, Prometheus Adapter, Kubernetes APIs, and release evidence to the worker.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "promotion",
+      "title": "Promotion Is a Protected Sequence",
+      "summary": "Present the CI/CD sequence from schema and signature verification through Helm rendering, staging checks, and protected production approval.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "decision",
+      "title": "Decision: Deploy Only With Complete Evidence",
+      "summary": "Summarize completed controls, remaining live-cluster gates, and the production readiness decision.",
+      "image_plan": "Use a suitable image if needed"
+    }
+  ]
+}

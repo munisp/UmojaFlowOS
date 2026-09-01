@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { margin: 0; }
+    .slide-container { width: 1280px; min-height: 720px; background: #0b1324; color: #eef5f7; font-family: Arial, Helvetica, sans-serif; padding: 58px 78px 0; position: relative; }
+    .top-rule { height: 4px; width: 70px; background: #55d6c2; }
+    .eyebrow { margin-top: 18px; color: #55d6c2; letter-spacing: 2px; font-size: 14px; font-weight: 700; text-transform: uppercase; }
+    .title { font-size: 42px; line-height: 1.1; margin-top: 12px; }
+    .status-banner { margin-top: 40px; background: #1a2a3a; border-left: 5px solid #55d6c2; padding: 24px; display: flex; justify-content: space-between; align-items: center; }
+    .status-text { font-size: 28px; font-weight: 700; }
+    .status-label { color: #55d6c2; text-transform: uppercase; font-size: 16px; letter-spacing: 1px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; }
+    .column h3 { font-size: 22px; color: #55d6c2; border-bottom: 1px solid #294454; padding-bottom: 12px; margin-bottom: 20px; }
+    .item { margin-bottom: 18px; display: flex; align-items: flex-start; }
+    .bullet { color: #55d6c2; margin-right: 12px; font-weight: bold; }
+    .item-content b { display: block; font-size: 18px; margin-bottom: 4px; }
+    .item-content p { font-size: 15px; color: #aebfc8; line-height: 1.4; }
+    .footer { position: absolute; bottom: 36px; right: 78px; font-size: 13px; color: #607887; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+<div class="slide-container">
+    <div class="top-rule"></div>
+    <div class="eyebrow">Readiness Decision</div>
+    <div class="title">Production Readiness: Conditional GO</div>
+
+    <div class="status-banner">
+        <div>
+            <div class="status-label">Current Status</div>
+            <div class="status-text">Technical Hardening Complete</div>
+        </div>
+        <div style="text-align: right;">
+            <div class="status-label">Next Milestone</div>
+            <div class="status-text">Authorized Staging Rehearsal</div>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="column">
+            <h3>Completed Controls</h3>
+            <div class="item">
+                <span class="bullet">✓</span>
+                <div class="item-content">
+                    <b>Four-Role Ed25519 Gate</b>
+                    <p>Machine-enforced approval binding for release SHA, artifacts, and WORM bucket.</p>
+                </div>
+            </div>
+            <div class="item">
+                <span class="bullet">✓</span>
+                <div class="item-content">
+                    <b>Aggregated Failure Logic</b>
+                    <p>Uniform timing for sidecar validation to reduce metadata leakage.</p>
+                </div>
+            </div>
+            <div class="item">
+                <span class="bullet">✓</span>
+                <div class="item-content">
+                    <b>Helm Deployment Model</b>
+                    <p>Declarative enforcement of immutable digests and signed evidence mounts.</p>
+                </div>
+            </div>
+            <div class="item">
+                <span class="bullet">✓</span>
+                <div class="item-content">
+                    <b>Fail-Closed Recovery</b>
+                    <p>Durable UNKNOWN state handling with mandatory signed-manifest reconciliation.</p>
+                </div>
+            </div>
+        </div>
+        <div class="column">
+            <h3>Remaining Staging Gates</h3>
+            <div class="item">
+                <span class="bullet">!</span>
+                <div class="item-content">
+                    <b>Live Cluster Rehearsal</b>
+                    <p>Verification of Istio sidecar injection and OTel trace propagation in staging.</p>
+                </div>
+            </div>
+            <div class="item">
+                <span class="bullet">!</span>
+                <div class="item-content">
+                    <b>WORM Policy Audit</b>
+                    <p>Independent verification of S3 Object Lock and bucket retention settings.</p>
+                </div>
+            </div>
+            <div class="item">
+                <span class="bullet">!</span>
+                <div class="item-content">
+                    <b>HSM Key Ceremony</b>
+                    <p>Formal issuance of production Ed25519 keys to authorized role owners.</p>
+                </div>
+            </div>
+            <div class="item">
+                <span class="bullet">!</span>
+                <div class="item-content">
+                    <b>Rollback Verification</b>
+                    <p>Authorized rehearsal of the SEV-1 recovery playbook in a restricted environment.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">08 / 08</div>
+</div>
+</body>
+</html>

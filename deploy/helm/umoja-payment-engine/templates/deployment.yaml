@@ -1,0 +1,168 @@
+{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.image.digest) }}
+{{- fail "values.image.digest must be a full sha256:<64 lowercase hex> digest; mutable tags and placeholders are forbidden" }}
+{{- end }}
+{{- if not .Values.releaseEvidence.existingClaim }}
+{{- fail "releaseEvidence.existingClaim is required; signed release evidence cannot be disabled" }}
+{{- end }}
+{{- if not .Values.objectStorage.bucket }}
+{{- fail "objectStorage.bucket is required for WORM manifest binding" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "umoja-payment-engine.fullname" . }}
+  labels:
+    {{- include "umoja-payment-engine.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  minReadySeconds: 15
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "umoja-payment-engine.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "umoja-payment-engine.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: queue-worker
+      annotations:
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "umoja-payment-engine.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.securityContext.pod | nindent 8 }}
+      volumes:
+        - name: release-evidence
+          persistentVolumeClaim:
+            claimName: {{ .Values.releaseEvidence.existingClaim }}
+            readOnly: true
+      containers:
+        - name: payment-engine
+          image: "{{ .Values.image.repository }}@{{ .Values.image.digest }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/app/fabric-attestation-worker"]
+          env:
+            - name: UMOJA_ENV
+              value: {{ .Values.environment | quote }}
+            - name: UMOJA_RELEASE_MANIFEST_PATH
+              value: {{ .Values.releaseEvidence.manifestPath | quote }}
+            - name: UMOJA_RELEASE_SIGNATURES_DIR
+              value: {{ .Values.releaseEvidence.signaturesDir | quote }}
+            - name: UMOJA_OBJECT_STORAGE_ENDPOINT
+              value: {{ required "objectStorage.endpoint is required" .Values.objectStorage.endpoint | quote }}
+            - name: UMOJA_OBJECT_STORAGE_BUCKET
+              value: {{ .Values.objectStorage.bucket | quote }}
+            - name: UMOJA_OBJECT_STORAGE_REGION
+              value: {{ .Values.objectStorage.region | quote }}
+            - name: UMOJA_OBJECT_STORAGE_USE_SSL
+              value: {{ .Values.objectStorage.useSSL | quote }}
+            - name: UMOJA_OBJECT_STORAGE_CANARY_KEY
+              value: {{ .Values.objectStorage.canaryKey | quote }}
+            - name: UMOJA_OBJECT_STORAGE_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.objectStorage.credentialsSecret }}
+                  key: {{ .Values.objectStorage.accessKeyKey }}
+            - name: UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.objectStorage.credentialsSecret }}
+                  key: {{ .Values.objectStorage.secretKeyKey }}
+            - name: UMOJA_FABRIC_QUEUE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.existingSecret }}
+                  key: {{ .Values.postgres.urlKey }}
+            - name: UMOJA_POSTGRES_MAX_OPEN_CONNS
+              value: {{ .Values.postgres.maxOpenConns | quote }}
+            - name: UMOJA_POSTGRES_MAX_IDLE_CONNS
+              value: {{ .Values.postgres.maxIdleConns | quote }}
+            - name: UMOJA_POSTGRES_CONN_MAX_LIFETIME
+              value: {{ .Values.postgres.connMaxLifetime | quote }}
+            - name: UMOJA_POSTGRES_CONN_MAX_IDLE_TIME
+              value: {{ .Values.postgres.connMaxIdleTime | quote }}
+            - name: UMOJA_FABRIC_QUEUE_WORKERS
+              value: {{ .Values.fabric.queueWorkers | quote }}
+            - name: UMOJA_FABRIC_ADMISSION_LIMIT
+              value: {{ .Values.fabric.admissionLimit | quote }}
+            - name: UMOJA_FABRIC_QUEUE_LEASE_DURATION
+              value: {{ .Values.fabric.leaseDuration | quote }}
+            - name: UMOJA_FABRIC_QUEUE_POLL_INTERVAL
+              value: {{ .Values.fabric.pollInterval | quote }}
+            - name: UMOJA_FABRIC_QUEUE_METRICS_REFRESH_INTERVAL
+              value: {{ .Values.fabric.metricsRefreshInterval | quote }}
+            - name: UMOJA_FABRIC_COMMIT_STATUS_TIMEOUT
+              value: {{ .Values.fabric.commitStatusTimeout | quote }}
+            - name: UMOJA_FABRIC_QUEUE_RETRY_DELAY
+              value: {{ .Values.fabric.retryDelay | quote }}
+            {{- if .Values.vault.enabled }}
+            - name: UMOJA_VAULT_ADDR
+              value: {{ required "vault.address is required when vault.enabled is true" .Values.vault.address | quote }}
+            - name: UMOJA_VAULT_OBJECT_STORAGE_SECRET_PATH
+              value: {{ required "vault.objectStorageSecretPath is required when vault.enabled is true" .Values.vault.objectStorageSecretPath | quote }}
+            - name: UMOJA_VAULT_NAMESPACE
+              value: {{ .Values.vault.namespace | quote }}
+            - name: UMOJA_VAULT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vault.tokenSecret }}
+                  key: {{ .Values.vault.tokenKey }}
+            {{- end }}
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.otel.serviceName | quote }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.otel.endpoint | quote }}
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: {{ .Values.otel.protocol | quote }}
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: {{ .Values.otel.resourceAttributes | quote }}
+          volumeMounts:
+            - name: release-evidence
+              mountPath: /var/run/umoja/release
+              readOnly: true
+          ports:
+            - name: metrics
+              containerPort: 8081
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext.container | nindent 12 }}
+      imagePullSecrets:
+        {{- toYaml .Values.image.pullSecrets | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}

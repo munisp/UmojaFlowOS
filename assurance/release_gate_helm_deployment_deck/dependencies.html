@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { margin: 0; }
+    .slide-container {
+        width: 1280px;
+        min-height: 720px;
+        background: #0b1324;
+        color: #eef5f7;
+        font-family: Arial, Helvetica, sans-serif;
+        padding: 58px 78px 0;
+        position: relative;
+        overflow: hidden;
+    }
+    .top-rule { height: 4px; width: 70px; background: #55d6c2; }
+    .kicker { margin-top: 18px; color: #55d6c2; letter-spacing: 2px; font-size: 14px; font-weight: 700; text-transform: uppercase; }
+    .title { font-size: 42px; line-height: 1.1; margin-top: 12px; max-width: 950px; font-weight: 800; }
+    .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 40px;
+        margin-top: 60px;
+    }
+    .dep-box {
+        border-top: 2px solid #294454;
+        padding-top: 20px;
+        min-height: 180px;
+    }
+    .dep-box h3 {
+        font-size: 22px;
+        color: #55d6c2;
+        margin-bottom: 15px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    .dep-list {
+        list-style: none;
+        color: #aebfc8;
+        font-size: 17px;
+        line-height: 1.6;
+    }
+    .dep-list b { color: #eef5f7; }
+    .footer {
+        position: absolute;
+        bottom: 36px;
+        right: 78px;
+        font-size: 13px;
+        color: #607887;
+        letter-spacing: 1px;
+    }
+    .status-tag {
+        display: inline-block;
+        padding: 2px 8px;
+        background: #1a2a3a;
+        border: 1px solid #55d6c2;
+        color: #55d6c2;
+        font-size: 12px;
+        font-weight: 700;
+        margin-left: 10px;
+        vertical-align: middle;
+    }
+</style>
+</head>
+<body>
+<div class="slide-container">
+    <div class="top-rule"></div>
+    <div class="kicker">Operational Readiness</div>
+    <h1 class="title">Runtime dependencies are explicit, auditable, and fail-closed.</h1>
+
+    <div class="grid">
+        <div class="dep-box">
+            <h3>Durable Ledger &amp; Queue</h3>
+            <ul class="dep-list">
+                <li><b>PostgreSQL 16:</b> Authoritative queue and double-entry state.</li>
+                <li><b>TigerBeetle:</b> High-performance financial ledger integration.</li>
+                <li><b>Migration 0057:</b> Mandatory schema for attestation tracking.</li>
+            </ul>
+        </div>
+        <div class="dep-box">
+            <h3>Secrets &amp; Evidence Store</h3>
+            <ul class="dep-list">
+                <li><b>HashiCorp Vault:</b> Version-aware credential rotation.</li>
+                <li><b>S3-Compatible WORM:</b> Immutable evidence storage.</li>
+                <li><b>Canary Validation:</b> Pre-flight credential health checks.</li>
+            </ul>
+        </div>
+        <div class="dep-box">
+            <h3>Mesh &amp; Observability</h3>
+            <ul class="dep-list">
+                <li><b>Istio Service Mesh:</b> STRICT mTLS and RBAC enforcement.</li>
+                <li><b>OpenTelemetry:</b> Distributed tracing and OTLP collection.</li>
+                <li><b>Prometheus Adapter:</b> External metrics for HPA scaling.</li>
+            </ul>
+        </div>
+        <div class="dep-box">
+            <h3>Release Governance</h3>
+            <ul class="dep-list">
+                <li><b>Signed PVC:</b> Read-only mount of the release bundle.</li>
+                <li><b>Ed25519 Sidecars:</b> Four-role detached approval signatures.</li>
+                <li><b>Manifest Binding:</b> Release SHA and WORM bucket pinning.</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="footer">06 / 08</div>
+</div>
+</body>
+</html>

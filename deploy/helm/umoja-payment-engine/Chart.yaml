@@ -1,0 +1,10 @@
+apiVersion: v2
+name: umoja-payment-engine
+description: Fail-closed UmojaFlowOS payment-engine and Fabric attestation queue worker
+home: https://github.com/munisp/UmojaFlowOS
+sources:
+  - https://github.com/munisp/UmojaFlowOS
+version: 0.1.0
+appVersion: "staging"
+type: application
+kubeVersion: ">=1.27.0-0"

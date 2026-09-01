@@ -1,0 +1,112 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/munisp/umojaflowos-payment-engine
+  digest: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+environment: staging
+
+releaseEvidence:
+  existingClaim: umoja-release-evidence
+  manifestPath: /var/run/umoja/release/manifest.json
+  signaturesDir: /var/run/umoja/release/signatures
+
+objectStorage:
+  endpoint: ""
+  bucket: ""
+  region: us-east-1
+  useSSL: true
+  canaryKey: ""
+  credentialsSecret: umoja-object-storage-credentials
+  accessKeyKey: UMOJA_OBJECT_STORAGE_ACCESS_KEY_ID
+  secretKeyKey: UMOJA_OBJECT_STORAGE_SECRET_ACCESS_KEY
+
+vault:
+  enabled: true
+  address: ""
+  namespace: ""
+  tokenSecret: umoja-vault-token
+  tokenKey: token
+  objectStorageSecretPath: ""
+
+postgres:
+  existingSecret: umoja-postgres-credentials
+  urlKey: queue-database-url
+  maxOpenConns: 16
+  maxIdleConns: 8
+  connMaxLifetime: 30m
+  connMaxIdleTime: 5m
+
+fabric:
+  queueWorkers: 2
+  admissionLimit: 4
+  leaseDuration: 90s
+  pollInterval: 250ms
+  metricsRefreshInterval: 5s
+  commitStatusTimeout: 30s
+  retryDelay: 30s
+
+otel:
+  serviceName: fabric-attestation-queue-worker
+  endpoint: http://otel-collector.observability.svc.cluster.local:4317
+  protocol: grpc
+  resourceAttributes: service.namespace=umojaflowos,deployment.environment=staging
+
+service:
+  type: ClusterIP
+  port: 8081
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "8081"
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  cpuAverageUtilization: 60
+  memoryAverageUtilization: 70
+  queueDepthAverageValue: "50"
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+podAnnotations:
+  sidecar.istio.io/inject: "true"
+  traffic.sidecar.istio.io/includeOutboundPorts: "443,5432"
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+securityContext:
+  pod:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  container:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+
+terminationGracePeriodSeconds: 45
