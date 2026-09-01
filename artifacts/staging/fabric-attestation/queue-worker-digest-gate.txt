@@ -1,0 +1,2 @@
+queue-worker image must be an immutable sha256 digest before deployment
+EXPECTED_FAIL_CLOSED: placeholder digest rejected

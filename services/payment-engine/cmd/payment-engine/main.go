@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	_ "github.com/lib/pq"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/attestation"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/domain"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/eventing"
@@ -126,12 +128,18 @@ func newHandlerWithWebhookAndPosting(now func() time.Time, webhook http.Handler,
 }
 
 func newHandlerWithSignerMetrics(now func() time.Time, webhook http.Handler, posting *ledger.PostingService, execution http.Handler, signerRetryMetrics *provider.SignerRetryMetrics, configuredLedgerBackend ...string) http.Handler {
+	return newHandlerWithSignerAndFabricMetrics(now, webhook, posting, execution, signerRetryMetrics, nil, configuredLedgerBackend...)
+}
+
+func newHandlerWithSignerAndFabricMetrics(now func() time.Time, webhook http.Handler, posting *ledger.PostingService, execution http.Handler, signerRetryMetrics *provider.SignerRetryMetrics, fabricMetrics *attestation.Metrics, configuredLedgerBackend ...string) http.Handler {
 	ledgerBackend := "disabled_without_deployed_tigerbeetle"
 	if len(configuredLedgerBackend) > 0 && configuredLedgerBackend[0] != "" {
 		ledgerBackend = configuredLedgerBackend[0]
 	}
 	mux := http.NewServeMux()
-	fabricMetrics := attestation.NewMetrics()
+	if fabricMetrics == nil {
+		fabricMetrics = attestation.NewMetrics()
+	}
 	fabricMetrics.SetResourceLabels(os.Getenv("POD_NAMESPACE"), os.Getenv("POD_NAME"))
 	metrics := &serviceMetrics{startedAt: now(), signerRetryMetrics: signerRetryMetrics, fabricMetrics: fabricMetrics}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -322,6 +330,68 @@ func startSettlementGRPC() (*grpc.Server, net.Listener, error) {
 	return grpcServer, lis, nil
 }
 
+func fabricQueueIntEnv(getenv func(string) string, key string, fallback int) (int, error) {
+	value := strings.TrimSpace(getenv(key))
+	if value == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		return 0, fmt.Errorf("%s must be a positive integer", key)
+	}
+	return parsed, nil
+}
+
+func startFabricQueueMetrics(ctx context.Context, metrics *attestation.Metrics) (func(), error) {
+	dsn := strings.TrimSpace(os.Getenv("UMOJA_FABRIC_QUEUE_DATABASE_URL"))
+	if dsn == "" {
+		return func() {}, nil
+	}
+	maxOpen, err := fabricQueueIntEnv(os.Getenv, "UMOJA_POSTGRES_MAX_OPEN_CONNS", 16)
+	if err != nil {
+		return nil, err
+	}
+	maxIdle, err := fabricQueueIntEnv(os.Getenv, "UMOJA_POSTGRES_MAX_IDLE_CONNS", 8)
+	if err != nil {
+		return nil, err
+	}
+	if maxIdle > maxOpen {
+		return nil, fmt.Errorf("UMOJA_POSTGRES_MAX_IDLE_CONNS cannot exceed UMOJA_POSTGRES_MAX_OPEN_CONNS")
+	}
+	interval := 5 * time.Second
+	if raw := strings.TrimSpace(os.Getenv("UMOJA_FABRIC_QUEUE_METRICS_REFRESH_INTERVAL")); raw != "" {
+		interval, err = time.ParseDuration(raw)
+		if err != nil || interval <= 0 {
+			return nil, fmt.Errorf("UMOJA_FABRIC_QUEUE_METRICS_REFRESH_INTERVAL must be a positive duration")
+		}
+	}
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open Fabric queue database: %w", err)
+	}
+	db.SetMaxOpenConns(maxOpen)
+	db.SetMaxIdleConns(maxIdle)
+	if raw := strings.TrimSpace(os.Getenv("UMOJA_POSTGRES_CONN_MAX_LIFETIME")); raw != "" {
+		lifetime, parseErr := time.ParseDuration(raw)
+		if parseErr != nil || lifetime <= 0 {
+			_ = db.Close()
+			return nil, fmt.Errorf("UMOJA_POSTGRES_CONN_MAX_LIFETIME must be a positive duration")
+		}
+		db.SetConnMaxLifetime(lifetime)
+	}
+	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := db.PingContext(pingCtx); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("Fabric queue database readiness: %w", err)
+	}
+	if err := attestation.StartQueueDepthRefresher(ctx, db, metrics, interval); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return func() { _ = db.Close() }, nil
+}
+
 func main() {
 	productionProfile := strings.EqualFold(strings.TrimSpace(os.Getenv("UMOJA_ENV")), "production")
 	if _, configErr := provider.LoadNigerianRailConfig(os.Getenv, productionProfile); configErr != nil {
@@ -389,7 +459,13 @@ func main() {
 		defer grpcServer.GracefulStop()
 		defer grpcListener.Close()
 	}
-	handler := observability.Handler(newHandlerWithSignerMetrics(time.Now, webhookRuntime, posting, executionHandler, signerRetryMetrics, ledgerRuntime.Backend))
+	fabricMetrics := attestation.NewMetrics()
+	queueMetricsClose, queueMetricsErr := startFabricQueueMetrics(context.Background(), fabricMetrics)
+	if queueMetricsErr != nil {
+		panic(queueMetricsErr)
+	}
+	defer queueMetricsClose()
+	handler := observability.Handler(newHandlerWithSignerAndFabricMetrics(time.Now, webhookRuntime, posting, executionHandler, signerRetryMetrics, fabricMetrics, ledgerRuntime.Backend))
 	if err := http.ListenAndServe(":"+port, handler); err != nil {
 		panic(err)
 	}

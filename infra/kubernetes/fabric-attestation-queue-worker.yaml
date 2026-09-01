@@ -1,0 +1,212 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fabric-attestation-queue-worker
+  namespace: umoja-payment
+  labels:
+    app.kubernetes.io/name: fabric-attestation-queue-worker
+    app.kubernetes.io/part-of: umojaflowos
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fabric-attestation-queue-worker
+  namespace: umoja-payment
+  labels:
+    app.kubernetes.io/name: fabric-attestation-queue-worker
+    app.kubernetes.io/component: queue-worker
+    app.kubernetes.io/part-of: umojaflowos
+spec:
+  replicas: 2
+  minReadySeconds: 15
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fabric-attestation-queue-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: fabric-attestation-queue-worker
+        app.kubernetes.io/component: queue-worker
+        app.kubernetes.io/part-of: umojaflowos
+      annotations:
+        sidecar.istio.io/inject: "true"
+        traffic.sidecar.istio.io/includeOutboundPorts: "443,5432"
+    spec:
+      serviceAccountName: fabric-attestation-queue-worker
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: queue-worker
+          image: ghcr.io/munisp/umojaflowos-payment-engine@sha256:REPLACE_WITH_RELEASE_DIGEST
+          imagePullPolicy: IfNotPresent
+          command: ["/app/payment-engine"]
+          env:
+            - name: UMOJA_ENV
+              value: staging
+            - name: UMOJA_FABRIC_QUEUE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: umoja-postgres-credentials
+                  key: queue-database-url
+            - name: UMOJA_POSTGRES_MAX_OPEN_CONNS
+              value: "16"
+            - name: UMOJA_POSTGRES_MAX_IDLE_CONNS
+              value: "8"
+            - name: UMOJA_POSTGRES_CONN_MAX_LIFETIME
+              value: "30m"
+            - name: UMOJA_FABRIC_QUEUE_WORKERS
+              value: "2"
+            - name: UMOJA_FABRIC_ADMISSION_LIMIT
+              value: "4"
+            - name: UMOJA_FABRIC_QUEUE_LEASE_DURATION
+              value: "90s"
+            - name: UMOJA_FABRIC_QUEUE_POLL_INTERVAL
+              value: "250ms"
+            - name: UMOJA_FABRIC_QUEUE_METRICS_REFRESH_INTERVAL
+              value: "5s"
+            - name: UMOJA_FABRIC_COMMIT_STATUS_TIMEOUT
+              value: "30s"
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OTEL_SERVICE_NAME
+              value: fabric-attestation-queue-worker
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector.observability.svc.cluster.local:4317
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: grpc
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.namespace=umojaflowos,deployment.environment=staging
+          ports:
+            - name: metrics
+              containerPort: 8081
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fabric-attestation-queue-worker
+  namespace: umoja-payment
+  labels:
+    app.kubernetes.io/name: fabric-attestation-queue-worker
+    app.kubernetes.io/part-of: umojaflowos
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "8081"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: fabric-attestation-queue-worker
+  ports:
+    - name: metrics
+      port: 8081
+      targetPort: metrics
+      protocol: TCP
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: fabric-attestation-queue-worker
+  namespace: umoja-payment
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: fabric-attestation-queue-worker
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: fabric-attestation-queue-worker
+  namespace: umoja-payment
+  labels:
+    app.kubernetes.io/name: fabric-attestation-queue-worker
+    app.kubernetes.io/part-of: umojaflowos
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: fabric-attestation-queue-worker
+  minReplicas: 2
+  maxReplicas: 8
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      selectPolicy: Max
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      selectPolicy: Min
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: External
+      external:
+        metric:
+          name: umoja_fabric_queue_depth
+          selector:
+            matchLabels:
+              state: pending
+        target:
+          type: AverageValue
+          averageValue: "50"
