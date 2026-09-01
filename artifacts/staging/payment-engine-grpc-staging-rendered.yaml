@@ -1,0 +1,293 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/part-of: umojaflowos
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted
+  name: umoja-payment
+---
+apiVersion: v1
+automountServiceAccountToken: false
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: payment-engine
+    app.kubernetes.io/name: payment-engine
+  name: payment-engine
+  namespace: umoja-payment
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: payment-engine
+    app.kubernetes.io/name: payment-engine
+    app.kubernetes.io/part-of: umojaflowos
+  name: payment-engine
+  namespace: umoja-payment
+spec:
+  ports:
+  - name: grpc-tls
+    port: 8443
+    protocol: TCP
+    targetPort: grpc-tls
+  - name: http
+    port: 8081
+    protocol: TCP
+    targetPort: http
+  selector:
+    app.kubernetes.io/name: payment-engine
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: payment-engine
+    app.kubernetes.io/name: payment-engine
+    app.kubernetes.io/part-of: umojaflowos
+  name: payment-engine
+  namespace: umoja-payment
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payment-engine
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      annotations:
+        container.apparmor.security.beta.kubernetes.io/payment-engine: runtime/default
+        sidecar.istio.io/inject: "true"
+        traffic.sidecar.istio.io/includeInboundPorts: 8081,8443
+        traffic.sidecar.istio.io/includeOutboundPorts: 443,5432,6379,8443
+      labels:
+        app.kubernetes.io/component: payment-engine
+        app.kubernetes.io/name: payment-engine
+        app.kubernetes.io/part-of: umojaflowos
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - env:
+        - name: GRPC_SETTLEMENT_LISTEN_ADDR
+          value: :8443
+        - name: GRPC_SETTLEMENT_EXECUTION_ENABLED
+          value: "false"
+        - name: GRPC_SETTLEMENT_CA_FILE
+          value: /var/run/umoja-settlement-grpc/ca.crt
+        - name: GRPC_SETTLEMENT_CERT_FILE
+          value: /var/run/umoja-settlement-grpc/tls.crt
+        - name: GRPC_SETTLEMENT_KEY_FILE
+          value: /var/run/umoja-settlement-grpc/tls.key
+        - name: GRPC_SETTLEMENT_SERVER_NAME
+          value: payment-engine.umoja-payment.svc.cluster.local
+        - name: OTEL_SERVICE_NAME
+          value: payment-engine
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector.observability.svc.cluster.local:4317
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: grpc
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=umojaflowos,deployment.environment=staging
+        - name: UMOJA_ENV
+          value: production
+        - name: PORT
+          value: "8081"
+        - name: MOJALOOP_FSPIOP_ENABLED
+          value: "true"
+        - name: MOJALOOP_FSPIOP_EXECUTION_ENABLED
+          value: "false"
+        - name: MOJALOOP_BASE_URL
+          valueFrom:
+            configMapKeyRef:
+              key: base-url
+              name: mojaloop-signer-config
+        - name: MOJALOOP_SOURCE_FSP
+          valueFrom:
+            configMapKeyRef:
+              key: source-fsp
+              name: mojaloop-signer-config
+        - name: MOJALOOP_SIGNER_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              key: signer-endpoint
+              name: mojaloop-signer-config
+        - name: MOJALOOP_SIGNER_AUDIENCE
+          valueFrom:
+            configMapKeyRef:
+              key: signer-audience
+              name: mojaloop-signer-config
+        - name: MOJALOOP_SIGNER_KEY_REFERENCE
+          valueFrom:
+            secretKeyRef:
+              key: key-reference
+              name: mojaloop-signer-key-reference
+        - name: MOJALOOP_SIGNER_CLIENT_CERT_FILE
+          value: /var/run/umoja-signer-tls/tls.crt
+        - name: MOJALOOP_SIGNER_CLIENT_KEY_FILE
+          value: /var/run/umoja-signer-tls/tls.key
+        - name: MOJALOOP_SIGNER_CA_FILE
+          value: /var/run/umoja-signer-tls/ca.crt
+        - name: MOJALOOP_FSPIOP_SIGNER_MAX_ATTEMPTS
+          value: "3"
+        - name: MOJALOOP_FSPIOP_SIGNER_INITIAL_BACKOFF
+          value: 25ms
+        - name: MOJALOOP_FSPIOP_SIGNER_MAX_BACKOFF
+          value: 250ms
+        - name: MOJALOOP_FSPIOP_SIGNER_RETRY_TRANSIENT_ONLY
+          value: "true"
+        image: ghcr.io/munisp/umojaflowos-payment-engine:RELEASE_SHA
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 2
+        name: payment-engine
+        ports:
+        - containerPort: 8443
+          name: grpc-tls
+          protocol: TCP
+        - containerPort: 8081
+          name: http
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          tcpSocket:
+            port: grpc-tls
+          timeoutSeconds: 2
+        resources:
+          limits:
+            cpu: 1
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /var/run/umoja-settlement-grpc
+          name: settlement-grpc-server-mtls
+          readOnly: true
+        - mountPath: /var/run/umoja-signer-tls
+          name: signer-mtls
+          readOnly: true
+        - mountPath: /tmp
+          name: tmp
+          readOnly: false
+      enableServiceLinks: false
+      securityContext:
+        fsGroup: 10001
+        runAsGroup: 10001
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: payment-engine
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: settlement-grpc-server-mtls
+        secret:
+          defaultMode: 256
+          items:
+          - key: tls.crt
+            mode: 256
+            path: tls.crt
+          - key: tls.key
+            mode: 256
+            path: tls.key
+          - key: ca.crt
+            mode: 292
+            path: ca.crt
+          secretName: settlement-grpc-server-mtls
+      - name: signer-mtls
+        secret:
+          defaultMode: 256
+          items:
+          - key: tls.crt
+            mode: 256
+            path: tls.crt
+          - key: tls.key
+            mode: 256
+            path: tls.key
+          - key: ca.crt
+            mode: 292
+            path: ca.crt
+          secretName: mojaloop-signer-mtls
+      - emptyDir:
+          medium: Memory
+          sizeLimit: 64Mi
+        name: tmp
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: payment-engine-egress
+  namespace: umoja-payment
+spec:
+  egress:
+  - ports:
+    - port: 8443
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: umoja-signer
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: mojaloop-signer
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+    ports:
+    - port: 8081
+      protocol: TCP
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: umoja-control
+    ports:
+    - port: 8081
+      protocol: TCP
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: payment-engine
+  policyTypes:
+  - Ingress
+  - Egress

@@ -98,13 +98,17 @@ The expected Service and container output includes `grpc-tls 8443 grpc-tls`. A m
 First validate the overlay and policy without changing the cluster:
 
 ```bash
-kubectl kustomize infra/kubernetes/payment-engine-grpc-staging-overlay \
+kustomize build --load-restrictor LoadRestrictionsNone \
+  infra/kubernetes/payment-engine-grpc-staging-overlay \
   > artifacts/staging/payment-engine-grpc-staging-rendered.yaml
 kubectl apply --dry-run=server -f artifacts/staging/payment-engine-grpc-staging-rendered.yaml
 kubectl apply --dry-run=server -f infra/service-mesh/settlement-grpc-mtls-staging.yaml
 istioctl validate -f infra/service-mesh/settlement-grpc-mtls-staging.yaml
 istioctl analyze -n "$PAYMENT_NS" infra/service-mesh/settlement-grpc-mtls-staging.yaml
-kubectl diff -k infra/kubernetes/payment-engine-grpc-staging-overlay
+kustomize build --load-restrictor LoadRestrictionsNone \
+  infra/kubernetes/payment-engine-grpc-staging-overlay \
+  > /tmp/payment-engine-grpc-staging-rendered.yaml
+kubectl diff -f /tmp/payment-engine-grpc-staging-rendered.yaml
 kubectl diff -f infra/service-mesh/settlement-grpc-mtls-staging.yaml
 ```
 

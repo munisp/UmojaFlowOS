@@ -27,6 +27,8 @@ spec:
           env:
             - name: GRPC_SETTLEMENT_LISTEN_ADDR
               value: ":8443"
+            - name: GRPC_SETTLEMENT_EXECUTION_ENABLED
+              value: "false"
             - name: GRPC_SETTLEMENT_CA_FILE
               value: /var/run/umoja-settlement-grpc/ca.crt
             - name: GRPC_SETTLEMENT_CERT_FILE

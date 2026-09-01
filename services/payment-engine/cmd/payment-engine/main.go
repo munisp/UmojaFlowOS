@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -16,7 +17,11 @@ import (
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/domain"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/eventing"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/ledger"
+	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/observability"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/provider"
+	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/settlement"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 // serviceMetrics holds counters the service actually observes while running.
@@ -279,6 +284,39 @@ func signerMetricSnapshot(metrics *provider.SignerRetryMetrics) provider.SignerR
 	return metrics.Snapshot()
 }
 
+// startSettlementGRPC starts the internal transport only when an address is
+// explicitly configured. Until the real coordinator is composed into this
+// binary, requests are held in UNKNOWN and cannot settle. This is deliberate:
+// exposing a socket must never imply that a payment execution path is enabled.
+func startSettlementGRPC() (*grpc.Server, net.Listener, error) {
+	addr := strings.TrimSpace(os.Getenv("GRPC_SETTLEMENT_LISTEN_ADDR"))
+	if addr == "" {
+		return nil, nil, nil
+	}
+	caFile := strings.TrimSpace(os.Getenv("GRPC_SETTLEMENT_CA_FILE"))
+	certFile := strings.TrimSpace(os.Getenv("GRPC_SETTLEMENT_CERT_FILE"))
+	keyFile := strings.TrimSpace(os.Getenv("GRPC_SETTLEMENT_KEY_FILE"))
+	tlsConfig, err := settlement.LoadGRPCServerTLSConfig(caFile, certFile, keyFile)
+	if err != nil {
+		return nil, nil, fmt.Errorf("configure settlement gRPC TLS: %w", err)
+	}
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, nil, fmt.Errorf("listen for settlement gRPC on %s: %w", addr, err)
+	}
+	grpcServer := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)))
+	failClosed := func(context.Context, settlement.Intent) (settlement.ProviderResult, error) {
+		return settlement.ProviderResult{State: settlement.Unknown, Reason: "settlement coordinator is not composed into payment-engine"}, settlement.ErrUnknown
+	}
+	settlement.RegisterGRPCSettlementServer(grpcServer, &settlement.GRPCSettlementServer{Handler: failClosed, QueryHandler: failClosed})
+	go func() {
+		if serveErr := grpcServer.Serve(lis); serveErr != nil {
+			fmt.Fprintf(os.Stderr, "settlement gRPC server stopped: %v\\n", serveErr)
+		}
+	}()
+	return grpcServer, lis, nil
+}
+
 func main() {
 	productionProfile := strings.EqualFold(strings.TrimSpace(os.Getenv("UMOJA_ENV")), "production")
 	if _, configErr := provider.LoadNigerianRailConfig(os.Getenv, productionProfile); configErr != nil {
@@ -329,11 +367,25 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	shutdownTelemetry, telemetryErr := observability.Init(context.Background())
+	if telemetryErr != nil {
+		panic(telemetryErr)
+	}
+	defer shutdownTelemetry(context.Background())
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8081"
 	}
-	if err := http.ListenAndServe(":"+port, newHandlerWithSignerMetrics(time.Now, webhookRuntime, posting, executionHandler, signerRetryMetrics, ledgerRuntime.Backend)); err != nil {
+	grpcServer, grpcListener, grpcErr := startSettlementGRPC()
+	if grpcErr != nil {
+		panic(grpcErr)
+	}
+	if grpcServer != nil {
+		defer grpcServer.GracefulStop()
+		defer grpcListener.Close()
+	}
+	handler := observability.Handler(newHandlerWithSignerMetrics(time.Now, webhookRuntime, posting, executionHandler, signerRetryMetrics, ledgerRuntime.Backend))
+	if err := http.ListenAndServe(":"+port, handler); err != nil {
 		panic(err)
 	}
 }
