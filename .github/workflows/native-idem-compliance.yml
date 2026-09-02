@@ -24,11 +24,14 @@ jobs:
       - name: Install OPA
         uses: open-policy-agent/setup-opa@v2
         with:
-          version: latest
+          version: 0.70.0
       - name: Install Conftest
-        uses: instrumenta/conftest-action@v0.3.0
-        with:
-          version: 0.56.0
+        run: |
+          set -Eeuo pipefail
+          curl --fail --silent --show-error --location \
+            https://github.com/open-policy-agent/conftest/releases/download/v0.56.0/conftest_0.56.0_Linux_x86_64.tar.gz \
+            | tar -xz conftest
+          sudo install -m 0755 conftest /usr/local/bin/conftest
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
@@ -43,7 +46,14 @@ jobs:
       - name: OPA unit tests
         run: opa test infra/opa -v
       - name: Rego policy lint
-        run: conftest verify --policy infra/opa infra/opa
+        run: |
+          set -Eeuo pipefail
+          mapfile -t policy_files < <(find infra/opa -maxdepth 1 -type f -name '*.rego' -print | sort)
+          if [ "${#policy_files[@]}" -eq 0 ]; then
+            echo 'No Rego policy files found' >&2
+            exit 1
+          fi
+          conftest verify --policy infra/opa "${policy_files[@]}"
       - name: Prometheus rule validation
         run: promtool check rules infra/monitoring/umoja-native-idem-alerts.yml
       - name: Helm lint and render

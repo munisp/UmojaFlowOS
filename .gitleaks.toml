@@ -1,0 +1,16 @@
+title = "UmojaFlowOS Gitleaks configuration"
+
+# These patterns are deterministic synthetic fixture fields, not credentials.
+# Real secrets must never be placed in these files. The allowlist is restricted
+# to the exact JSON keys and formats used by local synthetic evidence fixtures.
+[allowlist]
+description = "synthetic evidence hashes and lease identifiers"
+regexTarget = "match"
+regexes = [
+  '''"token_sha256"\s*:\s*"[0-9a-f]{64}"''',
+  '''"lease_token"\s*:\s*"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"'''
+]
+paths = [
+  '''^artifacts/local-seed/synthetic_nigeria_seed_manifest\.json$''',
+  '''^artifacts/external-signoff/evidence/artifacts/local-seed/synthetic_nigeria_seed_manifest\.json$'''
+]
