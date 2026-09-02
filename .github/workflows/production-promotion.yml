@@ -96,13 +96,27 @@ jobs:
           set -Eeuo pipefail
           python3 -m pip install --disable-pip-version-check pyyaml
           python3 scripts/infra/test_settlement_grpc_staging_security.py
-      - name: Verify release evidence binding
+      - name: Enforce production GO evidence gate
         env:
-          RELEASE_SHA: ${{ inputs.release_sha }}
+          IMAGE: ${{ inputs.image }}
+          EVIDENCE_DIR: ${{ vars.PRODUCTION_EVIDENCE_DIR }}
+          MANIFEST: ${{ vars.PRODUCTION_RELEASE_MANIFEST }}
+          SIGNATURES_DIR: ${{ vars.PRODUCTION_SIGNATURES_DIR }}
         run: |
           set -Eeuo pipefail
-          test -f assurance/grpc_typed_transport_implementation_evidence.md
-          grep -Fq "$RELEASE_SHA" assurance/release_evidence_manifest.example.json 2>/dev/null || echo 'Release manifest example is not the live approval record; protected environment approval remains mandatory.'
+          test -n "$EVIDENCE_DIR" || { echo 'PRODUCTION_EVIDENCE_DIR must be configured in the protected environment' >&2; exit 2; }
+          test -n "$MANIFEST" || { echo 'PRODUCTION_RELEASE_MANIFEST must be configured in the protected environment' >&2; exit 2; }
+          test -n "$SIGNATURES_DIR" || { echo 'PRODUCTION_SIGNATURES_DIR must be configured in the protected environment' >&2; exit 2; }
+          python3 scripts/infra/verify_release_manifest_signatures.py \
+            --manifest "$MANIFEST" \
+            --schema assurance/release_evidence_manifest.schema.json \
+            --signatures-dir "$SIGNATURES_DIR" \
+            --expected-sha "${{ inputs.release_sha }}"
+          python3 scripts/infra/validate_production_go_gate.py \
+            --evidence-dir "$EVIDENCE_DIR" \
+            --manifest "$MANIFEST" \
+            --signatures-dir "$SIGNATURES_DIR" \
+            --image "$IMAGE"
 
   staging:
     name: Apply to staging and run live mesh gate

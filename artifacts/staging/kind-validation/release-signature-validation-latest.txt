@@ -1,0 +1,2 @@
+valid fixture: PASS
+tampered signature: FAIL-CLOSED (rejected)

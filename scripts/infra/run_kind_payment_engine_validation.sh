@@ -25,27 +25,38 @@ arch() {
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(arch)"
 
+verify_binary_checksum(){
+  local name="$1" path="$2" expected="$3"
+  if [[ -n "$expected" ]]; then
+    printf '%s  %s\n' "$expected" "$path" | sha256sum -c -
+  elif [[ "${ALLOW_UNVERIFIED_DOWNLOADS:-false}" != true || "${CI:-false}" == true ]]; then
+    die "${name} checksum is required; unverified downloads are forbidden in CI"
+  else
+    log "WARNING: accepting unverified local-only ${name} binary"
+  fi
+}
+
 install_kubectl(){
   local out="${TOOLS_DIR}/kubectl"
-  [[ -x "${out}" ]] && { "${out}" version --client --output=yaml > "${ARTIFACT_DIR}/kubectl-version.yaml" 2>&1 || true; return; }
-  curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/${OS}/${ARCH}/kubectl" -o "${out}.tmp"
-  if [[ -n "${KUBECTL_SHA256:-}" ]]; then
-    printf '%s  %s\n' "${KUBECTL_SHA256}" "${out}.tmp" | sha256sum -c -
-  elif [[ "${ALLOW_UNVERIFIED_DOWNLOADS:-false}" != true ]]; then
-    die "KUBECTL_SHA256 is required for a new download; set it only from the official release checksum"
+  if [[ -x "${out}" ]]; then
+    verify_binary_checksum kubectl "${out}" "${KUBECTL_SHA256:-}"
+    "${out}" version --client --output=yaml > "${ARTIFACT_DIR}/kubectl-version.yaml" 2>&1 || true
+    return
   fi
+  curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/${OS}/${ARCH}/kubectl" -o "${out}.tmp"
+  verify_binary_checksum kubectl "${out}.tmp" "${KUBECTL_SHA256:-}"
   install -m 0755 "${out}.tmp" "${out}"; rm -f "${out}.tmp"
 }
 
 install_helm(){
   local out="${TOOLS_DIR}/helm" tmp="${ARTIFACT_DIR}/helm.tgz"
-  [[ -x "${out}" ]] && { "${out}" version > "${ARTIFACT_DIR}/helm-version.txt" 2>&1 || true; return; }
-  curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-${OS}-${ARCH}.tar.gz" -o "${tmp}"
-  if [[ -n "${HELM_SHA256:-}" ]]; then
-    printf '%s  %s\n' "${HELM_SHA256}" "${tmp}" | sha256sum -c -
-  elif [[ "${ALLOW_UNVERIFIED_DOWNLOADS:-false}" != true ]]; then
-    die "HELM_SHA256 is required for a new download; set it only from the official release checksum"
+  if [[ -x "${out}" ]]; then
+    verify_binary_checksum helm "${out}" "${HELM_BINARY_SHA256:-}"
+    "${out}" version > "${ARTIFACT_DIR}/helm-version.txt" 2>&1 || true
+    return
   fi
+  curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-${OS}-${ARCH}.tar.gz" -o "${tmp}"
+  verify_binary_checksum helm-archive "${tmp}" "${HELM_SHA256:-}"
   tar -xzf "${tmp}" -C "${ARTIFACT_DIR}"
   install -m 0755 "${ARTIFACT_DIR}/${OS}-${ARCH}/helm" "${out}"
   "${out}" version > "${ARTIFACT_DIR}/helm-version.txt"
@@ -53,21 +64,38 @@ install_helm(){
 
 install_kind(){
   local out="${TOOLS_DIR}/kind"
-  [[ -x "${out}" ]] && { "${out}" version > "${ARTIFACT_DIR}/kind-version.txt" 2>&1 || true; return; }
-  curl -fsSL "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-${OS}-${ARCH}" -o "${out}.tmp"
-  if [[ -n "${KIND_SHA256:-}" ]]; then
-    printf '%s  %s\n' "${KIND_SHA256}" "${out}.tmp" | sha256sum -c -
-  elif [[ "${ALLOW_UNVERIFIED_DOWNLOADS:-false}" != true ]]; then
-    die "KIND_SHA256 is required for a new download; set it only from the official release checksum"
+  if [[ -x "${out}" ]]; then
+    verify_binary_checksum kind "${out}" "${KIND_SHA256:-}"
+    "${out}" version > "${ARTIFACT_DIR}/kind-version.txt" 2>&1 || true
+    return
   fi
+  curl -fsSL "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-${OS}-${ARCH}" -o "${out}.tmp"
+  verify_binary_checksum kind "${out}.tmp" "${KIND_SHA256:-}"
   install -m 0755 "${out}.tmp" "${out}"; rm -f "${out}.tmp"
   "${out}" version > "${ARTIFACT_DIR}/kind-version.txt"
 }
 
+if [[ "${CI:-false}" == true && "${ALLOW_UNVERIFIED_DOWNLOADS:-false}" == true ]]; then
+  die "ALLOW_UNVERIFIED_DOWNLOADS cannot be enabled in CI"
+fi
 install_kubectl
 install_helm
 install_kind
 export PATH="${TOOLS_DIR}:${PATH}"
+
+run_static_checks(){
+  log "running repository-static validation"
+  python3 -m py_compile \
+    "${ROOT_DIR}/scripts/infra/validate_prometheus_adapter_hpa.py" \
+    "${ROOT_DIR}/scripts/infra/validate_fabric_queue_worker_scaling.py" \
+    "${ROOT_DIR}/scripts/infra/validate_fabric_object_storage_bindings.py" \
+    "${ROOT_DIR}/scripts/infra/validate_production_go_gate.py"
+  python3 "${ROOT_DIR}/scripts/infra/validate_fabric_queue_worker_scaling.py" > "${ARTIFACT_DIR}/queue-worker-static-validation.txt"
+  python3 "${ROOT_DIR}/scripts/infra/validate_fabric_object_storage_bindings.py" > "${ARTIFACT_DIR}/object-storage-binding-validation.txt"
+  python3 "${ROOT_DIR}/scripts/infra/test_verify_release_manifest_signatures.py" > "${ARTIFACT_DIR}/release-signature-validation.txt"
+  python3 "${ROOT_DIR}/tests/infra/test_release_signature_aggregation.py" > "${ARTIFACT_DIR}/release-signature-aggregation.txt"
+}
+run_static_checks
 
 for tool in kubectl helm kind; do command -v "${tool}" >/dev/null || die "${tool} unavailable after installation"; done
 command -v docker >/dev/null || die "Docker is required for Kind; no local container runtime is available"

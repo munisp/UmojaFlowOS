@@ -199,3 +199,62 @@ Deletion is not a substitute for evidence retention. Copy approved evidence to t
 ## Production interpretation
 
 A successful Kind run proves local integration of the chart, metrics API, and HPA mechanics only. It does not prove production readiness for PostgreSQL capacity, Fabric endorsement/commit latency, Vault rotation, S3 WORM behavior, Istio mTLS, OTel telemetry, HSM operations, disaster recovery, or regulatory approval. Those gates require authorized staging evidence.
+
+## Production GO gate
+
+A successful local Kind rehearsal is not production authorization. Before promotion, run the machine-enforced gate from the checked-out release commit with protected environment paths pointing to the approved evidence bundle:
+
+```bash
+python3 scripts/infra/verify_release_manifest_signatures.py \
+  --manifest "$PRODUCTION_RELEASE_MANIFEST" \
+  --schema assurance/release_evidence_manifest.schema.json \
+  --signatures-dir "$PRODUCTION_SIGNATURES_DIR" \
+  --expected-sha "$RELEASE_SHA"
+
+python3 scripts/infra/validate_production_go_gate.py \
+  --evidence-dir "$PRODUCTION_EVIDENCE_DIR" \
+  --manifest "$PRODUCTION_RELEASE_MANIFEST" \
+  --signatures-dir "$PRODUCTION_SIGNATURES_DIR" \
+  --image "$IMAGE@sha256:<64-hex-digest>"
+```
+
+The gate returns `production_go: true` only when all required live evidence files exist, the HPA/external-metrics validator reports `status: PASS` with `live_cluster_evidence: true`, the image is immutable, the manifest contains a future WORM retention timestamp and reconciliation run ID, and exactly the four required detached approval sidecars are present. It returns non-zero for missing, simulated, stale, unsigned, or structurally incomplete evidence.
+
+The protected CI environment must define `PRODUCTION_EVIDENCE_DIR`, `PRODUCTION_RELEASE_MANIFEST`, and `PRODUCTION_SIGNATURES_DIR` as paths accessible in the runner workspace. The canonical Python Ed25519 verifier is invoked before the GO gate; structural presence of four files is never accepted as a substitute for signature validation.
+
+The required live evidence set is:
+
+```text
+cluster_version.txt
+rollout-status.txt
+workload-state.yaml
+adapter-hpa-validation-final.json
+hpa-live-samples.log
+metric-baseline.json
+postgres-contention.json
+istio-mtls-rbac.json
+otel-trace-health.json
+fabric-commit-latency.json
+vault-rotation-canary.json
+worm-object-lock.json
+hsm-key-custody.json
+dr-recovery.json
+```
+
+The following remain external prerequisites and cannot be generated honestly by a repository-only run: Docker/Kind or an authorized Kubernetes cluster, Prometheus and Prometheus Adapter, PostgreSQL 16 load evidence, Istio STRICT/RBAC evidence, OTel traces, multi-peer Fabric endorsement and commit evidence, live Vault rotation, S3-compatible 401/403 recovery, WORM Object Lock verification, HSM custody evidence, and an authorized disaster-recovery rehearsal. Until those artifacts are captured and independently approved, the correct status is NO-GO.
+
+## Tool-installation security requirements
+
+The runner pins kubectl, Helm, and Kind versions. Every new download and every cached executable is checksum-verified when the corresponding `KUBECTL_SHA256`, `HELM_SHA256`, `KIND_SHA256`, or `HELM_BINARY_SHA256` value is supplied. Missing checksums are allowed only for an explicitly disposable local run with `ALLOW_UNVERIFIED_DOWNLOADS=true`; that override is rejected whenever `CI=true`. CI and production must provide official release checksums and must not rely on unverified downloads.
+
+The runner executes repository-static validation before checking Docker, so missing container tooling still produces useful static evidence. It never treats the absence of Docker, a cluster, or external metrics as a successful live validation.
+
+## Current readiness decision
+
+The repository implementation is **conditionally staging-ready but not production GO**. The code and static gates are implemented; live infrastructure evidence and regulated operational approvals remain mandatory. A production deployment must be blocked unless the machine-enforced GO gate returns `production_go: true` and the four approval roles independently sign the exact release manifest.
+
+References: [1] [Kubernetes kubectl release verification](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/) [2] [Helm installation and releases](https://helm.sh/docs/intro/install/) [3] [Kind quick start](https://kind.sigs.k8s.io/docs/user/quick-start/)
+
+[1]: https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/
+[2]: https://helm.sh/docs/intro/install/
+[3]: https://kind.sigs.k8s.io/docs/user/quick-start/

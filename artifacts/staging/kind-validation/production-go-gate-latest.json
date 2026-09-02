@@ -1,0 +1,27 @@
+{
+  "status": "FAIL",
+  "production_go": false,
+  "live_cluster_evidence_required": true,
+  "checks": [
+    {
+      "name": "live_evidence_complete",
+      "status": "FAIL",
+      "detail": "missing: adapter-hpa-validation-final.json, cluster_version.txt, dr-recovery.json, fabric-commit-latency.json, hpa-live-samples.log, hsm-key-custody.json, istio-mtls-rbac.json, metric-baseline.json, otel-trace-health.json, postgres-contention.json, rollout-status.txt, vault-rotation-canary.json, workload-state.yaml, worm-object-lock.json"
+    },
+    {
+      "name": "immutable_image",
+      "status": "FAIL",
+      "detail": "image must use a 64-hex sha256 digest"
+    },
+    {
+      "name": "manifest_bindings",
+      "status": "PASS",
+      "detail": "WORM retention and reconciliation run ID are present"
+    },
+    {
+      "name": "four_role_signatures",
+      "status": "FAIL",
+      "detail": "signature directory does not exist"
+    }
+  ]
+}
