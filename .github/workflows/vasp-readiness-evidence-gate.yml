@@ -59,7 +59,7 @@ jobs:
           evidence-kit/ci_validate_vasp_readiness.sh
       - name: Upload local validation report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: vasp-readiness-local-validation
           path: ci-readonly-output/
@@ -111,7 +111,7 @@ jobs:
           READ_ONLY_AUDITOR_TOKEN="$READ_ONLY_AUDITOR_TOKEN" \
           evidence-kit/ci_validate_vasp_readiness.sh
       - name: Upload read-only status output
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: vasp-readiness-staging-status
           path: ci-readonly-output/
