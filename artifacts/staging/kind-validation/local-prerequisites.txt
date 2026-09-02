@@ -1,0 +1,4 @@
+kind=missing
+docker=missing
+helm=missing
+kubectl=missing

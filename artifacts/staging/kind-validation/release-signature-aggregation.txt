@@ -1,0 +1,1 @@
+four-role aggregated failure: PASS

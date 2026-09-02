@@ -1,0 +1,1 @@
+PASS dedicated_worker=true replicas=2..8 adapter_metric=umoja_fabric_queue_depth
