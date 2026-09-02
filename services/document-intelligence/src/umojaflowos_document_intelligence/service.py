@@ -3,16 +3,44 @@ from __future__ import annotations
 import hashlib
 import importlib.metadata
 import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from pydantic import ValidationError
 
 from .contracts import AnalysisDisposition, AnalysisRequest, DocumentAnalysisResult, EngineProvenance, EvidenceSignal
 from .ollama_adapter import OllamaUnavailable, OllamaVisualAdapter, unavailable_signal
 
+_resource = Resource.create({
+    "service.name": os.getenv("OTEL_SERVICE_NAME", "document-intelligence"),
+    "service.namespace": "umojaflowos",
+    "deployment.environment": os.getenv("OTEL_ENVIRONMENT", "local"),
+})
+_provider = TracerProvider(resource=_resource)
+_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+trace.set_tracer_provider(_provider)
+_tracer = trace.get_tracer("umojaflowos.document-intelligence")
 app = FastAPI(title="UmojaFlowOS Document Intelligence", version="0.1.0")
+FastAPIInstrumentor.instrument_app(app, excluded_urls="healthz")
+HTTPXClientInstrumentor().instrument()
+
+@app.middleware("http")
+async def add_safe_telemetry_attributes(request: Request, call_next):
+    span = trace.get_current_span()
+    tenant_id = request.headers.get("x-tenant-id")
+    if tenant_id:
+        span.set_attribute("tenant.id", tenant_id[:128])
+    span.set_attribute("umoja.request.path", request.url.path)
+    return await call_next(request)
 
 
 def _sha256(value: bytes | str) -> str:
@@ -123,4 +151,7 @@ async def analyse_document(
         raise HTTPException(status_code=422, detail="uploaded MIME type does not match declared MIME type")
     content = await document.read()
     _ensure_content_matches_claim(content, request)
-    return await _analyse_file(request, content)
+    with _tracer.start_as_current_span("document.analyse") as span:
+        span.set_attribute("document.source_sha256", request.source_sha256)
+        span.set_attribute("document.mime_type", request.mime_type)
+        return await _analyse_file(request, content)

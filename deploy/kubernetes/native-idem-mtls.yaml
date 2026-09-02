@@ -1,0 +1,123 @@
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: native-idem-strict
+  namespace: umoja-payment
+spec:
+  mtls:
+    mode: STRICT
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: native-idem-allow-internal
+  namespace: umoja-payment
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: umoja-payment-engine
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/umoja-payment/sa/umoja-payment-engine
+              - cluster.local/ns/umoja-reconciliation/sa/umoja-reconciliation-worker
+      to:
+        - operation:
+            ports: ["8081", "8443"]
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: native-idem-engine-mtls
+  namespace: umoja-payment
+spec:
+  host: umoja-payment-engine.umoja-payment.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      tcp:
+        maxConnections: 256
+        connectTimeout: 3s
+      http:
+        http2MaxRequests: 1000
+        maxRequestsPerConnection: 100
+---
+# Kafka and TigerBeetle are configured with application-level TLS as well as
+# mesh mTLS. This protects protocol traffic even when a broker/ledger is not
+# sidecar-injected and makes cross-region connectivity explicit.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: native-idem-kafka-client
+  namespace: umoja-payment
+spec:
+  secretName: native-idem-kafka-client-tls
+  duration: 24h
+  renewBefore: 8h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    name: umoja-intermediate-ca
+    kind: ClusterIssuer
+  usages: [client auth]
+  subject:
+    organizations: [Newwave-UmojaFlowOS]
+  commonName: payment-engine.kafka.client
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: native-idem-tigerbeetle-client
+  namespace: umoja-payment
+spec:
+  secretName: native-idem-tigerbeetle-client-tls
+  duration: 24h
+  renewBefore: 8h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    name: umoja-intermediate-ca
+    kind: ClusterIssuer
+  usages: [client auth]
+  subject:
+    organizations: [Newwave-UmojaFlowOS]
+  commonName: payment-engine.tigerbeetle.client
+---
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: kafka-regional-endpoints
+  namespace: umoja-payment
+spec:
+  hosts:
+    - kafka.region-a.umoja.internal
+    - kafka.region-b.umoja.internal
+  location: MESH_EXTERNAL
+  ports:
+    - number: 9093
+      name: tls
+      protocol: TLS
+  resolution: DNS
+---
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: tigerbeetle-regional-endpoints
+  namespace: umoja-payment
+spec:
+  hosts:
+    - tigerbeetle.region-a.umoja.internal
+    - tigerbeetle.region-b.umoja.internal
+  location: MESH_EXTERNAL
+  ports:
+    - number: 3000
+      name: tcp-tigerbeetle
+      protocol: TCP
+  resolution: DNS

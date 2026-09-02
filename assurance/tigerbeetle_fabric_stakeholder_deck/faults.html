@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  .slide-container { width: 1280px; min-height: 720px; background: #0b1324; color: #f4f7fb; font-family: Arial, Helvetica, sans-serif; position: relative; overflow: hidden; }
+  .content { padding: 58px 76px 0; }
+  .kicker { color: #63d2c8; font-size: 16px; letter-spacing: 3px; text-transform: uppercase; font-weight: bold; }
+  .title { font-size: 43px; line-height: 1.08; margin-top: 14px; max-width: 820px; }
+  .table-container { margin-top: 48px; width: 100%; }
+  table { width: 100%; border-collapse: collapse; border-top: 3px solid #63d2c8; }
+  th { text-align: left; padding: 20px; font-size: 18px; color: #8fa1ba; text-transform: uppercase; letter-spacing: 1.5px; border-bottom: 1px solid #40516c; }
+  td { padding: 24px 20px; font-size: 20px; line-height: 1.4; border-bottom: 1px solid #1e2d44; vertical-align: top; }
+  .scenario { color: #f3c969; font-weight: bold; width: 300px; }
+  .response { color: #f4f7fb; }
+  .safety { color: #63d2c8; width: 350px; }
+  .bottom-note { position: absolute; left: 76px; right: 76px; bottom: 60px; border-top: 1px solid #40516c; padding-top: 20px; font-size: 21px; color: #f3c969; }
+  .bottom-note span { color: #c4cfde; }
+</style>
+</head>
+<body>
+<div class="slide-container">
+  <div class="content">
+    <div class="kicker">Fault Tolerance</div>
+    <div class="title">Faults hold risk—they do not move it.</div>
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Scenario</th>
+            <th>System Response</th>
+            <th>Stakeholder Safety</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="scenario">TigerBeetle Quorum Loss</td>
+            <td class="response">Immediate settlement fence. No new postings accepted until cluster authority is proven.</td>
+            <td class="safety">Zero double-spending. Zero balance corruption.</td>
+          </tr>
+          <tr>
+            <td class="scenario">Byzantine Fabric Response</td>
+            <td class="response">Digest mismatch detected. Evidence held as UNKNOWN. No blind retries permitted.</td>
+            <td class="safety">No false attestations. Audit trail preserved for review.</td>
+          </tr>
+          <tr>
+            <td class="scenario">Network Partition</td>
+            <td class="response">Transaction held in durable PostgreSQL state. Read-only reconciliation after healing.</td>
+            <td class="safety">Funds remain safe. No duplicate provider submissions.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="bottom-note">The Rule: <span>Any ambiguity in the ledger or attestation layer triggers a fail-closed state. Human review is required for resumption.</span></div>
+</div>
+</body>
+</html>

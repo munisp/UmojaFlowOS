@@ -1,0 +1,100 @@
+{
+  "project_info": {
+    "title": "TigerBeetle Incident Readiness",
+    "created": 1788263161.422,
+    "last_updated": 1788263272.857,
+    "total_slides": 8
+  },
+  "slides": [
+    {
+      "id": "cover",
+      "state": "edited",
+      "pageNum": 1
+    },
+    {
+      "id": "audit_decision",
+      "state": "edited",
+      "pageNum": 2
+    },
+    {
+      "id": "failure_model",
+      "state": "edited",
+      "pageNum": 3
+    },
+    {
+      "id": "monitoring_posture",
+      "state": "edited",
+      "pageNum": 4
+    },
+    {
+      "id": "tabletop_readiness",
+      "state": "edited",
+      "pageNum": 5
+    },
+    {
+      "id": "evidence_gates",
+      "state": "edited",
+      "pageNum": 6
+    },
+    {
+      "id": "leadership_actions",
+      "state": "edited",
+      "pageNum": 7
+    },
+    {
+      "id": "closing",
+      "state": "edited",
+      "pageNum": 8
+    }
+  ],
+  "outline": [
+    {
+      "id": "cover",
+      "title": "TigerBeetle Incident Readiness",
+      "summary": "Executive briefing for the upcoming regulatory audit. Presents the incident-response posture, monitoring controls, tabletop readiness, and remaining evidence conditions.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "audit_decision",
+      "title": "Current Audit Decision",
+      "summary": "Technical controls are conditionally ready for exercised local paths, while regulatory and live-activation evidence remains conditional on authorized staging proof.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "failure_model",
+      "title": "What We Detect and Contain",
+      "summary": "Shows the split-brain threat model: quorum loss, divergent node views, UNKNOWN transfers, reconciliation mismatches, and telemetry loss, with settlement fencing as the control response.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "monitoring_posture",
+      "title": "Early-Warning Monitoring Posture",
+      "summary": "Summarizes the 10 Prometheus rules and their operational actions, including paging, settlement fencing, reconciliation, and recovery holds.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "tabletop_readiness",
+      "title": "Tabletop Exercise Readiness",
+      "summary": "Explains the 90-minute exercise structure, roles, timed injects, success criteria, and scoring threshold for Engineering and Compliance.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "evidence_gates",
+      "title": "Evidence and Sign-Off Gates",
+      "summary": "Maps TigerBeetle evidence to E-04, E-06, E-08, and E-09, and shows the four independent approval roles and immutable manifest requirements.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "leadership_actions",
+      "title": "Leadership Actions Before Reassessment",
+      "summary": "Lists the decisions and evidence commitments needed before external reassessment: authorized staging, independent reconciliation, immutable evidence, and four-role approval.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "closing",
+      "title": "Decision Required",
+      "summary": "Closing message: remain fail-closed, fund the remediation and exercise, and advance only when independent evidence supports the next regulatory gate.",
+      "image_plan": "Use a suitable image if needed"
+    }
+  ]
+}

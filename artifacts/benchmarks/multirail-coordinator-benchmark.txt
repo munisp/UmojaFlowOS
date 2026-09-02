@@ -1,0 +1,12 @@
+goos: linux
+goarch: amd64
+pkg: github.com/munisp/UmojaFlowOS/services/payment-engine/multirail
+cpu: Intel(R) Xeon(R) Processor @ 2.50GHz
+BenchmarkCoordinatorConcurrentSingleFlight     	 4895677	       731.4 ns/op	     288 B/op	       4 allocs/op
+BenchmarkCoordinatorConcurrentSingleFlight-4   	 5163518	       754.1 ns/op	     288 B/op	       4 allocs/op
+BenchmarkCoordinatorConcurrentSingleFlight-8   	 4221362	       803.2 ns/op	     288 B/op	       4 allocs/op
+BenchmarkCoordinatorConcurrentDistinctKeys     	 1000000	      3684 ns/op	     997 B/op	       5 allocs/op
+BenchmarkCoordinatorConcurrentDistinctKeys-4   	 1000000	      3349 ns/op	     995 B/op	       5 allocs/op
+BenchmarkCoordinatorConcurrentDistinctKeys-8   	 1000000	      3498 ns/op	     995 B/op	       5 allocs/op
+PASS
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/multirail	23.845s

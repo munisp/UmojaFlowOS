@@ -1,0 +1,120 @@
+import { createHash, randomUUID } from "node:crypto";
+import type { PoolClient } from "pg";
+import { notifyOwner } from "./_core/notification";
+import { appendSegregationOfDutiesAuditLog } from "./segregationOfDutiesAuditLog";
+import { getPool } from "./postgres";
+
+const ADVISORY_LOCK_KEY = 8_702_041_914;
+const QUERY_VERSION = "sod-readiness-v1";
+const MIN_INTERVAL_SECONDS = 60;
+const MAX_INTERVAL_SECONDS = 3_600;
+const DEFAULT_LOCK_RETRY_ATTEMPTS = 3;
+const MAX_LOCK_RETRY_ATTEMPTS = 5;
+const DEFAULT_LOCK_RETRY_BACKOFF_MS = 250;
+const MAX_LOCK_RETRY_BACKOFF_MS = 5_000;
+
+type EvaluationState = "clean" | "exceptions_detected" | "indeterminate";
+type Violation = {
+  dossierId: string;
+  itemId: string;
+  area: string;
+  code: "self_verification" | "invalid_state" | "invalid_dossier_total";
+  evidenceRecordedBy?: string | null;
+  verifiedBy?: string | null;
+};
+
+type MonitorActor = { subject: string; role: "system_monitor" };
+
+export type SoDMonitorResult = {
+  status: "clean" | "exceptions_detected" | "leader_unavailable" | "indeterminate";
+  exceptionCount: number;
+  correlationId?: string;
+  reason?: string;
+};
+
+function strictEnabled(value: string | undefined): boolean {
+  if (value === undefined || value === "" || value === "false") return false;
+  if (value === "true") return true;
+  throw new Error("UMOJA_SOD_MONITOR_ENABLED must be true or false");
+}
+
+function configuredInterval(value: string | undefined): number {
+  if (value === undefined || value === "") return 300;
+  if (!/^[0-9]+$/.test(value)) throw new Error("UMOJA_SOD_MONITOR_INTERVAL_SECONDS must be an integer");
+  const seconds = Number(value);
+  if (!Number.isSafeInteger(seconds) || seconds < MIN_INTERVAL_SECONDS || seconds > MAX_INTERVAL_SECONDS) {
+    throw new Error(`UMOJA_SOD_MONITOR_INTERVAL_SECONDS must be between ${MIN_INTERVAL_SECONDS} and ${MAX_INTERVAL_SECONDS}`);
+  }
+  return seconds;
+}
+
+function configuredSubject(value: string | undefined): string {
+  const subject = value?.trim();
+  if (!subject || subject.length < 3 || subject.length > 255) {
+    throw new Error("UMOJA_SOD_MONITOR_SUBJECT must be a non-empty internal service subject");
+  }
+  return subject;
+}
+
+function configuredLockRetryAttempts(value: string | undefined): number {
+  if (value === undefined || value === "") return DEFAULT_LOCK_RETRY_ATTEMPTS;
+  if (!/^[0-9]+$/.test(value)) throw new Error("UMOJA_SOD_LOCK_RETRY_ATTEMPTS must be an integer");
+  const attempts = Number(value);
+  if (!Number.isSafeInteger(attempts) || attempts < 1 || attempts > MAX_LOCK_RETRY_ATTEMPTS) {
+    throw new Error(`UMOJA_SOD_LOCK_RETRY_ATTEMPTS must be between 1 and ${MAX_LOCK_RETRY_ATTEMPTS}`);
+  }
+  return attempts;
+}
+
+function configuredLockRetryBackoff(value: string | undefined): number {
+  if (value === undefined || value === "") return DEFAULT_LOCK_RETRY_BACKOFF_MS;
+  if (!/^[0-9]+$/.test(value)) throw new Error("UMOJA_SOD_LOCK_RETRY_BACKOFF_MS must be an integer");
+  const backoff = Number(value);
+  if (!Number.isSafeInteger(backoff) || backoff < 0 || backoff > MAX_LOCK_RETRY_BACKOFF_MS) {
+    throw new Error(`UMOJA_SOD_LOCK_RETRY_BACKOFF_MS must be between 0 and ${MAX_LOCK_RETRY_BACKOFF_MS}`);
+  }
+  return backoff;
+}
+
+function retryableDatabaseError(error: unknown): boolean {
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? String((error as { code?: unknown }).code)
+    : "";
+  return ["08000", "08001", "08003", "08004", "08006", "08007", "08P01", "57P01", "57P02", "57P03"].includes(code);
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+function canonicalDigest(violations: Violation[]): string {
+  const canonical = violations
+    .map(violation => ({
+      area: violation.area,
+      code: violation.code,
+      dossierId: violation.dossierId,
+      evidenceRecordedBy: violation.evidenceRecordedBy ?? null,
+      itemId: violation.itemId,
+      verifiedBy: violation.verifiedBy ?? null,
+    }))
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+}
+
+async function acquireLeader(environment: NodeJS.ProcessEnv = process.env): Promise<(() => Promise<void>) | null> {
+  const attempts = configuredLockRetryAttempts(environment.UMOJA_SOD_LOCK_RETRY_ATTEMPTS);
+  const backoff = configuredLockRetryBackoff(environment.UMOJA_SOD_LOCK_RETRY_BACKOFF_MS);
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    let client: PoolClient | undefined;
+    try {
+      client = await getPool().connect();
+      const result = await client.query<{ acquired: boolean }>(
+        "SELECT pg_try_advisory_lock($1) AS acquired",
+        [ADVISORY_LOCK_KEY],
+      );
+      if (!result.rows[0]?.acquired) {
+        client.release();
+        return null;
+      }

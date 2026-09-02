@@ -1,0 +1,31 @@
+                                                  Table "public.cbn_sandbox_consumer_records"
+       Column       |           Type           | Collation | Nullable |      Default      | Storage  | Compression | Stats target | Description 
+--------------------+--------------------------+-----------+----------+-------------------+----------+-------------+--------------+-------------
+ id                 | uuid                     |           | not null | gen_random_uuid() | plain    |             |              | 
+ dossier_id         | uuid                     |           | not null |                   | plain    |             |              | 
+ customer_id        | uuid                     |           | not null |                   | plain    |             |              | 
+ record_kind        | text                     |           | not null |                   | extended |             |              | 
+ disclosure_version | text                     |           |          |                   | extended |             |              | 
+ evidence_uri       | text                     |           | not null |                   | extended |             |              | 
+ details            | text                     |           | not null |                   | extended |             |              | 
+ status             | text                     |           | not null |                   | extended |             |              | 
+ recorded_by        | text                     |           | not null |                   | extended |             |              | 
+ recorded_at        | timestamp with time zone |           | not null | now()             | plain    |             |              | 
+ resolved_by        | text                     |           |          |                   | extended |             |              | 
+ resolved_at        | timestamp with time zone |           |          |                   | plain    |             |              | 
+ resolution         | text                     |           |          |                   | extended |             |              | 
+Indexes:
+    "cbn_sandbox_consumer_records_pkey" PRIMARY KEY, btree (id)
+    "cbn_sandbox_consumer_records_dossier_idx" btree (dossier_id, record_kind, recorded_at DESC)
+Check constraints:
+    "cbn_sandbox_consumer_records_check" CHECK (record_kind = 'disclosure_acceptance'::text AND disclosure_version IS NOT NULL AND status = 'recorded'::text OR record_kind = 'complaint'::text)
+    "cbn_sandbox_consumer_records_check1" CHECK (status <> 'resolved'::text OR resolved_by IS NOT NULL AND resolved_at IS NOT NULL AND resolution IS NOT NULL)
+    "cbn_sandbox_consumer_records_details_check" CHECK (char_length(details) >= 10 AND char_length(details) <= 4000)
+    "cbn_sandbox_consumer_records_evidence_uri_check" CHECK (evidence_uri ~ '^https://'::text)
+    "cbn_sandbox_consumer_records_record_kind_check" CHECK (record_kind = ANY (ARRAY['disclosure_acceptance'::text, 'complaint'::text]))
+    "cbn_sandbox_consumer_records_status_check" CHECK (status = ANY (ARRAY['recorded'::text, 'under_review'::text, 'resolved'::text]))
+Foreign-key constraints:
+    "cbn_sandbox_consumer_records_customer_id_fkey" FOREIGN KEY (customer_id) REFERENCES customers(id)
+    "cbn_sandbox_consumer_records_dossier_id_fkey" FOREIGN KEY (dossier_id) REFERENCES cbn_sandbox_dossiers(id)
+Access method: heap
+

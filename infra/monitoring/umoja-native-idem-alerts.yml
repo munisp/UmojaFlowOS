@@ -1,0 +1,163 @@
+groups:
+  - name: umoja-native-idem-ledger
+    interval: 30s
+    rules:
+      - alert: UmojaTigerBeetleReplicationLagHigh
+        expr: umoja_tigerbeetle_replication_lag_seconds > 5
+        for: 30s
+        labels:
+          severity: critical
+          service: tigerbeetle
+          action: fence_settlement
+          compliance_domain: ledger_integrity
+        annotations:
+          summary: TigerBeetle replication lag exceeds SLO
+          description: Replication lag is above the approved five-second threshold. Fence all writes and retain UNKNOWN states until quorum and convergence are verified.
+          runbook_url: https://docs.example.invalid/runbooks/tigerbeetle-split-brain
+
+      - alert: UmojaTigerBeetleReplicationTelemetryAbsent
+        expr: absent(umoja_tigerbeetle_replication_lag_seconds)
+        for: 2m
+        labels:
+          severity: critical
+          service: tigerbeetle
+          action: fence_settlement
+        annotations:
+          summary: TigerBeetle replication lag telemetry is absent
+          description: Missing ledger safety telemetry is treated as unsafe. Keep settlement fenced.
+
+      - alert: UmojaKafkaConsumerLagHigh
+        expr: max by (consumer_group, topic, environment) (umoja_kafka_consumer_lag_records) > 10000
+        for: 2m
+        labels:
+          severity: critical
+          service: kafka
+          action: stop_reconciliation_promotion
+        annotations:
+          summary: Kafka reconciliation consumer lag is high
+          description: Consumer lag exceeds the approved backlog threshold. Do not promote or declare reconciliation complete.
+          runbook_url: https://docs.example.invalid/runbooks/kafka-reconciliation-lag
+
+      - alert: UmojaKafkaConsumerLagGrowing
+        expr: deriv(umoja_kafka_consumer_lag_records[10m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: kafka
+          action: investigate
+        annotations:
+          summary: Kafka consumer lag is growing
+          description: Reconciliation backlog is increasing continuously.
+
+      - alert: UmojaKafkaConsumerTelemetryAbsent
+        expr: absent(umoja_kafka_consumer_lag_records)
+        for: 2m
+        labels:
+          severity: critical
+          service: kafka
+          action: stop_reconciliation_promotion
+        annotations:
+          summary: Kafka consumer lag telemetry is absent
+          description: Missing consumer safety telemetry is treated as unsafe.
+
+      - alert: UmojaOPAPolicyDenialsSpike
+        expr: sum by (environment, reason) (rate(umoja_opa_policy_denials_total{reason=~"invalid_release|invalid_run_id|invalid_amount|invalid_asset|invalid_identity|invalid_finality|other"}[5m])) > 0.5
+        for: 2m
+        labels:
+          severity: critical
+          service: opa
+          action: hold_settlement
+          compliance_domain: policy_enforcement
+        annotations:
+          summary: OPA policy denials are spiking
+          description: OPA is denying more than 0.5 requests per second for an allowlisted reason. Hold affected settlement flows and investigate policy, payload, tenant, and release bindings.
+          runbook_url: https://docs.example.invalid/runbooks/opa-policy-denials
+
+      - alert: UmojaOPAPolicyDenialsByReason
+        expr: sum by (environment, reason) (rate(umoja_opa_policy_denials_total{reason=~"invalid_release|invalid_run_id|invalid_amount|invalid_asset|invalid_identity|invalid_finality|other"}[15m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: opa
+          action: investigate
+          compliance_domain: policy_enforcement
+        annotations:
+          summary: OPA denials persist by bounded reason
+          description: A bounded OPA denial reason has remained active for five minutes. Review client payload validation and policy changes; do not bypass the policy gate.
+          runbook_url: https://docs.example.invalid/runbooks/opa-policy-denials
+
+      - alert: UmojaOPAPolicyEvaluationErrors
+        expr: increase(umoja_opa_policy_evaluation_errors_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: opa
+          action: hold_settlement
+          compliance_domain: policy_enforcement
+        annotations:
+          summary: OPA evaluation errors detected
+          description: An unavailable or malformed OPA decision must fail closed; no settlement may proceed.
+          runbook_url: https://docs.example.invalid/runbooks/opa-policy-failures
+
+      - alert: UmojaOPAEvaluationTimeouts
+        expr: increase(umoja_opa_policy_evaluation_timeouts_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: opa
+          action: hold_settlement
+          compliance_domain: policy_enforcement
+        annotations:
+          summary: OPA evaluation timeout detected
+          description: A bounded OPA evaluation timed out. Keep settlement fail-closed and inspect OPA readiness, CPU throttling, network policy, and sidecar logs.
+          runbook_url: https://docs.example.invalid/runbooks/opa-policy-timeouts
+
+      - alert: UmojaOPAEvaluationFailuresByClass
+        expr: sum by (environment, failure_class) (increase(umoja_opa_policy_evaluation_failures_total{failure_class=~"timeout|network_timeout|upstream_5xx|malformed_response|transport_or_contract"}[5m])) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: opa
+          action: hold_settlement
+          compliance_domain: policy_enforcement
+        annotations:
+          summary: OPA evaluation failure detected by bounded class
+          description: OPA returned a bounded transport, timeout, HTTP, decode, or contract failure. No settlement may proceed without an affirmative policy decision.
+          runbook_url: https://docs.example.invalid/runbooks/opa-policy-failures
+
+      - alert: UmojaOPARetryExhaustion
+        expr: increase(umoja_opa_policy_retry_exhaustions_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: opa
+          action: hold_settlement
+          compliance_domain: policy_enforcement
+        annotations:
+          summary: OPA retry budget exhausted
+          description: The OPA retry budget was exhausted and the affected intent must be durably recorded as UNKNOWN. Do not retry settlement through a second path.
+          runbook_url: https://docs.example.invalid/runbooks/opa-policy-retry-exhaustion
+
+      - alert: UmojaOPARetryRateHigh
+        expr: sum by (environment) (rate(umoja_opa_policy_retry_attempts_total[5m])) > 1
+        for: 2m
+        labels:
+          severity: warning
+          service: opa
+          action: investigate
+        annotations:
+          summary: OPA retry rate is elevated
+          description: OPA calls are requiring repeated attempts. Investigate sidecar latency, CPU limits, node pressure, and service-mesh connectivity before failures become settlement blocks.
+
+      - alert: UmojaOPAIntegrityTelemetryAbsent
+        expr: absent(umoja_opa_policy_denials_total) or absent(umoja_opa_policy_evaluation_errors_total) or absent(umoja_opa_policy_evaluation_timeouts_total) or absent(umoja_opa_policy_evaluation_failures_total)
+        for: 5m
+        labels:
+          severity: critical
+          service: opa
+          action: hold_settlement
+          compliance_domain: policy_enforcement
+        annotations:
+          summary: OPA integrity telemetry is absent
+          description: Required policy decision or failure telemetry is missing; keep the payment engine fenced.
+          runbook_url: https://docs.example.invalid/runbooks/opa-telemetry

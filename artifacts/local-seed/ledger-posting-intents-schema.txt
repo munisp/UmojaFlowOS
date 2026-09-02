@@ -1,0 +1,29 @@
+                                                      Table "public.ledger_posting_intents"
+        Column        |           Type           | Collation | Nullable |      Default      | Storage  | Compression | Stats target | Description 
+----------------------+--------------------------+-----------+----------+-------------------+----------+-------------+--------------+-------------
+ id                   | uuid                     |           | not null | gen_random_uuid() | plain    |             |              | 
+ posting_identity     | text                     |           | not null |                   | extended |             |              | 
+ correlation_id       | text                     |           | not null |                   | extended |             |              | 
+ currency             | text                     |           | not null |                   | extended |             |              | 
+ amount_minor         | numeric(30,0)            |           | not null |                   | main     |             |              | 
+ debit_account_id     | bigint                   |           | not null |                   | plain    |             |              | 
+ credit_account_id    | bigint                   |           | not null |                   | plain    |             |              | 
+ expected_transfer_id | bigint                   |           |          |                   | plain    |             |              | 
+ intent_state         | text                     |           | not null | 'approved'::text  | extended |             |              | 
+ created_at           | timestamp with time zone |           | not null | now()             | plain    |             |              | 
+Indexes:
+    "ledger_posting_intents_pkey" PRIMARY KEY, btree (id)
+    "ledger_posting_intents_expected_transfer_id_key" UNIQUE CONSTRAINT, btree (expected_transfer_id)
+    "ledger_posting_intents_posting_identity_key" UNIQUE CONSTRAINT, btree (posting_identity)
+    "ledger_posting_intents_window_idx" btree (created_at, intent_state)
+Check constraints:
+    "ledger_posting_intents_amount_minor_check" CHECK (amount_minor > 0::numeric)
+    "ledger_posting_intents_check" CHECK (debit_account_id <> credit_account_id)
+    "ledger_posting_intents_currency_check" CHECK (currency = ANY (ARRAY['NGN'::text, 'KES'::text, 'ZAR'::text, 'USD'::text, 'USDC'::text, 'USDT'::text]))
+    "ledger_posting_intents_expected_transfer_id_check" CHECK (expected_transfer_id IS NULL OR expected_transfer_id > 0)
+    "ledger_posting_intents_intent_state_check" CHECK (intent_state = ANY (ARRAY['approved'::text, 'posted'::text, 'voided'::text, 'blocked'::text]))
+Foreign-key constraints:
+    "ledger_posting_intents_credit_account_id_fkey" FOREIGN KEY (credit_account_id) REFERENCES ledger_account_bindings(tigerbeetle_account_id)
+    "ledger_posting_intents_debit_account_id_fkey" FOREIGN KEY (debit_account_id) REFERENCES ledger_account_bindings(tigerbeetle_account_id)
+Access method: heap
+

@@ -1,0 +1,6 @@
+=== RUN   TestGRPCSettlementMutualTLSHandshakeAndAuthorization
+--- PASS: TestGRPCSettlementMutualTLSHandshakeAndAuthorization (0.02s)
+=== RUN   TestGRPCSettlementRejectsMissingClientCertificate
+--- PASS: TestGRPCSettlementRejectsMissingClientCertificate (0.01s)
+PASS
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/settlement	1.066s

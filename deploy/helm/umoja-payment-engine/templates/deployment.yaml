@@ -35,6 +35,15 @@ spec:
     spec:
       serviceAccountName: {{ include "umoja-payment-engine.serviceAccountName" . }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- if .Values.multiAz.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: {{ .Values.multiAz.maxSkew }}
+          topologyKey: {{ .Values.multiAz.topologyKey | quote }}
+          whenUnsatisfiable: {{ .Values.multiAz.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              {{- include "umoja-payment-engine.selectorLabels" . | nindent 14 }}
+      {{- end }}
       securityContext:
         {{- toYaml .Values.securityContext.pod | nindent 8 }}
       volumes:
@@ -42,6 +51,11 @@ spec:
           persistentVolumeClaim:
             claimName: {{ .Values.releaseEvidence.existingClaim }}
             readOnly: true
+        {{- if .Values.idem.opa.enabled }}
+        - name: stablecoin-intent-policy
+          configMap:
+            name: {{ .Values.idem.opa.policyConfigMap }}
+        {{- end }}
       containers:
         - name: payment-engine
           image: "{{ .Values.image.repository }}@{{ .Values.image.digest }}"
@@ -50,6 +64,10 @@ spec:
           env:
             - name: UMOJA_ENV
               value: {{ .Values.environment | quote }}
+            - name: UMOJA_IDEM_RECONCILIATION_TOPIC
+              value: {{ .Values.idem.reconciliationTopic | quote }}
+            - name: UMOJA_IDEM_OPA_ENDPOINT
+              value: {{ .Values.idem.opa.endpoint | quote }}
             - name: UMOJA_RELEASE_MANIFEST_PATH
               value: {{ .Values.releaseEvidence.manifestPath | quote }}
             - name: UMOJA_RELEASE_SIGNATURES_DIR
@@ -156,6 +174,33 @@ spec:
             failureThreshold: 3
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+        {{- if .Values.idem.opa.enabled }}
+        - name: opa
+          image: {{ .Values.idem.opa.image | quote }}
+          args: ["run", "--server", "--addr=127.0.0.1:8181", "/policy/umojaflowos_stablecoin_intent.rego"]
+          ports:
+            - name: opa-http
+              containerPort: 8181
+              protocol: TCP
+          volumeMounts:
+            - name: stablecoin-intent-policy
+              mountPath: /policy
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: opa-http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: opa-http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            {{- toYaml .Values.securityContext.container | nindent 12 }}
+        {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext.container | nindent 12 }}
       imagePullSecrets:

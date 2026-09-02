@@ -1,0 +1,27 @@
+                                                                        Table "public.external_stakeholder_assignments"
+       Column        |                  Type                  | Collation | Nullable |                      Default                       | Storage  | Compression | Stats target | Description 
+---------------------+----------------------------------------+-----------+----------+----------------------------------------------------+----------+-------------+--------------+-------------
+ id                  | uuid                                   |           | not null | gen_random_uuid()                                  | plain    |             |              | 
+ stakeholder_role    | operating_role                         |           | not null |                                                    | plain    |             |              | 
+ stakeholder_subject | text                                   |           | not null |                                                    | extended |             |              | 
+ counterparty_id     | uuid                                   |           |          |                                                    | plain    |             |              | 
+ dossier_id          | uuid                                   |           |          |                                                    | plain    |             |              | 
+ status              | external_stakeholder_assignment_status |           | not null | 'assigned'::external_stakeholder_assignment_status | plain    |             |              | 
+ assigned_by         | text                                   |           | not null |                                                    | extended |             |              | 
+ assigned_at         | timestamp with time zone               |           | not null | now()                                              | plain    |             |              | 
+ suspended_at        | timestamp with time zone               |           |          |                                                    | plain    |             |              | 
+Indexes:
+    "external_stakeholder_assignments_pkey" PRIMARY KEY, btree (id)
+    "external_stakeholder_assignme_stakeholder_role_stakeholder__key" UNIQUE CONSTRAINT, btree (stakeholder_role, stakeholder_subject, counterparty_id, dossier_id)
+    "external_stakeholder_assignments_subject_idx" btree (stakeholder_subject, status, assigned_at DESC)
+Check constraints:
+    "external_stakeholder_assignments_check" CHECK (stakeholder_role = 'provider_contact'::operating_role AND counterparty_id IS NOT NULL AND dossier_id IS NULL OR stakeholder_role = 'cbn_liaison'::operating_role AND dossier_id IS NOT NULL AND counterparty_id IS NULL)
+    "external_stakeholder_assignments_stakeholder_role_check" CHECK (stakeholder_role = ANY (ARRAY['provider_contact'::operating_role, 'cbn_liaison'::operating_role]))
+Foreign-key constraints:
+    "external_stakeholder_assignments_counterparty_id_fkey" FOREIGN KEY (counterparty_id) REFERENCES counterparties(id)
+    "external_stakeholder_assignments_dossier_id_fkey" FOREIGN KEY (dossier_id) REFERENCES cbn_sandbox_dossiers(id)
+    "external_stakeholder_assignments_stakeholder_subject_fkey" FOREIGN KEY (stakeholder_subject) REFERENCES operator_role_assignments(subject)
+Referenced by:
+    TABLE "external_stakeholder_evidence" CONSTRAINT "external_stakeholder_evidence_assignment_id_fkey" FOREIGN KEY (assignment_id) REFERENCES external_stakeholder_assignments(id)
+Access method: heap
+

@@ -1,0 +1,27 @@
+flowchart LR
+  API[Payment / Stablecoin API]
+  CO[Payment Coordinator]
+  PG[(PostgreSQL\nworkflow + idempotency)]
+  TB[TigerBeetle\nauthoritative double-entry ledger]
+  AT[Fabric Attestation Adapter]
+  GW[Fabric Gateway\nTLS + X.509/HSM signer]
+  CH[Fabric Channel]
+  CC[Consortium Attestation Chaincode]
+  OBS[OTel Collector\nPrometheus + Alertmanager]
+  WORM[(Immutable Evidence Store)]
+  API --> CO
+  CO --> PG
+  CO --> TB
+  CO --> AT
+  AT --> GW
+  GW --> CH
+  CH --> CC
+  CO --> OBS
+  AT --> OBS
+  TB --> OBS
+  PG --> WORM
+  CC --> WORM
+  CC -. advisory proof only .-> PG
+  GW -. timeout / Byzantine response .-> AT
+  AT -. hold / reconcile; never settle .-> CO
+  TB -. ledger authority .-> CO

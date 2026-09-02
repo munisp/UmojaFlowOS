@@ -1,0 +1,100 @@
+{
+  "project_info": {
+    "title": "OpenTelemetry and Alertmanager–Novu Compliance Posture",
+    "created": 1788271021.941,
+    "last_updated": 1788271247.381,
+    "total_slides": 8
+  },
+  "slides": [
+    {
+      "id": "cover",
+      "state": "edited",
+      "pageNum": 1
+    },
+    {
+      "id": "decision",
+      "state": "edited",
+      "pageNum": 2
+    },
+    {
+      "id": "architecture",
+      "state": "edited",
+      "pageNum": 3
+    },
+    {
+      "id": "coverage",
+      "state": "edited",
+      "pageNum": 4
+    },
+    {
+      "id": "alerting",
+      "state": "edited",
+      "pageNum": 5
+    },
+    {
+      "id": "chaos",
+      "state": "edited",
+      "pageNum": 6
+    },
+    {
+      "id": "audit",
+      "state": "edited",
+      "pageNum": 7
+    },
+    {
+      "id": "actions",
+      "state": "edited",
+      "pageNum": 8
+    }
+  ],
+  "outline": [
+    {
+      "id": "cover",
+      "title": "OpenTelemetry and Alertmanager–Novu Compliance Posture",
+      "summary": "Executive briefing for staging audit readiness, telemetry control coverage, and notification governance.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "decision",
+      "title": "The Platform Is Technically Conditional, Not Regulatory GO",
+      "summary": "Separate validated local controls from live staging and regulatory evidence still outstanding.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "architecture",
+      "title": "One Observability Path, Two Operational Outcomes",
+      "summary": "Show services sending OTLP to the Collector, metrics flowing to Prometheus and Alertmanager, and traces flowing to Tempo.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "coverage",
+      "title": "Coverage Is Broad; Middleware Evidence Is the Gate",
+      "summary": "Summarize Go, Rust, Python, and TypeScript instrumentation and identify middleware-specific staging proof still required.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "alerting",
+      "title": "Critical Compliance Signals Route to Human Action",
+      "summary": "Explain Collector health, export failure, refused telemetry, ledger integrity, and Novu routing controls.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "chaos",
+      "title": "Chaos Testing Is Safe by Design",
+      "summary": "Summarize the non-destructive preflight, staging authorization gate, partition test, and fail-closed outcomes.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "audit",
+      "title": "Evidence Must Prove Delivery, Not Configuration",
+      "summary": "List the artifacts needed for external audit sign-off and the remaining staging evidence gaps.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "actions",
+      "title": "Leadership Decisions Before Reassessment",
+      "summary": "Close with the decisions required to provision staging, run chaos tests, and authorize independent sign-off.",
+      "image_plan": "Use a suitable image if needed"
+    }
+  ]
+}

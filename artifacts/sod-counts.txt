@@ -1,0 +1,8 @@
+              source              | count 
+----------------------------------+-------
+ user_role_assignments            |     3
+ operator_role_assignments        |     3
+ external_stakeholder_assignments |     3
+ super_administrator_assignments  |     3
+(4 rows)
+

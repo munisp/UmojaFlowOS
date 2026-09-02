@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  .slide-container { width: 1280px; min-height: 720px; background: #f7fafc; font-family: Arial, sans-serif; color: #0b1f33; padding: 54px 70px 24px; }
+  .kicker { font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: #168f92; font-weight: 700; }
+  .title { font-size: 42px; font-weight: 700; margin-top: 12px; }
+  .rule { height: 3px; background: #15a6a6; width: 88px; margin-top: 18px; }
+  .content-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 32px; }
+  .audit-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  .audit-table th { text-align: left; padding: 12px; background: #0b1f33; color: #fff; font-size: 18px; border: 1px solid #0b1f33; }
+  .audit-table td { padding: 12px; border: 1px solid #d8e3eb; font-size: 17px; line-height: 1.4; color: #496174; vertical-align: top; }
+  .status-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+  .status-pass { background: #e6fffa; color: #168f92; }
+  .status-gap { background: #fffaf0; color: #b57b16; }
+  /* Reduced the top spacing before the summary to remove overflow while keeping title padding intact */
+  .summary-box { margin-top: 16px; padding: 20px; background: #edf2f7; border-left: 6px solid #0b1f33; }
+  .summary-box p { font-size: 19px; line-height: 1.5; color: #2d3748; }
+  .summary-box strong { color: #0b1f33; }
+</style>
+</head>
+<body>
+<div class="slide-container">
+  <div class="kicker">06 / Audit Readiness</div>
+  <h1 class="title">Evidence Must Prove Delivery, Not Configuration</h1>
+  <div class="rule"></div>
+  
+  <div class="content-grid">
+    <div class="col">
+      <table class="audit-table">
+        <thead>
+          <tr>
+            <th>Required Artifacts (E-01 to E-09)</th>
+            <th>Audit Requirement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Build Provenance (E-01)</strong></td>
+            <td>Cryptographic binding of source to binary.</td>
+          </tr>
+          <tr>
+            <td><strong>Ledger Integrity (E-04)</strong></td>
+            <td>TigerBeetle reconciliation & quorum evidence.</td>
+          </tr>
+          <tr>
+            <td><strong>Compliance Alerts (E-06)</strong></td>
+            <td>End-to-end Alertmanager-Novu delivery logs.</td>
+          </tr>
+          <tr>
+            <td><strong>Resilience Proof (E-08)</strong></td>
+            <td>Chaos partition & recovery telemetry.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <div class="col">
+      <table class="audit-table">
+        <thead>
+          <tr>
+            <th>Staging Evidence Gaps</th>
+            <th>Current Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Live Middleware Tracing</strong></td>
+            <td><span class="status-gap">Gap</span> Local contract pass only.</td>
+          </tr>
+          <tr>
+            <td><strong>Novu Bridge Delivery</strong></td>
+            <td><span class="status-gap">Gap</span> Awaiting staging webhook.</td>
+          </tr>
+          <tr>
+            <td><strong>Independent Sign-off</strong></td>
+            <td><span class="status-gap">Gap</span> Four-role manifest pending.</td>
+          </tr>
+          <tr>
+            <td><strong>W3C Trace Preservation</strong></td>
+            <td><span class="status-gap">Gap</span> Kafka/Temporal live proof.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="summary-box">
+    <p><strong>The Evidence Chain:</strong> A successful audit requires a single <strong>immutable release manifest</strong> where every artifact digest is hashed, bound to a common release SHA, and signed by four distinct authorized subjects. Configuration files are not evidence; only <strong>execution logs from authorized staging</strong> satisfy the regulatory gate.</p>
+  </div>
+</div>
+</body>
+</html>

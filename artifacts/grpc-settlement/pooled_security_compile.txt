@@ -1,0 +1,15 @@
+goos: linux
+goarch: amd64
+pkg: github.com/munisp/UmojaFlowOS/services/payment-engine/internal/settlement
+cpu: Intel(R) Xeon(R) Processor @ 2.50GHz
+BenchmarkSettlementPooledConcurrent       	    1483	   2355925 ns/op	   10657 B/op	     176 allocs/op
+BenchmarkSettlementPooledConcurrent       	    1522	   2330150 ns/op	   10653 B/op	     176 allocs/op
+BenchmarkSettlementPooledConcurrent       	    1513	   2332459 ns/op	   10654 B/op	     176 allocs/op
+BenchmarkSettlementPooledConcurrent-4     	    5463	    625873 ns/op	   10440 B/op	     163 allocs/op
+BenchmarkSettlementPooledConcurrent-4     	    5510	    622832 ns/op	   10451 B/op	     162 allocs/op
+BenchmarkSettlementPooledConcurrent-4     	    5230	    624002 ns/op	   10426 B/op	     162 allocs/op
+BenchmarkSettlementPooledConcurrent-16    	   20734	    175843 ns/op	   11082 B/op	     159 allocs/op
+BenchmarkSettlementPooledConcurrent-16    	   19797	    175690 ns/op	   11171 B/op	     159 allocs/op
+BenchmarkSettlementPooledConcurrent-16    	   20604	    174298 ns/op	   11123 B/op	     159 allocs/op
+PASS
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/settlement	41.036s

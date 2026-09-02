@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    .slide-container { width: 1280px; min-height: 720px; background: #f7fafc; font-family: Arial, sans-serif; color: #0b1f33; padding-top: 54px; padding-left: 70px; padding-right: 70px; display: flex; flex-direction: column; }
+    .kicker { font-size: 15px; letter-spacing: 3px; text-transform: uppercase; color: #168f92; font-weight: 700; }
+    .title { font-size: 42px; font-weight: 700; margin-top: 12px; }
+    .rule { height: 3px; background: #15a6a6; width: 88px; margin-top: 18px; }
+    .action-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 40px; margin-top: 60px; flex-grow: 1; }
+    .action-item { border-left: 4px solid #15a6a6; padding-left: 24px; }
+    .action-item h3 { font-size: 24px; color: #0b1f33; margin-bottom: 16px; }
+    .action-item p { font-size: 18px; line-height: 1.5; color: #496174; }
+    .footer { background: #0b1f33; color: #fff; margin-left: -70px; margin-right: -70px; padding: 40px 70px; display: flex; justify-content: space-between; align-items: center; }
+    .footer-text { font-size: 24px; font-weight: 700; color: #f5b942; }
+    .signal { display: flex; gap: 8px; }
+    .signal span { display: block; width: 12px; height: 12px; border-radius: 50%; background: #72d7d1; }
+    .signal span:nth-child(2) { background: #15a6a6; }
+    .signal span:nth-child(3) { background: #f5b942; }
+</style>
+</head>
+<body>
+<div class="slide-container">
+    <div class="kicker">07 / Next Steps</div>
+    <h1 class="title">Leadership Decisions Before Reassessment</h1>
+    <div class="rule"></div>
+    
+    <div class="action-grid">
+        <div class="action-item">
+            <h3>1. Provision Staging</h3>
+            <p>Authorize the deployment of the OpenTelemetry Collector, Prometheus, and Alertmanager in a dedicated staging environment with active Kafka and Temporal proxies.</p>
+        </div>
+        <div class="action-item" style="border-left-color: #168f92;">
+            <h3>2. Authorize Chaos</h3>
+            <p>Approve the execution of the controlled network-partition chaos tests to generate the E-08 resilience evidence required for the regulatory dossier.</p>
+        </div>
+        <div class="action-item" style="border-left-color: #f5b942;">
+            <h3>3. Independent Sign-off</h3>
+            <p>Designate the four authorized subjects for the Release Manager, Security, Compliance, and Operations roles to sign the immutable release manifest.</p>
+        </div>
+    </div>
+
+    <div class="footer">
+        <div class="footer-text">Final Disposition: NO-GO Pending Staging Evidence</div>
+        <div class="signal">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </div>
+</div>
+</body>
+</html>

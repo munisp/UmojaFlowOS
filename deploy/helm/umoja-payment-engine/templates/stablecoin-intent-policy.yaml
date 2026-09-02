@@ -1,0 +1,11 @@
+{{- if .Values.idem.opa.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.idem.opa.policyConfigMap }}
+  labels:
+    {{- include "umoja-payment-engine.labels" . | nindent 4 }}
+data:
+  umojaflowos_stablecoin_intent.rego: |
+{{ .Files.Get "files/umojaflowos_stablecoin_intent.rego" | indent 4 }}
+{{- end }}

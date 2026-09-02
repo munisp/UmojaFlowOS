@@ -33,6 +33,7 @@ from .lakehouse_catalog import CATALOG_SOURCES, write_catalog_evidence
 from .lifecycle_event_lakehouse import LifecycleEventProjectionError, project_lifecycle_event
 from .sedona_livy import SedonaAggregateJobClient, SedonaLivyConfig, SedonaUnavailable
 from .geolibre_project import GeoLibrePublicationError, build_aggregate_project
+from .observability import configure as configure_observability
 from .regulatory_submission import (
     AuthorisedRegulatoryChannel,
     RegulatorySubmissionRequest,
@@ -255,6 +256,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="UmojaFlowOS Reporting Analytics", version="1.0.0", lifespan=lifespan)
+configure_observability(app)
 
 # Envelope identity published in docs/service-contracts.md and pinned by the
 # TypeScript control plane with strict literals. Changing any of these strings is

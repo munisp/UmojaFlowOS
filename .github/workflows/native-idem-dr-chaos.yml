@@ -1,0 +1,85 @@
+name: Native Idem DR Chaos
+
+on:
+  workflow_dispatch:
+    inputs:
+      chaos_approved:
+        description: Type STAGING_CHAOS_APPROVED to authorize disposable chaos
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  dr-chaos:
+    if: ${{ inputs.chaos_approved == 'STAGING_CHAOS_APPROVED' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: helm/kind-action@v1.10.0
+        with:
+          version: v0.25.0
+          node_image: kindest/node:v1.31.2
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+      - name: Create isolated namespace
+        run: kubectl create namespace umoja-chaos
+      - name: Deploy disposable workload
+        run: |
+          set -Eeuo pipefail
+          helm upgrade --install umoja-payment-engine deploy/helm/umoja-payment-engine \
+            --namespace umoja-chaos --create-namespace \
+            --set image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+            --set objectStorage.endpoint=https://s3-compatible.invalid \
+            --set objectStorage.bucket=umoja-release-evidence \
+            --set vault.address=https://vault.invalid \
+            --set vault.objectStorageSecretPath=secret/data/umoja/object-storage \
+            --set idem.opa.enabled=true \
+            --wait --timeout 5m
+      - name: Capture pre-fault state
+        run: |
+          set -Eeuo pipefail
+          mkdir -p evidence
+          kubectl get nodes -o wide > evidence/nodes-before.txt
+          kubectl get pods -n umoja-chaos -o wide > evidence/pods-before.txt
+          kubectl get events -n umoja-chaos --sort-by=.lastTimestamp > evidence/events-before.txt
+      - name: Inject disposable network partition
+        env:
+          CHAOS_APPROVED: ${{ inputs.chaos_approved }}
+        run: |
+          set -Eeuo pipefail
+          test "$CHAOS_APPROVED" = STAGING_CHAOS_APPROVED
+          kubectl apply -n umoja-chaos -f - <<'YAML'
+          apiVersion: chaos-mesh.org/v1alpha1
+          kind: NetworkChaos
+          metadata:
+            name: native-idem-partition
+          spec:
+            action: partition
+            mode: all
+            selector:
+              namespaces: [umoja-chaos]
+              labelSelectors:
+                app.kubernetes.io/name: umoja-payment-engine
+            direction: both
+            duration: "30s"
+          YAML
+      - name: Verify fail-closed outcome
+        run: |
+          set -Eeuo pipefail
+          sleep 35
+          kubectl get networkchaos -n umoja-chaos -o yaml > evidence/networkchaos.yaml
+          kubectl get pods -n umoja-chaos -o wide > evidence/pods-after.txt
+          kubectl get events -n umoja-chaos --sort-by=.lastTimestamp > evidence/events-after.txt
+          kubectl logs -n umoja-chaos -l app.kubernetes.io/name=umoja-payment-engine --all-containers > evidence/payment-engine.log || true
+          grep -Eiq 'UNKNOWN|fenced|quorum|partition' evidence/payment-engine.log
+      - name: Upload simulation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-idem-dr-chaos-${{ github.run_id }}
+          path: evidence/
+          if-no-files-found: error

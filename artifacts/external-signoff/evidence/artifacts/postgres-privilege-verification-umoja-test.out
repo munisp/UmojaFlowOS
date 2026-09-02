@@ -1,0 +1,282 @@
+== roles ==
+        rolname         | rolsuper | rolcreatedb | rolcreaterole | rolinherit | rolcanlogin 
+------------------------+----------+-------------+---------------+------------+-------------
+ assurance_schema_owner | f        | f           | f             | f          | t
+ umoja_app              | f        | f           | f             | f          | t
+(2 rows)
+
+== database ==
+  datname   |         owner          | app_connect | app_database_create 
+------------+------------------------+-------------+---------------------
+ umoja_test | assurance_schema_owner | t           | f
+(1 row)
+
+== role memberships ==
+ member | granted_role 
+--------+--------------
+(0 rows)
+
+== public schema privileges ==
+ app_usage | app_create | owner_create 
+-----------+------------+--------------
+ t         | f          | t
+(1 row)
+
+== app table grants ==
+ table_schema |                 table_name                 | privilege_type 
+--------------+--------------------------------------------+----------------
+ public       | activity_events                            | INSERT
+ public       | activity_events                            | SELECT
+ public       | adapter_certification_evidence             | SELECT
+ public       | administrator_approval_decisions           | SELECT
+ public       | administrator_governance_audit             | SELECT
+ public       | administrator_kyc_escalations              | SELECT
+ public       | administrator_kyc_evidence                 | SELECT
+ public       | administrator_kyc_evidence_requests        | SELECT
+ public       | administrator_kyc_oversize_exceptions      | SELECT
+ public       | administrator_kyc_review_entries           | SELECT
+ public       | administrator_kyc_reviews                  | SELECT
+ public       | administrator_kyc_upload_intents           | SELECT
+ public       | administrator_kyc_upload_policy            | SELECT
+ public       | administrator_kyc_upload_policy_audit      | SELECT
+ public       | alert_policies                             | INSERT
+ public       | alert_policies                             | SELECT
+ public       | alert_policies                             | UPDATE
+ public       | aml_screening_checks                       | INSERT
+ public       | aml_screening_checks                       | SELECT
+ public       | auditor_engagement_records                 | INSERT
+ public       | auditor_engagement_records                 | SELECT
+ public       | auditor_engagement_records                 | UPDATE
+ public       | authorised_execution_tests                 | SELECT
+ public       | bank_evidence_items                        | INSERT
+ public       | bank_evidence_items                        | SELECT
+ public       | beneficiaries                              | INSERT
+ public       | beneficiaries                              | SELECT
+ public       | beneficiaries                              | UPDATE
+ public       | cbn_sandbox_consumer_records               | INSERT
+ public       | cbn_sandbox_consumer_records               | SELECT
+ public       | cbn_sandbox_dossiers                       | INSERT
+ public       | cbn_sandbox_dossiers                       | SELECT
+ public       | cbn_sandbox_dossiers                       | UPDATE
+ public       | cbn_sandbox_evidence_assessments           | INSERT
+ public       | cbn_sandbox_evidence_assessments           | SELECT
+ public       | cbn_sandbox_evidence_items                 | INSERT
+ public       | cbn_sandbox_evidence_items                 | SELECT
+ public       | cbn_sandbox_incidents                      | INSERT
+ public       | cbn_sandbox_incidents                      | SELECT
+ public       | cbn_sandbox_reporting_packs                | INSERT
+ public       | cbn_sandbox_reporting_packs                | SELECT
+ public       | cbn_sandbox_test_plans                     | INSERT
+ public       | cbn_sandbox_test_plans                     | SELECT
+ public       | cbn_sandbox_test_plans                     | UPDATE
+ public       | compliance_alerts                          | INSERT
+ public       | compliance_alerts                          | SELECT
+ public       | compliance_alerts                          | UPDATE
+ public       | compliance_cases                           | INSERT
+ public       | compliance_cases                           | SELECT
+ public       | compliance_cases                           | UPDATE
+ public       | compliance_vendor_evidence_items           | INSERT
+ public       | compliance_vendor_evidence_items           | SELECT
+ public       | compliance_vendor_gate_decisions           | INSERT
+ public       | compliance_vendor_gate_decisions           | SELECT
+ public       | control_assurance_assessments              | SELECT
+ public       | control_audit_packets                      | SELECT
+ public       | control_evidence_outbox                    | INSERT
+ public       | control_evidence_outbox                    | SELECT
+ public       | control_evidence_outbox                    | UPDATE
+ public       | corridor_policies                          | INSERT
+ public       | corridor_policies                          | SELECT
+ public       | corridor_policies                          | UPDATE
+ public       | counterparties                             | INSERT
+ public       | counterparties                             | SELECT
+ public       | counterparties                             | UPDATE
+ public       | counterparty_authorizations                | INSERT
+ public       | counterparty_authorizations                | SELECT
+ public       | counterparty_authorizations                | UPDATE
+ public       | counterparty_crypto_posture_decisions      | INSERT
+ public       | counterparty_crypto_posture_decisions      | SELECT
+ public       | counterparty_evidence_items                | INSERT
+ public       | counterparty_evidence_items                | SELECT
+ public       | counterparty_financial_soundness_decisions | INSERT
+ public       | counterparty_financial_soundness_decisions | SELECT
+ public       | counterparty_onboarding_gate_decisions     | INSERT
+ public       | counterparty_onboarding_gate_decisions     | SELECT
+ public       | counterparty_onboardings                   | INSERT
+ public       | counterparty_onboardings                   | SELECT
+ public       | counterparty_onboardings                   | UPDATE
+ public       | counterparty_risk_assessments              | INSERT
+ public       | counterparty_risk_assessments              | SELECT
+ public       | customer_destination_counterparties        | INSERT
+ public       | customer_destination_counterparties        | SELECT
+ public       | customer_use_case_gate_decisions           | INSERT
+ public       | customer_use_case_gate_decisions           | SELECT
+ public       | customers                                  | INSERT
+ public       | customers                                  | SELECT
+ public       | customers                                  | UPDATE
+ public       | document_analysis_evidence                 | INSERT
+ public       | document_analysis_evidence                 | SELECT
+ public       | document_analysis_jobs                     | INSERT
+ public       | document_analysis_jobs                     | SELECT
+ public       | document_analysis_jobs                     | UPDATE
+ public       | enterprise_governance_reviews              | SELECT
+ public       | execution_approval_rehearsals              | SELECT
+ public       | external_stakeholder_assignments           | INSERT
+ public       | external_stakeholder_assignments           | SELECT
+ public       | external_stakeholder_assignments           | UPDATE
+ public       | external_stakeholder_evidence              | INSERT
+ public       | external_stakeholder_evidence              | SELECT
+ public       | governed_bank_accounts                     | SELECT
+ public       | imto_readiness_assessments                 | SELECT
+ public       | imto_readiness_evidence_items              | SELECT
+ public       | imto_readiness_profiles                    | SELECT
+ public       | integration_connections                    | INSERT
+ public       | integration_connections                    | SELECT
+ public       | integration_connections                    | UPDATE
+ public       | kyc_document_upload_intents                | INSERT
+ public       | kyc_document_upload_intents                | SELECT
+ public       | kyc_document_upload_intents                | UPDATE
+ public       | kyc_documents                              | INSERT
+ public       | kyc_documents                              | SELECT
+ public       | kyc_documents                              | UPDATE
+ public       | ledger_account_bindings                    | INSERT
+ public       | ledger_account_bindings                    | SELECT
+ public       | ledger_posting_intents                     | INSERT
+ public       | ledger_posting_intents                     | SELECT
+ public       | ledger_reconciliation_discrepancies        | INSERT
+ public       | ledger_reconciliation_discrepancies        | SELECT
+ public       | ledger_reconciliation_runs                 | INSERT
+ public       | ledger_reconciliation_runs                 | SELECT
+ public       | legal_entities                             | INSERT
+ public       | legal_entities                             | SELECT
+ public       | legal_entities                             | UPDATE
+ public       | liquidity_governance_policies              | SELECT
+ public       | liquidity_positions                        | INSERT
+ public       | liquidity_positions                        | SELECT
+ public       | liquidity_positions                        | UPDATE
+ public       | market_observations                        | INSERT
+ public       | market_observations                        | SELECT
+ public       | notification_deliveries                    | INSERT
+ public       | notification_deliveries                    | SELECT
+ public       | operator_access_requests                   | INSERT
+ public       | operator_access_requests                   | SELECT
+ public       | operator_access_requests                   | UPDATE
+ public       | operator_onboarding_records                | INSERT
+ public       | operator_onboarding_records                | SELECT
+ public       | operator_onboarding_records                | UPDATE
+ public       | operator_role_assignments                  | INSERT
+ public       | operator_role_assignments                  | SELECT
+ public       | operator_role_assignments                  | UPDATE
+ public       | payment_legs                               | INSERT
+ public       | payment_legs                               | SELECT
+ public       | payment_legs                               | UPDATE
+ public       | payment_orders                             | INSERT
+ public       | payment_orders                             | SELECT
+ public       | payment_orders                             | UPDATE
+ public       | policy_decisions                           | INSERT
+ public       | policy_decisions                           | SELECT
+ public       | postgres_cutover_runs                      | INSERT
+ public       | postgres_cutover_runs                      | SELECT
+ public       | postgres_cutover_table_reconciliations     | INSERT
+ public       | postgres_cutover_table_reconciliations     | SELECT
+ public       | provider_reconciliation_decision           | SELECT
+ public       | provider_send_requests                     | INSERT
+ public       | provider_send_requests                     | SELECT
+ public       | provider_send_requests                     | UPDATE
+ public       | provider_unknown_reconciliation            | SELECT
+ public       | psp_evidence_items                         | INSERT
+ public       | psp_evidence_items                         | SELECT
+ public       | psp_gate_decisions                         | INSERT
+ public       | psp_gate_decisions                         | SELECT
+ public       | rate_locks                                 | INSERT
+ public       | rate_locks                                 | SELECT
+ public       | rate_locks                                 | UPDATE
+ public       | regulatory_deadlines                       | INSERT
+ public       | regulatory_deadlines                       | SELECT
+ public       | regulatory_deadlines                       | UPDATE
+ public       | regulatory_reports                         | INSERT
+ public       | regulatory_reports                         | SELECT
+ public       | regulatory_reports                         | UPDATE
+ public       | regulatory_submission_attempts             | INSERT
+ public       | regulatory_submission_attempts             | SELECT
+ public       | sar_str_filings                            | INSERT
+ public       | sar_str_filings                            | SELECT
+ public       | sar_str_filings                            | UPDATE
+ public       | scheduled_jobs                             | INSERT
+ public       | scheduled_jobs                             | SELECT
+ public       | scheduled_jobs                             | UPDATE
+ public       | schema_migrations                          | SELECT
+ public       | segregation_of_duties_evaluation_runs      | INSERT
+ public       | segregation_of_duties_evaluation_runs      | SELECT
+ public       | service_health_samples                     | INSERT
+ public       | service_health_samples                     | SELECT
+ public       | spend_card_programmes                      | SELECT
+ public       | spend_policy_rules                         | SELECT
+ public       | stablecoin_execution_evidence              | SELECT
+ public       | stablecoin_issuer_evidence_items           | INSERT
+ public       | stablecoin_issuer_evidence_items           | SELECT
+ public       | stablecoin_issuer_gate_decisions           | INSERT
+ public       | stablecoin_issuer_gate_decisions           | SELECT
+ public       | stablecoin_orchestration_route_reviews     | SELECT
+ public       | stablecoin_orchestration_routes            | SELECT
+ public       | stablecoin_treasury_mandates               | SELECT
+ public       | stakeholder_account_security_messages      | SELECT
+ public       | stakeholder_account_sessions               | SELECT
+ public       | stakeholder_accounts                       | SELECT
+ public       | stakeholder_kyc_reminder_deliveries        | SELECT
+ public       | stakeholder_notification_preferences       | SELECT
+ public       | super_administrator_assignments            | SELECT
+ public       | supply_chain_finance_programmes            | SELECT
+ public       | tigerbeetle_transfer_facts                 | INSERT
+ public       | tigerbeetle_transfer_facts                 | SELECT
+ public       | trade_case_approvals                       | SELECT
+ public       | trade_case_evidence                        | SELECT
+ public       | trade_case_exceptions                      | SELECT
+ public       | trade_case_reconciliations                 | SELECT
+ public       | trade_case_routes                          | SELECT
+ public       | trade_case_stakeholders                    | SELECT
+ public       | trade_cases                                | SELECT
+ public       | treasury_buffer_policies                   | INSERT
+ public       | treasury_buffer_policies                   | SELECT
+ public       | treasury_buffer_policies                   | UPDATE
+ public       | treasury_rebalancing_recommendations       | INSERT
+ public       | treasury_rebalancing_recommendations       | SELECT
+ public       | treasury_rebalancing_recommendations       | UPDATE
+ public       | treasury_stress_test_runs                  | SELECT
+ public       | user_role_assignments                      | INSERT
+ public       | user_role_assignments                      | SELECT
+ public       | vasp_offshore_counterparty_assessments     | INSERT
+ public       | vasp_offshore_counterparty_assessments     | SELECT
+ public       | vasp_offshore_counterparty_evidence_items  | INSERT
+ public       | vasp_offshore_counterparty_evidence_items  | SELECT
+ public       | vasp_offshore_counterparty_evidence_items  | UPDATE
+ public       | vasp_offshore_counterparty_profiles        | INSERT
+ public       | vasp_offshore_counterparty_profiles        | SELECT
+ public       | vasp_offshore_counterparty_profiles        | UPDATE
+ public       | vasp_readiness_assurance_items             | INSERT
+ public       | vasp_readiness_assurance_items             | SELECT
+ public       | vasp_readiness_assurance_items             | UPDATE
+ public       | vasp_regulatory_evidence_items             | INSERT
+ public       | vasp_regulatory_evidence_items             | SELECT
+ public       | vasp_regulatory_profiles                   | INSERT
+ public       | vasp_regulatory_profiles                   | SELECT
+ public       | vasp_regulatory_profiles                   | UPDATE
+ public       | vasp_travel_rule_evidence_items            | INSERT
+ public       | vasp_travel_rule_evidence_items            | SELECT
+ public       | vasp_travel_rule_route_assessments         | INSERT
+ public       | vasp_travel_rule_route_assessments         | SELECT
+ public       | verification_consents                      | INSERT
+ public       | verification_consents                      | SELECT
+ public       | verification_reviewer_decisions            | INSERT
+ public       | verification_reviewer_decisions            | SELECT
+(243 rows)
+
+== objects owned by app ==
+ schema_name | object_name | relkind | owner 
+-------------+-------------+---------+-------
+(0 rows)
+
+== app default privileges ==
+ grantor | schema_name | defaclobjtype | defaclacl 
+---------+-------------+---------------+-----------
+(0 rows)
+

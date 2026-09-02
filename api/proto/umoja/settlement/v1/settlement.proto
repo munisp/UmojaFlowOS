@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package umoja.settlement.v1;
+
+option go_package = "github.com/munisp/UmojaFlowOS/services/payment-engine/internal/settlement/gen/settlementv1;settlementv1";
+
+service Settlement {
+  rpc Execute(SettlementRequest) returns (SettlementResponse);
+  rpc Query(SettlementQueryRequest) returns (SettlementResponse);
+}
+
+message SettlementRequest {
+  string intent_id = 1;
+  string idempotency_key = 2;
+  string tenant_id = 3;
+  string direction = 4;
+  string asset = 5;
+  string fiat = 6;
+  int64 amount_minor = 7;
+  string destination = 8;
+  bytes canonical_payload = 9;
+  string payload_sha256 = 10;
+  string expires_at_rfc3339 = 11;
+}
+
+message SettlementQueryRequest {
+  string intent_id = 1;
+  string idempotency_key = 2;
+  string tenant_id = 3;
+  string asset = 4;
+  string fiat = 5;
+  string payload_sha256 = 6;
+}
+
+message SettlementResponse {
+  string state = 1;
+  string reference = 2;
+  string blockchain_tx = 3;
+  string reason = 4;
+  bool retryable_without_effect = 5;
+  string payload_sha256 = 6;
+  string attestation_id = 7;
+}

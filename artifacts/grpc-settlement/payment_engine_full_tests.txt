@@ -1,0 +1,20 @@
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/cmd/mojaloop-signer-chaos	0.003s
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/cmd/mojaloop-signer-loadtest	0.004s
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/cmd/payment-engine	0.007s
+?   	github.com/munisp/UmojaFlowOS/services/payment-engine/cmd/settlement-grpc-test-server	[no test files]
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/cmd/tigerbeetle-loadtest	0.003s
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/attestation	0.006s
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/authorization	0.409s
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/domain	0.002s
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/enterprisecontrol	0.002s
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/eventing	0.006s
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/idempotency	0.003s
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/ledger	0.004s
+?   	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/observability	[no test files]
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/provider	0.559s
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/settlement	0.014s
+?   	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/settlement/gen/umoja/settlement/v1	[no test files]
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/tradecontrol	0.003s
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/vaspcontrol	0.002s
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/workflow	0.050s
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/multirail	0.003s

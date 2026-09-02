@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.slide-container{width:1280px;min-height:720px;background:#0d1b2a;color:#f4f7fb;font-family:Arial,sans-serif;padding:58px 78px 0;position:relative}
+.kicker{color:#d9a441;text-transform:uppercase;letter-spacing:3px;font-size:14px;font-weight:700}
+.title{font-size:42px;margin-top:18px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:48px}
+.card{background:#162b42;padding:18px;border-top:4px solid #385674;min-height:140px}
+.card-title{font-size:20px;color:#d9a441;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;font-weight:700}
+.card-content{font-size:17px;line-height:1.5;color:#bdc9d6}
+.card-content ul{list-style:none;margin-top:8px}
+.card-content li{margin-bottom:8px;padding-left:20px;position:relative}
+.card-content li::before{content:"\2022";color:#d9a441;position:absolute;left:0}
+.threshold{margin-top:16px;background:#203a55;border:1px solid #d9a441;padding:20px;display:flex;align-items:center;justify-content:space-between}
+.threshold-text{font-size:22px;font-weight:700}
+.threshold-score{font-size:32px;color:#d9a441;font-weight:800}
+.foot{position:absolute;bottom:52px;color:#7890a7;font-size:14px}
+</style>
+</head>
+<body>
+<div class="slide-container">
+    <div class="kicker">04 · Organizational Readiness</div>
+    <div class="title">90-minute tabletop exercise validates cross-functional response</div>
+    
+    <div class="grid">
+        <div class="card">
+            <div class="card-title">Structure &amp; Duration</div>
+            <div class="card-content">
+                90-minute facilitated discussion plus 30-minute hotwash. No production impact. Focuses on detection, containment, and reconciliation.
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">Cross-Functional Roles</div>
+            <div class="card-content">
+                Engineering, Operations, Treasury, Security, Compliance, and Communications. Led by an Incident Commander and Independent Witness.
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">Timed Injects</div>
+            <div class="card-content">
+                Scenario advances from consensus warnings to divergent node views, timed-out requests, and provider replay requests.
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">Success Criteria</div>
+            <div class="card-content">
+                Immediate fencing, no blind retries, authoritative reconciliation, MLRO impact assessment, and staged resumption approval.
+            </div>
+        </div>
+    </div>
+
+    <div class="threshold">
+        <div class="threshold-text">Minimum passing threshold for regulatory readiness</div>
+        <div class="threshold-score">10 / 12 POINTS</div>
+    </div>
+
+    <div class="foot">UmojaFlowOS · Tabletop exercise structure</div>
+</div>
+</body>
+</html>

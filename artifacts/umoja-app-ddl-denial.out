@@ -1,0 +1,3 @@
+ERROR:  permission denied for schema public
+LINE 1: CREATE TABLE public.__umoja_app_ddl_probe(id integer);
+                     ^

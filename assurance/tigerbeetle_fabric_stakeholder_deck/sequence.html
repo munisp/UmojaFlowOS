@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #09101a; }
+.slide-container { width: 1280px; min-height: 720px; background: #0b1324; color: #f4f7fb; font-family: Arial, Helvetica, sans-serif; position: relative; overflow: hidden; }
+.content { padding: 50px 60px 0; }
+.kicker { font-size: 15px; color: #63d2c8; text-transform: uppercase; letter-spacing: 3px; font-weight: bold; }
+.title { font-size: 39px; margin-top: 12px; margin-bottom: 24px; }
+.visual-area { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.diagram { width: 1100px; height: 420px; object-fit: contain; background: #101d31; border: 1px solid #2a3b4d; }
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; width: 1100px; margin-top: 10px; }
+.step { border-left: 3px solid #f3c969; padding-left: 15px; }
+.step-h { font-size: 16px; font-weight: bold; color: #f3c969; text-transform: uppercase; letter-spacing: 1px; }
+.step-p { font-size: 14px; color: #c4cfde; margin-top: 4px; line-height: 1.3; }
+.foot { position: absolute; left: 60px; right: 60px; bottom: 40px; color: #f3c969; font-size: 16px; border-top: 1px solid #40516c; padding-top: 14px; font-weight: bold; }
+.foot span { color: #8fa1ba; font-weight: normal; margin-left: 10px; }
+</style>
+</head>
+<body>
+<div class="slide-container">
+  <div class="content">
+    <div class="kicker">Process Flow</div>
+    <div class="title">A settlement becomes an auditable proof</div>
+    <div class="visual-area">
+      <img class="diagram" src="/home/ubuntu/UmojaFlowOS-repo/assurance/tigerbeetle_fabric_attestation_sequence.png" alt="Sequence Diagram">
+      <div class="steps">
+        <div class="step">
+          <div class="step-h">1. Bind</div>
+          <div class="step-p">Immutable payload SHA-256 bound to idempotency key in PostgreSQL.</div>
+        </div>
+        <div class="step">
+          <div class="step-h">2. Post</div>
+          <div class="step-p">Authoritative double-entry transfer created in TigerBeetle.</div>
+        </div>
+        <div class="step">
+          <div class="step-h">3. Attest</div>
+          <div class="step-p">Consortium endorsement of the evidence digest in Fabric.</div>
+        </div>
+        <div class="step">
+          <div class="step-h">4. Reconcile</div>
+          <div class="step-p">Read-only status query resolves any network timeouts.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">The Golden Rule:<span>No blind retries. No second ledger postings. No ambiguous outcomes.</span></div>
+</div>
+</body>
+</html>

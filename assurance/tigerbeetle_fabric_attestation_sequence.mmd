@@ -1,0 +1,36 @@
+sequenceDiagram
+  autonumber
+  participant C as Client/API
+  participant K as Coordinator
+  participant P as PostgreSQL
+  participant T as TigerBeetle
+  participant A as Fabric Adapter
+  participant F as Fabric Gateway/Chaincode
+  participant R as Reconciler
+  C->>K: Submit intent + idempotency key
+  K->>P: Create/bind intent + canonical payload SHA-256
+  P-->>K: Lease and durable identity
+  K->>T: Create double-entry transfer
+  T-->>K: Created or Exists
+  K->>P: Persist ledger fact
+  K->>A: Create consortium attestation
+  A->>F: Evaluate/endorse/submit digest-bound proof
+  alt Valid commit
+    F-->>A: Attestation ID + matching digest
+    A-->>K: Attested
+    K->>P: Mark evidence complete
+  else Timeout / partition
+    F-->>A: Timeout or unavailable
+    A-->>K: UNKNOWN / error
+    K->>P: Hold, create reconciliation task
+    Note over K,R: No blind retry and no second ledger posting
+    R->>F: Read-only query by deterministic attestation ID
+    alt Matching proof found
+      F-->>R: Matching digest and release SHA
+      R->>P: Reconcile and close evidence
+    else Missing or Byzantine proof
+      F-->>R: Missing or mismatched record
+      R->>P: Keep held, raise critical alert
+    end
+  end
+  K-->>C: Result only after PostgreSQL reconciliation policy

@@ -1,0 +1,29 @@
+                                                       Table "public.ledger_account_bindings"
+         Column         |           Type           | Collation | Nullable |      Default      | Storage  | Compression | Stats target | Description 
+------------------------+--------------------------+-----------+----------+-------------------+----------+-------------+--------------+-------------
+ id                     | uuid                     |           | not null | gen_random_uuid() | plain    |             |              | 
+ account_reference      | text                     |           | not null |                   | extended |             |              | 
+ tigerbeetle_account_id | bigint                   |           | not null |                   | plain    |             |              | 
+ account_kind           | text                     |           | not null |                   | extended |             |              | 
+ currency               | text                     |           | not null |                   | extended |             |              | 
+ evidence_uri           | text                     |           | not null |                   | extended |             |              | 
+ evidence_sha256        | character(64)            |           | not null |                   | extended |             |              | 
+ created_by             | text                     |           | not null |                   | extended |             |              | 
+ created_at             | timestamp with time zone |           | not null | now()             | plain    |             |              | 
+Indexes:
+    "ledger_account_bindings_pkey" PRIMARY KEY, btree (id)
+    "ledger_account_bindings_account_reference_key" UNIQUE CONSTRAINT, btree (account_reference)
+    "ledger_account_bindings_tigerbeetle_account_id_key" UNIQUE CONSTRAINT, btree (tigerbeetle_account_id)
+Check constraints:
+    "ledger_account_bindings_account_kind_check" CHECK (account_kind = ANY (ARRAY['customer_safeguarded'::text, 'settlement_asset'::text, 'provider_clearing'::text, 'fee_revenue'::text]))
+    "ledger_account_bindings_currency_check" CHECK (currency = ANY (ARRAY['NGN'::text, 'KES'::text, 'ZAR'::text, 'USD'::text, 'USDC'::text, 'USDT'::text]))
+    "ledger_account_bindings_evidence_sha256_check" CHECK (evidence_sha256 ~ '^[a-f0-9]{64}$'::text)
+    "ledger_account_bindings_evidence_uri_check" CHECK (evidence_uri ~ '^https://'::text)
+    "ledger_account_bindings_tigerbeetle_account_id_check" CHECK (tigerbeetle_account_id > 0)
+Referenced by:
+    TABLE "ledger_posting_intents" CONSTRAINT "ledger_posting_intents_credit_account_id_fkey" FOREIGN KEY (credit_account_id) REFERENCES ledger_account_bindings(tigerbeetle_account_id)
+    TABLE "ledger_posting_intents" CONSTRAINT "ledger_posting_intents_debit_account_id_fkey" FOREIGN KEY (debit_account_id) REFERENCES ledger_account_bindings(tigerbeetle_account_id)
+    TABLE "tigerbeetle_transfer_facts" CONSTRAINT "tigerbeetle_transfer_facts_credit_account_id_fkey" FOREIGN KEY (credit_account_id) REFERENCES ledger_account_bindings(tigerbeetle_account_id)
+    TABLE "tigerbeetle_transfer_facts" CONSTRAINT "tigerbeetle_transfer_facts_debit_account_id_fkey" FOREIGN KEY (debit_account_id) REFERENCES ledger_account_bindings(tigerbeetle_account_id)
+Access method: heap
+

@@ -29,6 +29,9 @@ use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use tower_http::trace::TraceLayer;
+
+mod observability;
 
 const SERVICE_NAME: &str = "umojaflowos-ledger-gateway";
 const CONTRACT_VERSION: &str = "v1";
@@ -283,10 +286,12 @@ fn router() -> Router {
             post(receive_payment_event),
         )
         .with_state(Arc::new(ServiceState::new()))
+        .layer(TraceLayer::new_for_http())
 }
 
 #[tokio::main]
 async fn main() {
+    let telemetry_provider = observability::init();
     let port = std::env::var("PORT").unwrap_or_else(|_| "8083".to_string());
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
         .await
@@ -294,6 +299,7 @@ async fn main() {
     axum::serve(listener, router())
         .await
         .expect("serve ledger-gateway");
+    telemetry_provider.shutdown().expect("shutdown OTLP provider");
 }
 
 #[cfg(test)]

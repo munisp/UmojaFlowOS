@@ -1,0 +1,73 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: otel-collector-self
+          static_configs:
+            - targets: ["0.0.0.0:8888"]
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+    send_batch_size: 512
+    timeout: 5s
+  resource:
+    attributes:
+      - key: service.namespace
+        value: umojaflowos
+        action: upsert
+      - key: deployment.environment
+        from_attribute: OTEL_ENVIRONMENT
+        action: upsert
+  transform/tenant_safety:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - set(attributes["tenant.id"], attributes["tenant.id"]) where attributes["tenant.id"] != nil
+          - set(attributes["tenant.id"], "unknown") where attributes["tenant.id"] == nil
+    metric_statements:
+      - context: datapoint
+        statements:
+          - set(attributes["tenant.id"], "unknown") where attributes["tenant.id"] == nil
+
+exporters:
+  debug:
+    verbosity: basic
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    resource_to_telemetry_conversion:
+      enabled: true
+  otlphttp/lakehouse:
+    endpoint: ${env:OTEL_LAKEHOUSE_OTLP_ENDPOINT:-http://lakehouse-telemetry:4318}
+    headers:
+      authorization: ${env:OTEL_LAKEHOUSE_AUTHORIZATION:-}
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, transform/tenant_safety, batch]
+      exporters: [otlphttp/lakehouse, debug]
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, resource, transform/tenant_safety, batch]
+      exporters: [prometheus, otlphttp/lakehouse, debug]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, transform/tenant_safety, batch]
+      exporters: [otlphttp/lakehouse, debug]

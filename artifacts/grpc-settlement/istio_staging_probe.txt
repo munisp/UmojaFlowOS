@@ -1,0 +1,7 @@
+--- tool availability ---
+--- kubectl client version ---
+bash: kubectl: command not found
+--- cluster probe ---
+bash: kubectl: command not found
+--- namespaces ---
+bash: kubectl: command not found

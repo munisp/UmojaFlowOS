@@ -1,0 +1,46 @@
+apps/control-plane/server/analysisSubmission.ts:7:      ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL })
+apps/control-plane/server/analysisSubmission.ts:8:      : new Pool({
+apps/control-plane/server/cbnSandbox.integration.test.ts:5:import { closePostgresPool, getPool } from "./postgres";
+apps/control-plane/server/cbnSandbox.integration.test.ts:42:  await closePostgresPool();
+apps/control-plane/server/complianceAlerts.integration.test.ts:25:const pool = new Pool({ ...postgresTestConnectionConfig(), max: 3 });
+apps/control-plane/server/complianceAlerts.ts:36:      ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL, max: 4 })
+apps/control-plane/server/complianceAlerts.ts:37:      : new Pool({
+apps/control-plane/server/complianceCaseWorkflow.ts:8:      ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL })
+apps/control-plane/server/complianceCaseWorkflow.ts:9:      : new Pool({
+apps/control-plane/server/counterpartyOnboarding.integration.test.ts:7:  closePostgresPool,
+apps/control-plane/server/counterpartyOnboarding.integration.test.ts:190:  await closePostgresPool();
+apps/control-plane/server/credentialAuditTrail.integration.test.ts:5:  closePostgresPool,
+apps/control-plane/server/credentialAuditTrail.integration.test.ts:39:  afterAll(async () => { await closePostgresPool(); });
+apps/control-plane/server/integrationCredentialActivation.integration.test.ts:6:  closePostgresPool,
+apps/control-plane/server/integrationCredentialActivation.integration.test.ts:199:  await closePostgresPool();
+apps/control-plane/server/keycloakFederation.test.ts:42:    response.writeHead(404).end();
+apps/control-plane/server/kycDocumentLifecycle.integration.test.ts:3:import { closePostgresPool, createPostgresCustomer, createPostgresKycDocumentUploadIntent, describePostgresTableColumns, finalizePostgresKycDocumentUpload, listPostgresActivityEventsForObjects, listPostgresKycDocuments, updatePostgresKycDocumentReview } from "./postgres";
+apps/control-plane/server/kycDocumentLifecycle.integration.test.ts:38:    await closePostgresPool();
+apps/control-plane/server/lakehouseControlEvidence.integration.test.ts:5:import { closePostgresPool, getPool } from "./postgres";
+apps/control-plane/server/lakehouseControlEvidence.integration.test.ts:57:    await closePostgresPool();
+apps/control-plane/server/legalEntityRegistry.ts:7:      ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL })
+apps/control-plane/server/legalEntityRegistry.ts:8:      : new Pool({
+apps/control-plane/server/operationalAlerts.integration.test.ts:25:  return new Pool(postgresTestConnectionConfig());
+apps/control-plane/server/operationalAlerts.integration.test.ts:50:      await db.end();
+apps/control-plane/server/operationalAlerts.integration.test.ts:81:      await db.end();
+apps/control-plane/server/operationalAlerts.integration.test.ts:95:      await db.end();
+apps/control-plane/server/operationalAlerts.integration.test.ts:170:      await db.end();
+apps/control-plane/server/operationalAlerts.integration.test.ts:198:      await db.end();
+apps/control-plane/server/operationalAlerts.ts:27:      ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL })
+apps/control-plane/server/operationalAlerts.ts:28:      : new Pool({
+apps/control-plane/server/paymentWorkflow.ts:22:      ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL })
+apps/control-plane/server/paymentWorkflow.ts:23:      : new Pool({
+apps/control-plane/server/postgres.integration.test.ts:2:import { closePostgresPool, createPostgresDocumentAnalysisJob, createPostgresReviewerDecision, createPostgresVerificationConsent, getPostgresCutoverReadiness, getPostgresPrivilegeBoundary, getPostgresReadiness, listPostgresActivityEventsForObjects, listPostgresCounterparties, listPostgresCounterpartyAuthorizations, listPostgresDocumentAnalysisJobs, listPostgresKycDocuments, listPostgresNotificationDeliveries, listPostgresRegulatoryDeadlines, listPostgresSarStrFilings, persistPostgresDocumentAnalysisEvidence } from "./postgres";
+apps/control-plane/server/postgres.integration.test.ts:12:    await closePostgresPool();
+apps/control-plane/server/postgres.ts:35:      ? new Pool({ connectionString: process.env.POSTGRES_DATABASE_URL, ...commonOptions })
+apps/control-plane/server/postgres.ts:36:      : new Pool({ ...localDevelopmentConfig, ...commonOptions });
+apps/control-plane/server/postgres.ts:1560:export async function closePostgresPool() {
+apps/control-plane/server/postgres.ts:1562:    await pool.end();
+apps/control-plane/server/providerActivationGate.test.ts:131:      await client.end();
+apps/control-plane/server/providerHealthCheck.test.ts:23:        res.end();
+apps/control-plane/server/registryAuthorization.integration.test.ts:4:import { closePostgresPool, listPostgresActivityEventsForObjects } from "./postgres";
+apps/control-plane/server/registryAuthorization.integration.test.ts:29:    await closePostgresPool();
+apps/control-plane/server/serviceHealthHistory.integration.test.ts:3:import { closePostgresPool, getPool } from "./postgres";
+apps/control-plane/server/serviceHealthHistory.integration.test.ts:40:  afterAll(async () => { purge(); await closePostgresPool(); });
+apps/control-plane/server/vaspReadiness.integration.test.ts:5:import { closePostgresPool, createPostgresCounterparty } from "./postgres";
+apps/control-plane/server/vaspReadiness.integration.test.ts:57:  await closePostgresPool();

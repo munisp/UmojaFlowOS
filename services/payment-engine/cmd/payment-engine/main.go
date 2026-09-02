@@ -34,12 +34,13 @@ import (
 // absent rather than reported as zero, because a fabricated zero is worse than a
 // missing field — it reads as "nothing is wrong".
 type serviceMetrics struct {
-	startedAt          time.Time
-	validationsTotal   atomic.Uint64
-	validationsInvalid atomic.Uint64
-	validationsFailed  atomic.Uint64
-	signerRetryMetrics *provider.SignerRetryMetrics
-	fabricMetrics      *attestation.Metrics
+	startedAt             time.Time
+	validationsTotal      atomic.Uint64
+	validationsInvalid    atomic.Uint64
+	validationsFailed     atomic.Uint64
+	signerRetryMetrics    *provider.SignerRetryMetrics
+	fabricMetrics         *attestation.Metrics
+	reconciliationMetrics *observability.ReconciliationMetrics
 }
 
 // metricsSnapshot is the wire form. The control plane reads it as-is.
@@ -141,7 +142,7 @@ func newHandlerWithSignerAndFabricMetrics(now func() time.Time, webhook http.Han
 		fabricMetrics = attestation.NewMetrics()
 	}
 	fabricMetrics.SetResourceLabels(os.Getenv("POD_NAMESPACE"), os.Getenv("POD_NAME"))
-	metrics := &serviceMetrics{startedAt: now(), signerRetryMetrics: signerRetryMetrics, fabricMetrics: fabricMetrics}
+	metrics := &serviceMetrics{startedAt: now(), signerRetryMetrics: signerRetryMetrics, fabricMetrics: fabricMetrics, reconciliationMetrics: observability.NewReconciliationMetrics()}
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"service": "payment-engine", "status": "healthy", "provider_execution": "disabled_without_verified_provider", "ledger_backend": ledgerBackend})
@@ -172,6 +173,7 @@ func newHandlerWithSignerAndFabricMetrics(now func() time.Time, webhook http.Han
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 		writePrometheusMetrics(w, metrics.signerRetryMetrics)
 		metrics.fabricMetrics.WritePrometheus(w)
+		metrics.reconciliationMetrics.WritePrometheus(w, os.Getenv("UMOJA_ENV"))
 	})
 	if webhook != nil {
 		mux.Handle("POST /v1/providers/yellowcard/webhooks", webhook)

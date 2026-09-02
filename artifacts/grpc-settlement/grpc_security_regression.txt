@@ -1,0 +1,1 @@
+ok  	github.com/munisp/UmojaFlowOS/services/payment-engine/internal/settlement	0.016s

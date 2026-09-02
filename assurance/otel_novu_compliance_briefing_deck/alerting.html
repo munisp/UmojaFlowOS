@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        .slide-container { 
+            width: 1280px; 
+            min-height: 720px; 
+            background: #0b1f33; 
+            font-family: Arial, sans-serif; 
+            color: #fff; 
+            padding: 50px 70px 0; 
+        }
+        .kicker { 
+            font-size: 16px; 
+            letter-spacing: 3px; 
+            text-transform: uppercase; 
+            color: #72d7d1; 
+            font-weight: 700; 
+        }
+        .title { 
+            font-size: 44px; 
+            font-weight: 700; 
+            margin-top: 15px; 
+            color: #fff;
+        }
+        .rule { 
+            height: 4px; 
+            background: #15a6a6; 
+            width: 100px; 
+            margin-top: 20px; 
+        }
+        .content-grid { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 60px; 
+            margin-top: 50px; 
+        }
+        .alert-group h3 { 
+            font-size: 24px; 
+            color: #72d7d1; 
+            margin-bottom: 25px; 
+            border-bottom: 1px solid #466b80;
+            padding-bottom: 10px;
+        }
+        .alert-item { 
+            margin-bottom: 25px; 
+            display: flex; 
+            gap: 15px;
+        }
+        .status-dot { 
+            width: 14px; 
+            height: 14px; 
+            background: #f5b942; 
+            border-radius: 50%; 
+            margin-top: 6px;
+            flex-shrink: 0;
+        }
+        .alert-text h4 { 
+            font-size: 20px; 
+            margin-bottom: 5px; 
+        }
+        .alert-text p { 
+            font-size: 17px; 
+            color: #c9d9e7; 
+            line-height: 1.4; 
+        }
+        .routing-box {
+            background: rgba(21, 166, 166, 0.1);
+            border: 1px solid #15a6a6;
+            padding: 30px;
+        }
+        .routing-box h3 {
+            font-size: 24px;
+            color: #72d7d1;
+            margin-bottom: 20px;
+        }
+        .routing-step {
+            margin-bottom: 20px;
+            font-size: 18px;
+            line-height: 1.5;
+            color: #d3e1ea;
+        }
+        .routing-step strong {
+            color: #fff;
+        }
+        .footer-note {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #466b80;
+            font-size: 16px;
+            color: #9fb6c8;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="kicker">04 / Alerting & Notification</div>
+        <h1 class="title">Critical Compliance Signals Route to Human Action</h1>
+        <div class="rule"></div>
+        
+        <div class="content-grid">
+            <div class="alert-group">
+                <h3>Critical Telemetry Alerts</h3>
+                
+                <div class="alert-item">
+                    <div class="status-dot"></div>
+                    <div class="alert-text">
+                        <h4>Collector Availability (UmojaOTelCollectorDown)</h4>
+                        <p>Fires if the OTel Collector is unreachable for >2m. High compliance impact; settlement visibility lost.</p>
+                    </div>
+                </div>
+                
+                <div class="alert-item">
+                    <div class="status-dot"></div>
+                    <div class="alert-text">
+                        <h4>Export Failures (UmojaOTelExportFailures)</h4>
+                        <p>Detects failing OTLP exports to backends. Prevents silent data loss in audit trails.</p>
+                    </div>
+                </div>
+                
+                <div class="alert-item">
+                    <div class="status-dot"></div>
+                    <div class="alert-text">
+                        <h4>Refused Telemetry (UmojaComplianceTelemetryMissing)</h4>
+                        <p>Fires if the Collector refuses spans/metrics. Indicates buffer saturation or policy rejection.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="alert-group">
+                <div class="routing-box">
+                    <h3>Novu Notification Routing</h3>
+                    <div class="routing-step">
+                        <strong>1. Alertmanager Grouping:</strong> Alerts are grouped by tenant, service, and severity to prevent notification fatigue.
+                    </div>
+                    <div class="routing-step">
+                        <strong>2. Inhibition Rules:</strong> Secondary warnings are suppressed if the primary Collector is down.
+                    </div>
+                    <div class="routing-step">
+                        <strong>3. Novu Webhook Bridge:</strong> Critical signals are transformed into Novu events for multi-channel delivery.
+                    </div>
+                    <div class="routing-step">
+                        <strong>4. Human Response:</strong> Responders receive direct links to runbooks and the compliance dashboard.
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer-note">
+            Note: All critical compliance alerts require an independent human sign-off for resolution in the audit log.
+        </div>
+    </div>
+</body>
+</html>

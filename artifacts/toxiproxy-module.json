@@ -1,0 +1,14 @@
+{
+	"Path": "github.com/Shopify/toxiproxy/v2",
+	"Version": "v2.5.0",
+	"Time": "2022-09-10T12:01:19Z",
+	"Dir": "/home/ubuntu/go/pkg/mod/github.com/!shopify/toxiproxy/v2@v2.5.0",
+	"GoMod": "/home/ubuntu/go/pkg/mod/cache/download/github.com/!shopify/toxiproxy/v2/@v/v2.5.0.mod",
+	"GoVersion": "1.17",
+	"Origin": {
+		"VCS": "git",
+		"URL": "https://github.com/Shopify/toxiproxy",
+		"Hash": "30ea6dd47f0e853dd4bdd490b003b939aaa3ed9c",
+		"Ref": "refs/tags/v2.5.0"
+	}
+}

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    .slide-container {
+        width: 1280px;
+        min-height: 720px; /* keep as required */
+        background: #0d1b2a;
+        color: #f4f7fb;
+        font-family: Arial, sans-serif;
+        padding: 58px 78px 0;
+        position: relative;
+    }
+    .kicker {
+        color: #d9a441;
+        text-transform: uppercase;
+        letter-spacing: 3px;
+        font-size: 14px;
+        font-weight: 700;
+    }
+    .title {
+        font-size: 42px;
+        margin-top: 18px; /* do not change */
+        margin-bottom: 30px; /* reduced to save vertical space */
+    }
+    .action-list {
+        display: grid;
+        grid-template-columns: 1fr 1fr; /* two-column layout to halve vertical stacking */
+        gap: 16px 20px;
+    }
+    .action-item {
+        background: #162b42;
+        border-left: 4px solid #d9a441;
+        padding: 16px 20px; /* reduced inner padding */
+        min-height: 0;
+    }
+    .action-title {
+        font-size: 24px;
+        font-weight: 700;
+        color: #f2cf7e;
+        margin-bottom: 8px;
+    }
+    .action-desc {
+        font-size: 18px;
+        line-height: 1.4;
+        color: #bdc9d6;
+    }
+    .gate-marker {
+        position: absolute;
+        top: 58px;
+        right: 78px;
+        border: 1px solid #35506b;
+        padding: 8px 16px;
+        font-size: 14px;
+        color: #8ea3b8;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    .foot {
+        color: #7890a7;
+        font-size: 14px;
+        margin-top: 20px; /* place in flow to avoid extra absolute space */
+    }
+</style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="kicker">07 · Path to GO</div>
+        <div class="title">Four commitments required before regulatory reassessment</div>
+        <div class="gate-marker">Conditions Precedent</div>
+        
+        <div class="action-list">
+            <div class="action-item">
+                <div class="action-title">1. Authorized Staging Execution</div>
+                <div class="action-desc">Fund and authorize a full E-01–E-09 evidence run in a segregated staging environment using approved provider sandboxes and synthetic subjects.</div>
+            </div>
+            
+            <div class="action-item">
+                <div class="action-title">2. Independent Reconciliation Witness</div>
+                <div class="action-desc">Appoint a Treasury/Ledger witness to independently verify account bindings and sign the zero-unexplained-difference reconciliation report.</div>
+            </div>
+            
+            <div class="action-item">
+                <div class="action-title">3. Immutable Evidence Retention</div>
+                <div class="action-desc">Commit to WORM (Write Once, Read Many) storage for all audit artifacts, ensuring evidence cannot be altered or deleted after capture.</div>
+            </div>
+            
+            <div class="action-item">
+                <div class="action-title">4. Four-Role Cryptographic Sign-Off</div>
+                <div class="action-desc">Mandate independent review and Ed25519 detached signatures from Release, Security, Compliance, and Operations owners for the final manifest.</div>
+            </div>
+        </div>
+
+        <div class="foot">UmojaFlowOS · Executive readiness roadmap</div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+.slide-container{width:1280px;min-height:720px;background:#0b1324;color:#f4f7fb;font-family:Arial,Helvetica,sans-serif;position:relative;overflow:hidden}
+.content{padding:58px 76px 0}
+.kicker{color:#63d2c8;font-size:16px;letter-spacing:3px;text-transform:uppercase;font-weight:bold}
+.title{font-size:43px;line-height:1.08;margin-top:14px;max-width:820px}
+.grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:40px;margin-top:48px}
+.cell{min-height:180px;border-top:3px solid #63d2c8;padding-top:16px}
+.cell.alt{border-color:#f3c969}
+.h{font-size:24px;font-weight:bold;color:#f4f7fb}
+.body{font-size:19px;line-height:1.4;color:#c4cfde;margin-top:12px}
+.body b{color:#63d2c8}
+.bottom{position:absolute;left:76px;right:76px;bottom:60px;border-top:1px solid #40516c;padding-top:18px;font-size:20px;color:#8fa1ba}
+.bottom b{color:#f3c969}
+</style>
+</head>
+<body>
+<div class="slide-container">
+  <div class="content">
+    <div class="kicker">Consortium Governance</div>
+    <div class="title">Trust is built on shared rules,<br>not shared secrets.</div>
+    <div class="grid">
+      <div class="cell">
+        <div class="h">Membership & MSP</div>
+        <div class="body">Each organization owns its <b>Membership Service Provider (MSP)</b> and Certificate Authority. No single party can unilaterally add members or change channel rules.</div>
+      </div>
+      <div class="cell alt">
+        <div class="h">Identity & HSM</div>
+        <div class="body">Signing keys are retained in <b>Hardware Security Modules (HSM)</b>. Private keys never leave the organization; only endorsed digests are recorded on the ledger.</div>
+      </div>
+      <div class="cell alt">
+        <div class="h">Endorsement Policy</div>
+        <div class="body">Attestations require <b>multi-party endorsement</b>. A proof is only valid if the required organizations observe and sign the same evidence digest.</div>
+      </div>
+      <div class="cell">
+        <div class="h">Change Control</div>
+        <div class="body">Chaincode upgrades and policy changes require <b>two-party approval</b> from each organization, a reproducible build, and a release-manifest binding.</div>
+      </div>
+    </div>
+  </div>
+  <div class="bottom"><b>Independent Assurance:</b> Quarterly reviews of membership, certificate inventory, incident records, and reconciliation results.</div>
+</div>
+</body>
+</html>

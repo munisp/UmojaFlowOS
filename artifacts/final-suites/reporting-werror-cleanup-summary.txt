@@ -1,0 +1,1 @@
+reporting_werror_cleanup_exit=0

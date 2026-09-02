@@ -65,6 +65,7 @@ GRANT INSERT ON TABLE
   psp_gate_decisions,
   stablecoin_issuer_evidence_items,
   stablecoin_issuer_gate_decisions,
+  stablecoin_settlement_attempts,
   compliance_vendor_evidence_items,
   compliance_vendor_gate_decisions
 TO :"app_role_ident";

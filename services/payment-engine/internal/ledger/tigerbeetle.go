@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	tb "github.com/tigerbeetle/tigerbeetle-go"
 )
 
@@ -61,6 +63,9 @@ func (c *TigerBeetleClient) ledgerForCurrency(currency string) (uint32, error) {
 }
 
 func (c *TigerBeetleClient) CreateAccounts(ctx context.Context, accounts []Account) error {
+	ctx, span := otel.Tracer("umojaflowos.payment-engine.tigerbeetle").Start(ctx, "tigerbeetle.create_accounts")
+	defer span.End()
+	span.SetAttributes(attribute.Int("tigerbeetle.batch_size", len(accounts)))
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -106,6 +111,9 @@ func (c *TigerBeetleClient) CreateAccounts(ctx context.Context, accounts []Accou
 }
 
 func (c *TigerBeetleClient) CreateTransfers(ctx context.Context, transfers []Transfer) error {
+	ctx, span := otel.Tracer("umojaflowos.payment-engine.tigerbeetle").Start(ctx, "tigerbeetle.create_transfers")
+	defer span.End()
+	span.SetAttributes(attribute.Int("tigerbeetle.batch_size", len(transfers)))
 	if err := ctx.Err(); err != nil {
 		return err
 	}

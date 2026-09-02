@@ -1,0 +1,9 @@
+              table_name               |                                                                        columns                                                                         
+---------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ external_stakeholder_assignments      | id, stakeholder_role, stakeholder_subject, counterparty_id, dossier_id, status, assigned_by, assigned_at, suspended_at
+ operator_role_assignments             | subject, role, status, assigned_by, assigned_at, suspended_at
+ segregation_of_duties_evaluation_runs | id, correlation_id, evaluator_subject, evaluator_role, query_version, evaluation_state, exception_count, exception_digest, error_summary, evaluated_at
+ super_administrator_assignments       | subject, status, assigned_by, assigned_at, revoked_by, revoked_at, revocation_reason
+ user_role_assignments                 | id, user_subject, role, assigned_by, assigned_at, revoked_at
+(5 rows)
+

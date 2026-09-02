@@ -1,0 +1,16 @@
+{
+  "title": "Umoja Native Idem Health",
+  "uid": "umoja-native-idem-health",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {"list": [{"name": "environment", "type": "custom", "query": "staging,production", "current": {"text": "staging", "value": "staging"}}]},
+  "panels": [
+    {"id": 1, "type": "stat", "title": "Settlement Fence", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"expr": "umoja_tigerbeetle_settlement_fence_active{environment=\"$environment\"}", "legendFormat": "fence active"}], "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": 0}, {"color": "green", "value": 1}]}}}},
+    {"id": 2, "type": "timeseries", "title": "TigerBeetle Replication Lag", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"expr": "umoja_tigerbeetle_replication_lag_seconds{environment=\"$environment\"}", "legendFormat": "{{cluster}} / {{replica}}"}], "fieldConfig": {"defaults": {"unit": "s", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": 0}, {"color": "red", "value": 5}]}}}},
+    {"id": 3, "type": "timeseries", "title": "Kafka Consumer Lag", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"expr": "max by (consumer_group, topic) (umoja_kafka_consumer_lag_records{environment=\"$environment\"})", "legendFormat": "{{consumer_group}} / {{topic}}"}], "fieldConfig": {"defaults": {"unit": "none", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": 0}, {"color": "orange", "value": 1000}, {"color": "red", "value": 10000}]}}}},
+    {"id": 4, "type": "timeseries", "title": "OPA Denials by Reason", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"expr": "sum by (reason) (rate(umoja_opa_policy_denials_total{environment=\"$environment\"}[5m]))", "legendFormat": "{{reason}}"}]},
+    {"id": 5, "type": "timeseries", "title": "OPA Evaluation Errors", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"expr": "increase(umoja_opa_policy_evaluation_errors_total{environment=\"$environment\"}[5m])", "legendFormat": "errors"}]},
+    {"id": 6, "type": "table", "title": "Active Integrity Alerts", "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"expr": "ALERTS{alertname=~\"UmojaTigerBeetleReplicationLagHigh|UmojaKafkaConsumerLagHigh|UmojaOPAPolicyDenialsSpike|UmojaOPAPolicyEvaluationErrors\",environment=\"$environment\"}", "format": "table", "instant": true}]}
+  ]
+}

@@ -1,0 +1,128 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: umoja-reconciliation-worm-export
+  namespace: umoja-payment
+  annotations:
+    # Set this only when using a cloud workload identity integration.
+    # eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/umoja-release-evidence-publisher
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: umoja-reconciliation-worm-export
+  namespace: umoja-payment
+  labels:
+    app.kubernetes.io/name: umoja-reconciliation-worm-export
+    app.kubernetes.io/component: compliance-evidence
+spec:
+  schedule: "17 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 900
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 10
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 900
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: umoja-reconciliation-worm-export
+          annotations:
+            sidecar.istio.io/inject: "false"
+        spec:
+          serviceAccountName: umoja-reconciliation-worm-export
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: exporter
+              # Replace with an approved immutable digest containing the
+              # repository export_reconciliation_worm_bundle.sh script.
+              image: ghcr.io/munisp/umoja-release-evidence-exporter@sha256:REPLACE_WITH_64_HEX_DIGEST
+              imagePullPolicy: IfNotPresent
+              command: ["/opt/umoja/bin/export_reconciliation_worm_bundle.sh"]
+              env:
+                - name: UMOJA_ENV
+                  value: staging
+                - name: WORM_EXPORT_APPROVED
+                  value: APPROVED_STAGING_WORM_EXPORT
+                - name: EVIDENCE_DIR
+                  value: /var/lib/umoja/evidence
+                - name: WORM_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: umoja-worm-export-config
+                      key: bucket
+                - name: WORM_PREFIX
+                  valueFrom:
+                    secretKeyRef:
+                      name: umoja-worm-export-config
+                      key: prefix
+                - name: RECONCILIATION_RUN_ID
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.uid
+                - name: RELEASE_SHA
+                  valueFrom:
+                    secretKeyRef:
+                      name: umoja-worm-export-config
+                      key: release_sha
+                - name: RETAIN_UNTIL
+                  valueFrom:
+                    secretKeyRef:
+                      name: umoja-worm-export-config
+                      key: retain_until
+                - name: AWS_REGION
+                  valueFrom:
+                    secretKeyRef:
+                      name: umoja-worm-export-config
+                      key: region
+              volumeMounts:
+                - name: evidence
+                  mountPath: /var/lib/umoja/evidence
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                requests: {cpu: 50m, memory: 128Mi}
+                limits: {cpu: 500m, memory: 512Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+          volumes:
+            - name: evidence
+              persistentVolumeClaim:
+                claimName: umoja-release-evidence
+                readOnly: true
+            - name: tmp
+              emptyDir: {}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: umoja-worm-export-config
+  namespace: umoja-payment
+  labels:
+    app.kubernetes.io/component: compliance-evidence
+  annotations:
+    # Create or sync this object through Vault/External Secrets in production.
+    # Do not commit populated Secret data.
+    secrets.example.org/source: vault:secret/data/umoja/worm-export
+stringData:
+  bucket: "REPLACE_WITH_APPROVED_BUCKET"
+  prefix: "umoja/releases"
+  release_sha: "REPLACE_WITH_40_HEX_RELEASE_SHA"
+  retain_until: "REPLACE_WITH_POLICY_APPROVED_ISO8601_DEADLINE"
+  region: "eu-west-1"
+type: Opaque

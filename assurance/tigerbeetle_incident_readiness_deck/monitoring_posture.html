@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    .slide-container { width: 1280px; min-height: 720px; background: #0d1b2a; color: #f4f7fb; font-family: Arial, sans-serif; padding: 58px 78px 0; position: relative; }
+    .kicker { color: #d9a441; text-transform: uppercase; letter-spacing: 3px; font-size: 14px; font-weight: 700; }
+    .title { font-size: 42px; margin-top: 18px; margin-bottom: 48px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th { text-align: left; padding: 16px; border-bottom: 2px solid #35506b; color: #8ea3b8; text-transform: uppercase; letter-spacing: 2px; font-size: 14px; }
+    td { padding: 16px; border-bottom: 1px solid #1d314a; font-size: 17px; line-height: 1.4; vertical-align: top; }
+    .category { color: #d9a441; font-weight: 700; width: 200px; }
+    .action-tag { display: inline-block; padding: 4px 12px; border-radius: 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+    .fence { background: #4a1d1d; color: #ff9999; border: 1px solid #ff4444; }
+    .reconcile { background: #1d3a4a; color: #99d6ff; border: 1px solid #44aaff; }
+    .hold { background: #3a3a1d; color: #fff299; border: 1px solid #ffcc44; }
+    .summary-box { margin-top: 40px; padding: 24px; background: #162b42; border-left: 4px solid #d9a441; font-size: 19px; color: #bdc9d6; }
+    .foot { position: absolute; bottom: 52px; color: #7890a7; font-size: 14px; }
+</style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="kicker">03 · Monitoring posture</div>
+        <div class="title">10 fail-closed rules enforce ledger integrity and operational fencing</div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Domain</th>
+                    <th>Indicator / Rule</th>
+                    <th>Operational Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="category">Cluster Health</td>
+                    <td>Quorum Loss, Node Divergence, Identity Mismatch, Consensus Errors</td>
+                    <td><span class="action-tag fence">Fence Settlement</span></td>
+                </tr>
+                <tr>
+                    <td class="category">Payment Safety</td>
+                    <td>UNKNOWN State Growth, Reconciliation Mismatch, Telemetry Absence</td>
+                    <td><span class="action-tag reconcile">Reconcile &amp; Suspend</span></td>
+                </tr>
+                <tr>
+                    <td class="category">Recovery</td>
+                    <td>View Non-Convergence, Pending Recovery Reconciliation</td>
+                    <td><span class="action-tag hold">Maintain Hold</span></td>
+                </tr>
+                <tr>
+                    <td class="category">Control Integrity</td>
+                    <td>Inactive Settlement Fence during Instability</td>
+                    <td><span class="action-tag fence">Emergency Fence</span></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="summary-box">
+            <strong>Audit Assurance:</strong> Every rule is validated by deterministic <code>promtool</code> unit tests. Alerts are bound to the <strong>ledger_integrity</strong> compliance domain and require independent witness sign-off before resumption.
+        </div>
+
+        <div class="foot">UmojaFlowOS · Prometheus early-warning control set</div>
+    </div>
+</body>
+</html>

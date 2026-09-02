@@ -9,6 +9,20 @@ route:
   repeat_interval: 4h
   routes:
     - matchers:
+        - alertname="UmojaTigerBeetleQuorumLost"
+        - severity="critical"
+      receiver: umoja-tigerbeetle-critical-pagerduty
+      group_wait: 10s
+      repeat_interval: 30m
+      continue: false
+    - matchers:
+        - alertname="UmojaTigerBeetleReplicationLagHigh"
+        - severity="critical"
+      receiver: umoja-tigerbeetle-critical-pagerduty
+      group_wait: 10s
+      repeat_interval: 30m
+      continue: false
+    - matchers:
         - service="payment-engine"
         - component="mojaloop-signer"
         - severity="critical"
@@ -38,6 +52,21 @@ inhibit_rules:
       - environment
 
 receivers:
+  - name: umoja-tigerbeetle-critical-pagerduty
+    pagerduty_configs:
+      - routing_key_file: /etc/alertmanager/secrets/pagerduty-routing-key
+        severity: critical
+        class: tigerbeetle-ledger
+        component: payment-engine
+        group: ledger-integrity
+        description: '{{ .CommonAnnotations.summary }}'
+        details:
+          alertname: '{{ .CommonLabels.alertname }}'
+          service: '{{ .CommonLabels.service }}'
+          environment: '{{ .CommonLabels.environment }}'
+          action: '{{ .CommonLabels.action }}'
+          runbook: '{{ .CommonAnnotations.runbook_url }}'
+          description: '{{ .CommonAnnotations.description }}'
   - name: umoja-signer-critical-pagerduty
     pagerduty_configs:
       - routing_key_file: /etc/alertmanager/secrets/pagerduty-routing-key

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  .slide-container { width: 1280px; min-height: 720px; background: #0b1324; color: #f4f7fb; font-family: Arial, sans-serif; position: relative; overflow: hidden; }
+  .content { padding: 60px 80px 0; }
+  .kicker { font-size: 16px; color: #63d2c8; text-transform: uppercase; letter-spacing: 3px; font-weight: bold; margin-bottom: 12px; }
+  .title { font-size: 44px; font-weight: bold; margin-bottom: 40px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; }
+  .box { border-top: 3px solid #63d2c8; padding-top: 20px; }
+  .box.pending { border-color: #f3c969; }
+  .box-h { font-size: 24px; font-weight: bold; margin-bottom: 20px; color: #f4f7fb; }
+  .list-item { margin-bottom: 24px; display: flex; align-items: flex-start; }
+  .icon { width: 24px; height: 24px; margin-right: 16px; margin-top: 4px; flex-shrink: 0; }
+  .text-block b { display: block; font-size: 18px; color: #63d2c8; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
+  .text-block.pending b { color: #f3c969; }
+  .text-block p { font-size: 18px; line-height: 1.4; color: #bac6d8; }
+  .status-bar { position: absolute; bottom: 60px; left: 80px; right: 80px; border-top: 1px solid #40516c; padding-top: 20px; display: flex; justify-content: space-between; align-items: center; }
+  .status-label { font-size: 18px; color: #8fa1ba; }
+  .status-value { font-size: 20px; font-weight: bold; color: #f3c969; }
+</style>
+</head>
+<body>
+  <div class="slide-container">
+    <div class="content">
+      <div class="kicker">Readiness Assessment</div>
+      <div class="title">Readiness is proven in layers</div>
+      <div class="grid">
+        <div class="box">
+          <div class="box-h">Validated Technical Controls</div>
+          <div class="list-item">
+            <div class="text-block">
+              <b>Byzantine Simulation</b>
+              <p>100-worker concurrent load tests verify double-entry invariants under simulated network partitions and faulty responses.</p>
+            </div>
+          </div>
+          <div class="list-item">
+            <div class="text-block">
+              <b>Idempotency Binding</b>
+              <p>PostgreSQL-backed immutable identity prevents duplicate ledger postings or conflicting attestation attempts.</p>
+            </div>
+          </div>
+          <div class="list-item">
+            <div class="text-block">
+              <b>Fail-Closed Logic</b>
+              <p>Automated rejection of mismatched digests and release SHAs at the Gateway adapter boundary.</p>
+            </div>
+          </div>
+        </div>
+        <div class="box pending">
+          <div class="box-h">Consortium Evidence Required</div>
+          <div class="list-item">
+            <div class="text-block pending">
+              <b>Identity & MSP</b>
+              <p>Real multi-organization Membership Service Providers and Certificate Authorities with HSM-backed signing.</p>
+            </div>
+          </div>
+          <div class="list-item">
+            <div class="text-block pending">
+              <b>Endorsement Policy</b>
+              <p>Live channel configuration endorsed by independent consortium members across separate infrastructures.</p>
+            </div>
+          </div>
+          <div class="list-item">
+            <div class="text-block pending">
+              <b>Independent Sign-off</b>
+              <p>Four-role release approval manifest with detached cryptographic signatures bound to one immutable release SHA.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="status-bar">
+      <div class="status-label">Current Regulatory Disposition</div>
+      <div class="status-value">NO-GO: Pending Authorized Staging Evidence</div>
+    </div>
+  </div>
+</body>
+</html>

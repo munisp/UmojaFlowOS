@@ -1,4 +1,5 @@
 import "dotenv/config";
+import "./otel";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
@@ -15,6 +16,7 @@ import { startServiceHealthMonitor } from "../serviceHealthMonitor";
 import { startSegregationOfDutiesMonitor } from "../segregationOfDutiesMonitor";
 import { lakehouseControlEvidenceDrain } from "../scheduled/lakehouseControlEvidenceDrain";
 import { serveStatic, setupVite } from "./vite";
+import { trace } from "@opentelemetry/api";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -38,6 +40,13 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  app.use((req, _res, next) => {
+    const span = trace.getActiveSpan();
+    const tenantId = req.header("x-tenant-id");
+    if (span && tenantId) span.setAttribute("tenant.id", tenantId.slice(0, 128));
+    if (span) span.setAttribute("umoja.request.path", req.path);
+    next();
+  });
   // The payment engine signs the raw ledger-evidence body. Register this
   // private route before the general JSON parser so its HMAC covers exactly the
   // bytes received from the protected network.

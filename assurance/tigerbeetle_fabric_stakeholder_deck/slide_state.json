@@ -1,0 +1,111 @@
+{
+  "project_info": {
+    "title": "TigerBeetle + Hyperledger Fabric",
+    "created": 1788275796.984,
+    "last_updated": 1788275969.077,
+    "total_slides": 9
+  },
+  "slides": [
+    {
+      "id": "cover",
+      "state": "edited",
+      "pageNum": 1
+    },
+    {
+      "id": "decision",
+      "state": "edited",
+      "pageNum": 2
+    },
+    {
+      "id": "architecture",
+      "state": "edited",
+      "pageNum": 3
+    },
+    {
+      "id": "sequence",
+      "state": "edited",
+      "pageNum": 4
+    },
+    {
+      "id": "faults",
+      "state": "edited",
+      "pageNum": 5
+    },
+    {
+      "id": "governance",
+      "state": "edited",
+      "pageNum": 6
+    },
+    {
+      "id": "readiness",
+      "state": "edited",
+      "pageNum": 7
+    },
+    {
+      "id": "actions",
+      "state": "edited",
+      "pageNum": 8
+    },
+    {
+      "id": "closing",
+      "state": "edited",
+      "pageNum": 9
+    }
+  ],
+  "outline": [
+    {
+      "id": "cover",
+      "title": "TigerBeetle + Hyperledger Fabric",
+      "summary": "Stakeholder briefing on the dual-layer accounting and consortium-attestation architecture.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "decision",
+      "title": "One Financial Authority, One Shared Proof",
+      "summary": "TigerBeetle remains the internal double-entry authority while Fabric provides external consortium attestation.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "architecture",
+      "title": "How the Platform Fits Together",
+      "summary": "Architecture view of PostgreSQL, TigerBeetle, Fabric Gateway, chaincode, and observability boundaries.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "sequence",
+      "title": "A Settlement Becomes an Auditable Proof",
+      "summary": "Sequence flow from intent binding through ledger posting, Fabric attestation, reconciliation, and safe customer outcome.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "faults",
+      "title": "Faults Hold Risk—They Do Not Move It",
+      "summary": "Byzantine and partition behavior keeps accounting balanced, rejects mismatched proofs, and prevents blind retries.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "governance",
+      "title": "Consortium Governance Creates Trust",
+      "summary": "Membership, MSP/CA custody, endorsement policy, privacy, change control, and independent assurance.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "readiness",
+      "title": "Readiness Is Proven in Layers",
+      "summary": "Local tests establish control behavior; live multi-organization evidence is still required for production readiness.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "actions",
+      "title": "Leadership Decisions Before Production",
+      "summary": "Decisions and evidence commitments required for production consortium onboarding.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "closing",
+      "title": "A Safer Path to Shared Settlement Evidence",
+      "summary": "Closing message: authoritative accounting, independently verifiable consortium proof, and fail-closed operations.",
+      "image_plan": "Use a suitable image if needed"
+    }
+  ]
+}

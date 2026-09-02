@@ -16,6 +16,21 @@ serviceAccount:
 
 environment: staging
 
+idem:
+  enabled: true
+  reconciliationTopic: umoja.stablecoin.v1.finality-confirmed
+  opa:
+    enabled: true
+    image: openpolicyagent/opa:0.70.0
+    endpoint: http://127.0.0.1:8181/v1/data/umojaflowos/stablecoin/result
+    policyConfigMap: umoja-stablecoin-intent-policy
+
+multiAz:
+  enabled: true
+  topologyKey: topology.kubernetes.io/zone
+  maxSkew: 1
+  whenUnsatisfiable: DoNotSchedule
+
 releaseEvidence:
   existingClaim: umoja-release-evidence
   manifestPath: /var/run/umoja/release/manifest.json
@@ -102,7 +117,13 @@ podAnnotations:
 
 nodeSelector: {}
 tolerations: []
-affinity: {}
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: umoja-payment-engine
+        topologyKey: kubernetes.io/hostname
 
 securityContext:
   pod:

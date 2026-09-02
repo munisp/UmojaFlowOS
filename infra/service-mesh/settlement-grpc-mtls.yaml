@@ -1,0 +1,69 @@
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: settlement-grpc-strict-mtls
+  namespace: umoja
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payment-engine
+  mtls:
+    mode: STRICT
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: settlement-grpc-allowlisted-callers
+  namespace: umoja
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: payment-engine
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/umoja/sa/control-plane
+              - cluster.local/ns/umoja/sa/reconciliation-worker
+      to:
+        - operation:
+            ports: ["8443"]
+            methods: ["POST"]
+---
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: settlement-grpc
+  namespace: umoja
+spec:
+  hosts:
+    - payment-engine.umoja.svc.cluster.local
+  location: MESH_INTERNAL
+  ports:
+    - number: 8443
+      name: grpc-tls
+      protocol: GRPC
+  resolution: DNS
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: settlement-grpc-mtls
+  namespace: umoja
+spec:
+  host: payment-engine.umoja.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      http:
+        http2MaxRequests: 1000
+        maxRequestsPerConnection: 1000
+      tcp:
+        maxConnections: 200
+    outlierDetection:
+      consecutive5xxErrors: 3
+      interval: 5s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50

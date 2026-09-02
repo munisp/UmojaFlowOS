@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      .slide-container { 
+        width: 1280px; 
+        min-height: 720px; 
+        background: #f7fafc; 
+        font-family: Arial, sans-serif; 
+        color: #0b1f33; 
+        padding: 54px 70px 24px;
+      }
+      .kicker { 
+        font-size: 15px; 
+        letter-spacing: 3px; 
+        text-transform: uppercase; 
+        color: #168f92; 
+        font-weight: 700; 
+      }
+      .title { 
+        font-size: 42px; 
+        font-weight: 700; 
+        margin-top: 12px; 
+      }
+      .rule { 
+        height: 3px; 
+        background: #15a6a6; 
+        width: 88px; 
+        margin-top: 18px; 
+      }
+      .grid { 
+        display: grid; 
+        grid-template-columns: 1fr 1fr; 
+        gap: 60px; 
+        margin-top: 40px; 
+      }
+      .col h2 { 
+        font-size: 25px; 
+        margin: 0 0 20px; 
+        color: #0b1f33;
+        border-bottom: 1px solid #d8e3eb;
+        padding-bottom: 10px;
+      }
+      .col ul { 
+        margin: 0; 
+        padding-left: 22px; 
+        font-size: 20px; 
+        line-height: 1.6; 
+        color: #496174; 
+      }
+      .col li { margin-bottom: 12px; }
+      .col li::marker { color: #15a6a6; }
+      .gate-status {
+        margin-top: 40px;
+        background: #0b1f33;
+        color: #fff;
+        padding: 20px 30px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .gate-status strong { font-size: 22px; color: #72d7d1; }
+      .gate-status span { font-size: 18px; color: #c9d9e7; }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="kicker">03 / Instrumentation Scope</div>
+        <div class="title">Coverage is broad; middleware evidence is the gate</div>
+        <div class="rule"></div>
+        
+        <div class="grid">
+            <section class="col">
+                <h2>Implemented Service SDKs</h2>
+                <ul>
+                    <li><strong>Go:</strong> Payment Engine &amp; TigerBeetle adapter spans with OTLP gRPC export.</li>
+                    <li><strong>Rust:</strong> Ledger Gateway Axum/Tower HTTP tracing and OTLP provider.</li>
+                    <li><strong>Python:</strong> Reporting &amp; Spatial processing with FastAPI/HTTPX instrumentation.</li>
+                    <li><strong>TypeScript:</strong> Control Plane NodeSDK with Express auto-instrumentation.</li>
+                </ul>
+            </section>
+            
+            <section class="col">
+                <h2>Pending Staging Evidence</h2>
+                <ul>
+                    <li><strong>Kafka:</strong> Live broker header propagation and client-side trace preservation.</li>
+                    <li><strong>Temporal:</strong> Workflow/Activity interceptor delivery in authorized staging.</li>
+                    <li><strong>Dapr:</strong> Sidecar HTTP hop verification and traceparent injection.</li>
+                    <li><strong>TigerBeetle:</strong> Cluster-level consensus and quorum telemetry delivery.</li>
+                </ul>
+            </section>
+        </div>
+
+        <div class="gate-status">
+            <strong>Audit Boundary:</strong>
+            <span>Code-level instrumentation is 100% complete. Staging-level middleware proof is 0% complete.</span>
+        </div>
+    </div>
+</body>
+</html>

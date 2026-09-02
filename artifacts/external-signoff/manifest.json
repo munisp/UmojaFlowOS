@@ -1,0 +1,62 @@
+{
+  "schema_version": "1.0",
+  "repository": "munisp/UmojaFlowOS",
+  "sanitized": true,
+  "files": [
+    {
+      "path": "evidence/artifacts/final_production_readiness_report.md",
+      "sha256": "31902c8ec46519ee1ffdceedd307d7d6a61e2c5ddab1a49d4318148bc8f8ae57",
+      "bytes": 5477
+    },
+    {
+      "path": "evidence/docs/production_readiness_scorecard.md",
+      "sha256": "17a613ec39c3f4d6da9c39c03814a2f8e15d48a449d4e92dbafb8123abbc0015",
+      "bytes": 11028
+    },
+    {
+      "path": "evidence/docs/production_regulatory_deployment_guide.md",
+      "sha256": "c54c23803f42d116b6e8d4686b4679a756b5234f61ded88eaa75d605c0a3da1b",
+      "bytes": 19491
+    },
+    {
+      "path": "evidence/docs/production_readiness_coverage_report.md",
+      "sha256": "7fd91b7f3cef8e2a4ea2f2d75874c15ce7082a3b573fd8d1c0dbbcb39408f6e6",
+      "bytes": 8457
+    },
+    {
+      "path": "evidence/docs/compliance_rbac_verification_report.md",
+      "sha256": "2a87cafe4e1e90850c79e819d8758602881fa710975af6fd122f350abe43c4db",
+      "bytes": 4162
+    },
+    {
+      "path": "evidence/artifacts/clean-room-compliance-final.log",
+      "sha256": "27fc526c0f9cc1e58eadcb869fe650b46957f0a1afae87ef7d497815e11336d8",
+      "bytes": 938
+    },
+    {
+      "path": "evidence/artifacts/local-seed/synthetic_nigeria_seed_manifest.json",
+      "sha256": "ec46c240d91f2102e99c766502cd8ab44c5926ff9899e10a8f0e12a89ad99f63",
+      "bytes": 224330
+    },
+    {
+      "path": "evidence/artifacts/local-seed/seed-verify.log",
+      "sha256": "a1061272488b4d2af3471ed2b8d9c678cd9b10ba4745ecc999171a8743549dc8",
+      "bytes": 682
+    },
+    {
+      "path": "evidence/artifacts/toxiproxy-partition-final.log",
+      "sha256": "bf14b72532177700c315a4513b2a24823a5cc1a774b77fe4d72da764b85c95bf",
+      "bytes": 225
+    },
+    {
+      "path": "evidence/artifacts/postgres-privilege-verification-umoja-test.out",
+      "sha256": "a54e9fd5ca97b55906f788044b7bfc44716706d811c9740bd64e982d5603e7ae",
+      "bytes": 17813
+    },
+    {
+      "path": "evidence/artifacts/umoja-app-ddl-denial.out",
+      "sha256": "0c0b19c58a9646d931b235c2e1e2f8ba5c273272cc22970b2e3622f3f41aaeba",
+      "bytes": 130
+    }
+  ]
+}

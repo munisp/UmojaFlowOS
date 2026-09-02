@@ -1,0 +1,21 @@
+                                          Table "public.stablecoin_orchestration_route_reviews"
+    Column    |           Type           | Collation | Nullable |      Default      | Storage  | Compression | Stats target | Description 
+--------------+--------------------------+-----------+----------+-------------------+----------+-------------+--------------+-------------
+ id           | uuid                     |           | not null | gen_random_uuid() | plain    |             |              | 
+ route_id     | uuid                     |           | not null |                   | plain    |             |              | 
+ decision     | text                     |           | not null |                   | extended |             |              | 
+ rationale    | text                     |           | not null |                   | extended |             |              | 
+ decided_by   | text                     |           | not null |                   | extended |             |              | 
+ decided_role | operating_role           |           | not null |                   | plain    |             |              | 
+ decided_at   | timestamp with time zone |           | not null | now()             | plain    |             |              | 
+Indexes:
+    "stablecoin_orchestration_route_reviews_pkey" PRIMARY KEY, btree (id)
+    "stablecoin_orchestration_route_reviews_latest_idx" btree (route_id, decided_at DESC, id DESC)
+Check constraints:
+    "stablecoin_orchestration_route_reviews_decided_role_check" CHECK (decided_role = ANY (ARRAY['admin'::operating_role, 'compliance_officer'::operating_role]))
+    "stablecoin_orchestration_route_reviews_decision_check" CHECK (decision = ANY (ARRAY['approved'::text, 'blocked'::text]))
+    "stablecoin_orchestration_route_reviews_rationale_check" CHECK (char_length(TRIM(BOTH FROM rationale)) >= 16 AND char_length(TRIM(BOTH FROM rationale)) <= 4000)
+Foreign-key constraints:
+    "stablecoin_orchestration_route_reviews_route_id_fkey" FOREIGN KEY (route_id) REFERENCES stablecoin_orchestration_routes(id) ON DELETE RESTRICT
+Access method: heap
+

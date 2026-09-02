@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  .slide-container {
+    width: 1280px;
+    min-height: 720px;
+    background: #0b1324;
+    color: #f4f7fb;
+    font-family: Arial, Helvetica, sans-serif;
+    position: relative;
+    overflow: hidden;
+  }
+  .content {
+    padding: 58px 76px 0;
+  }
+  .kicker {
+    color: #63d2c8;
+    font-size: 16px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-weight: bold;
+  }
+  .title {
+    font-size: 43px;
+    line-height: 1.08;
+    margin-top: 14px;
+    max-width: 900px;
+  }
+  .action-list {
+    margin-top: 48px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+  }
+  .action-item {
+    min-height: 180px;
+    border-top: 3px solid #63d2c8;
+    padding-top: 16px;
+  }
+  .action-item.gold {
+    border-color: #f3c969;
+  }
+  .action-h {
+    font-size: 24px;
+    font-weight: bold;
+    color: #f4f7fb;
+  }
+  .action-sub {
+    font-size: 15px;
+    color: #8fa1ba;
+    margin-top: 6px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+  .action-body {
+    font-size: 19px;
+    line-height: 1.4;
+    color: #c4cfde;
+    margin-top: 16px;
+  }
+  .bottom-gate {
+    position: absolute;
+    left: 76px;
+    right: 76px;
+    bottom: 60px;
+    border-top: 1px solid #40516c;
+    padding-top: 18px;
+    font-size: 20px;
+    color: #f3c969;
+  }
+  .bottom-gate span {
+    color: #c4cfde;
+  }
+</style>
+</head>
+<body>
+<div class="slide-container">
+  <div class="content">
+    <div class="kicker">Next Steps</div>
+    <div class="title">Leadership Decisions Before Production</div>
+    
+    <div class="action-list">
+      <div class="action-item">
+        <div class="action-h">Consortium Governance</div>
+        <div class="action-sub">Legal & Compliance</div>
+        <div class="action-body">Approve the multi-organization agreement, channel membership roster, and endorsement policies required for shared proof.</div>
+      </div>
+      
+      <div class="action-item gold">
+        <div class="action-h">Identity & HSM Ceremony</div>
+        <div class="action-sub">Security Operations</div>
+        <div class="action-body">Authorize the dual-control key ceremony for non-exportable HSM-backed Fabric identities and X.509 certificates.</div>
+      </div>
+      
+      <div class="action-item gold">
+        <div class="action-h">Staging Evidence Pack</div>
+        <div class="action-sub">Technical Validation</div>
+        <div class="action-body">Commit to a full E-04 through E-09 staging run against one immutable release SHA to prove end-to-end resilience.</div>
+      </div>
+      
+      <div class="action-item">
+        <div class="action-h">Independent Sign-off</div>
+        <div class="action-sub">Regulatory Readiness</div>
+        <div class="action-body">Execute the four-role approval process with detached cryptographic signatures for the final release manifest.</div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="bottom-gate">
+    Requirement: <span>Production activation is prohibited until all four leadership gates are closed and verified.</span>
+  </div>
+</div>
+</body>
+</html>

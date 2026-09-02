@@ -1,0 +1,9 @@
+go_test_race|1|elapsed_seconds=7.365;exit_status=1;
+rust_risk_test|0|elapsed_seconds=1.912;exit_status=0;
+rust_ledger_test|0|elapsed_seconds=15.942;exit_status=0;
+reporting_unittest|1|elapsed_seconds=2.438;exit_status=1;
+document_pytest|1|elapsed_seconds=1.613;exit_status=1;
+control_plane_check|0|elapsed_seconds=22.563;exit_status=0;
+control_plane_all_tests|0|elapsed_seconds=106.003;exit_status=0;
+control_plane_integration_tests|1|elapsed_seconds=17.035;exit_status=1;
+postgres_app_role_integration|1|elapsed_seconds=0.324;exit_status=1;

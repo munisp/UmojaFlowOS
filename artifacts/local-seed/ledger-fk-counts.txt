@@ -1,0 +1,14 @@
+ bindings 
+----------
+        0
+(1 row)
+
+ intents 
+---------
+       0
+(1 row)
+
+ tigerbeetle_account_id 
+------------------------
+(0 rows)
+

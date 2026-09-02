@@ -1,0 +1,1 @@
+reporting_redis_exit=0

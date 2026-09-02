@@ -20,22 +20,22 @@ func TestMetricsEndpointsWithoutExternalDependencies(t *testing.T) {
 	handler := newHandlerWithSignerMetrics(time.Now, nil, nil, nil, signerMetrics)
 
 	tests := []struct {
-		name       string
-		path       string
+		name        string
+		path        string
 		contentType string
-		expected   []string
+		expected    []string
 	}{
 		{
-			name:       "json metrics",
-			path:       "/v1/metrics",
+			name:        "json metrics",
+			path:        "/v1/metrics",
 			contentType: "application/json",
-			expected:   []string{"\"signer_attempts_total\":12", "\"signer_retry_exhausted_total\":2"},
+			expected:    []string{"\"signer_attempts_total\":12", "\"signer_retry_exhausted_total\":2"},
 		},
 		{
-			name:       "prometheus metrics",
-			path:       "/metrics",
+			name:        "prometheus metrics",
+			path:        "/metrics",
 			contentType: "text/plain",
-			expected:   []string{"# TYPE umoja_signer_attempts_total counter", "umoja_signer_retries_total 4", "umoja_signer_retry_exhausted_total 2", "umoja_signer_non_retryable_errors_total 1"},
+			expected:    []string{"# TYPE umoja_signer_attempts_total counter", "umoja_signer_retries_total 4", "umoja_signer_retry_exhausted_total 2", "umoja_signer_non_retryable_errors_total 1"},
 		},
 	}
 

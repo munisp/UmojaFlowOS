@@ -1,0 +1,17 @@
+== roles ==
+ rolname | rolsuper | rolcreatedb | rolcreaterole | rolinherit | rolcanlogin 
+---------+----------+-------------+---------------+------------+-------------
+(0 rows)
+
+== database ==
+ datname | owner | app_connect | app_database_create 
+---------+-------+-------------+---------------------
+(0 rows)
+
+== role memberships ==
+ member | granted_role 
+--------+--------------
+(0 rows)
+
+== public schema privileges ==
+psql:artifacts/postgres_privilege_verification.sql:27: ERROR:  role "umoja_app" does not exist

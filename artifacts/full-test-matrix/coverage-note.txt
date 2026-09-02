@@ -1,0 +1,1 @@
+coverage_note=Rust and Python coverage providers are not invoked by the repository Makefile; Vitest coverage provider is not declared in apps/control-plane/package.json.
