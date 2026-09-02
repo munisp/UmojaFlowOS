@@ -85,6 +85,12 @@ hpa:
   cpuAverageUtilization: 60
   memoryAverageUtilization: 70
   queueDepthAverageValue: "50"
+  scaleUpStabilizationSeconds: 60
+  scaleUpPods: 2
+  scaleUpPeriodSeconds: 60
+  scaleDownStabilizationSeconds: 300
+  scaleDownPods: 1
+  scaleDownPeriodSeconds: 120
 
 podDisruptionBudget:
   enabled: true

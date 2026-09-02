@@ -1,0 +1,146 @@
+{
+  "mode": "deterministic_hpa_model_with_job_timestamps",
+  "seconds": 900,
+  "arrival_rate_during_burst_per_second": 100,
+  "burst_seconds": 120,
+  "worker_rate_per_replica_per_second": 16,
+  "initial_replicas": 2,
+  "max_replicas": 8,
+  "target_pending_per_replica": 50,
+  "max_queue_depth": 5344,
+  "final_queue_depth": 0,
+  "final_replicas": 3,
+  "scale_events": 8,
+  "events": [
+    {
+      "second": 60,
+      "action": "scale_up",
+      "replicas": 4,
+      "queue": 4148,
+      "desired": 8
+    },
+    {
+      "second": 90,
+      "action": "scale_up",
+      "replicas": 6,
+      "queue": 5228,
+      "desired": 8
+    },
+    {
+      "second": 120,
+      "action": "scale_up",
+      "replicas": 8,
+      "queue": 5248,
+      "desired": 8
+    },
+    {
+      "second": 300,
+      "action": "scale_down",
+      "replicas": 7,
+      "queue": 0,
+      "desired": 2
+    },
+    {
+      "second": 420,
+      "action": "scale_down",
+      "replicas": 6,
+      "queue": 0,
+      "desired": 2
+    },
+    {
+      "second": 540,
+      "action": "scale_down",
+      "replicas": 5,
+      "queue": 0,
+      "desired": 2
+    },
+    {
+      "second": 660,
+      "action": "scale_down",
+      "replicas": 4,
+      "queue": 0,
+      "desired": 2
+    },
+    {
+      "second": 780,
+      "action": "scale_down",
+      "replicas": 3,
+      "queue": 0,
+      "desired": 2
+    }
+  ],
+  "completed_jobs": 12000,
+  "uncompleted_jobs": 0,
+  "latency_seconds": {
+    "queue_wait": {
+      "count": 12000,
+      "min_seconds": 0.0,
+      "p50_seconds": 48.0,
+      "p95_seconds": 53.0,
+      "p99_seconds": 54.0,
+      "max_seconds": 54.0,
+      "mean_seconds": 44.444,
+      "histogram_cumulative_counts": {
+        "le_0s": 32,
+        "le_1s": 64,
+        "le_2s": 124,
+        "le_5s": 256,
+        "le_10s": 492,
+        "le_20s": 960,
+        "le_30s": 1440,
+        "le_45s": 4268,
+        "le_60s": 12000,
+        "le_90s": 12000,
+        "le_120s": 12000,
+        "le_inf": 12000
+      }
+    },
+    "processing": {
+      "count": 12000,
+      "min_seconds": 1.0,
+      "p50_seconds": 1.0,
+      "p95_seconds": 1.0,
+      "p99_seconds": 1.0,
+      "max_seconds": 1.0,
+      "mean_seconds": 1.0,
+      "histogram_cumulative_counts": {
+        "le_0s": 0,
+        "le_1s": 12000,
+        "le_2s": 12000,
+        "le_5s": 12000,
+        "le_10s": 12000,
+        "le_20s": 12000,
+        "le_30s": 12000,
+        "le_45s": 12000,
+        "le_60s": 12000,
+        "le_90s": 12000,
+        "le_120s": 12000,
+        "le_inf": 12000
+      }
+    },
+    "end_to_end": {
+      "count": 12000,
+      "min_seconds": 1.0,
+      "p50_seconds": 49.0,
+      "p95_seconds": 54.0,
+      "p99_seconds": 55.0,
+      "max_seconds": 55.0,
+      "mean_seconds": 45.444,
+      "histogram_cumulative_counts": {
+        "le_0s": 0,
+        "le_1s": 32,
+        "le_2s": 64,
+        "le_5s": 216,
+        "le_10s": 448,
+        "le_20s": 924,
+        "le_30s": 1384,
+        "le_45s": 3636,
+        "le_60s": 12000,
+        "le_90s": 12000,
+        "le_120s": 12000,
+        "le_inf": 12000
+      }
+    }
+  },
+  "live_cluster_evidence": false
+}

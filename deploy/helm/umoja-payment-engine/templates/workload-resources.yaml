@@ -59,19 +59,19 @@ spec:
   maxReplicas: {{ .Values.hpa.maxReplicas }}
   behavior:
     scaleUp:
-      stabilizationWindowSeconds: 60
+      stabilizationWindowSeconds: {{ .Values.hpa.scaleUpStabilizationSeconds }}
       selectPolicy: Max
       policies:
         - type: Pods
-          value: 2
-          periodSeconds: 60
+          value: {{ .Values.hpa.scaleUpPods }}
+          periodSeconds: {{ .Values.hpa.scaleUpPeriodSeconds }}
     scaleDown:
-      stabilizationWindowSeconds: 300
+      stabilizationWindowSeconds: {{ .Values.hpa.scaleDownStabilizationSeconds }}
       selectPolicy: Min
       policies:
         - type: Pods
-          value: 1
-          periodSeconds: 120
+          value: {{ .Values.hpa.scaleDownPods }}
+          periodSeconds: {{ .Values.hpa.scaleDownPeriodSeconds }}
   metrics:
     - type: Resource
       resource:
