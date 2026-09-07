@@ -23,7 +23,7 @@ tracing = "0.1"
 tracing-opentelemetry = "0.29"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["trace"] }
+tower-http = { version = "0.7", features = ["trace"] }
 
 [dev-dependencies]
 # Exercises the real axum router in-process; no listener is opened.
