@@ -20,7 +20,7 @@ opentelemetry = "0.28"
 opentelemetry-otlp = { version = "0.28", features = ["grpc-tonic"] }
 opentelemetry_sdk = { version = "0.28", features = ["rt-tokio"] }
 tracing = "0.1"
-tracing-opentelemetry = "0.29"
+tracing-opentelemetry = "0.33"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["trace"] }
