@@ -72,17 +72,24 @@ jobs:
             --set vault.address=https://vault.invalid \
             --set vault.objectStorageSecretPath=secret/data/umoja/object-storage \
             > rendered-native-idem.yaml
-      - name: Kubernetes client-side validation
-        uses: azure/setup-kubectl@v4
-        with:
-          version: v1.31.4
-      # --validate defaults to true even under --dry-run=client, which fetches
-      # the live cluster's OpenAPI schema over the network to check the
-      # manifest against - there's no cluster here (confirmed live: "dial tcp
-      # [::1]:8080: connect: connection refused"), and this step exists to
-      # catch YAML/structural errors, not to validate against a specific
-      # cluster's API surface.
-      - run: kubectl apply --dry-run=client --validate=false -f rendered-native-idem.yaml
+      # Not kubectl apply --dry-run=client: it still needs live server
+      # discovery to resolve resource kinds (Deployment, HPA, ...) to their
+      # API group/version, separate from --validate's schema check and
+      # unaffected by --validate=false - there's no cluster here (confirmed
+      # live, both with and without --validate=false: "dial tcp [::1]:8080:
+      # connect: connection refused"). kubeconform validates structurally
+      # against bundled offline OpenAPI schemas, which is what this step
+      # actually needs - catching YAML/structural errors, not checking
+      # against one specific cluster's API surface.
+      - name: Install kubeconform
+        run: |
+          set -Eeuo pipefail
+          curl --fail --silent --show-error --location \
+            https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar -xz kubeconform
+          sudo install -m 0755 kubeconform /usr/local/bin/kubeconform
+      - name: Kubernetes manifest validation (offline schema, no cluster)
+        run: kubeconform --strict --summary rendered-native-idem.yaml
       - uses: actions/upload-artifact@v4
         with:
           name: native-idem-rendered-manifests
