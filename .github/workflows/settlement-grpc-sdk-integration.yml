@@ -30,14 +30,17 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: services/payment-engine/go.mod
+      # Must precede setup-node: its cache: pnpm option needs pnpm already on
+      # PATH to compute a cache key (confirmed live: "Unable to locate
+      # executable file: pnpm" when this ran after setup-node instead).
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.12.1
       - name: Install Python gRPC runtime
         run: python3 -m pip install --disable-pip-version-check grpcio==1.74.0 protobuf==6.32.0
       - name: Install Node dependencies
