@@ -41,7 +41,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
+          cache-dependency-path: apps/control-plane/pnpm-lock.yaml
       # Both pins must be >= whatever versions generated
       # sdk/python/umoja/settlement/v1/settlement_pb2*.py - confirmed live in
       # sequence: protobuf gencode 7.35.1 vs pinned runtime 6.32.0, then (once
@@ -49,7 +49,14 @@ jobs:
       # vs pinned grpcio 1.74.0.
       - name: Install Python gRPC runtime
         run: python3 -m pip install --disable-pip-version-check grpcio==1.83.1 protobuf==7.36.1
+      # This job's only Node dependency, vitest, lives in apps/control-plane's
+      # own package.json/pnpm-lock.yaml - the repo root has a separate,
+      # unrelated one (codegen tooling only: @bufbuild/protobuf, ts-proto)
+      # this repo has no pnpm workspace linking the two. Installing at the
+      # root here left apps/control-plane's own node_modules empty
+      # (confirmed live: "Command \"vitest\" not found").
       - name: Install Node dependencies
+        working-directory: apps/control-plane
         run: pnpm install --frozen-lockfile
       - name: Build typed settlement server
         working-directory: services/payment-engine
