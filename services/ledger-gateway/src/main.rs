@@ -299,7 +299,9 @@ async fn main() {
     axum::serve(listener, router())
         .await
         .expect("serve ledger-gateway");
-    telemetry_provider.shutdown().expect("shutdown OTLP provider");
+    telemetry_provider
+        .shutdown()
+        .expect("shutdown OTLP provider");
 }
 
 #[cfg(test)]
