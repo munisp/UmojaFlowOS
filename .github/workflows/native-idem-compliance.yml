@@ -73,7 +73,7 @@ jobs:
             --set vault.objectStorageSecretPath=secret/data/umoja/object-storage \
             > rendered-native-idem.yaml
       - name: Kubernetes client-side validation
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@v5
         with:
           version: v1.31.4
       # --validate defaults to true even under --dry-run=client, which fetches
