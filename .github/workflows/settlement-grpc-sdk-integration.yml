@@ -42,8 +42,12 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
+      # protobuf must be >= whatever protoc version generated
+      # sdk/python/umoja/settlement/v1/settlement_pb2.py (confirmed live:
+      # "gencode 7.35.1 runtime 6.32.0 ... Runtime version cannot be older
+      # than the linked gencode version").
       - name: Install Python gRPC runtime
-        run: python3 -m pip install --disable-pip-version-check grpcio==1.74.0 protobuf==6.32.0
+        run: python3 -m pip install --disable-pip-version-check grpcio==1.74.0 protobuf==7.36.1
       - name: Install Node dependencies
         run: pnpm install --frozen-lockfile
       - name: Build typed settlement server
