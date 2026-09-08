@@ -16,7 +16,7 @@ func TestNativeIdemHelmRendersFailClosedMultiAZWorkload(t *testing.T) {
 		"vault.address": "https://vault.invalid",
 		"vault.objectStorageSecretPath": "secret/data/umoja/object-storage",
 	}}
-	rendered := helm.RenderTemplate(t, options, "../../../deploy/helm/umoja-payment-engine", "umoja-payment-engine")
+	rendered := helm.RenderTemplate(t, options, "../../../deploy/helm/umoja-payment-engine", "umoja-payment-engine", nil)
 	require.Contains(t, rendered, "topologySpreadConstraints:")
 	require.Contains(t, rendered, "topology.kubernetes.io/zone")
 	require.Contains(t, rendered, "name: opa")
