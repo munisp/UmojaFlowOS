@@ -1,0 +1,56 @@
+name: Docker Build & Push
+
+# Pushes each service to the DO registry the corresponding newwave-dev Flux
+# ImageRepository scans (umoja-control-plane, umoja-payment-engine, etc.),
+# tagged YYYYMMDD-HHMM to match each ImagePolicy's alphabetical-latest
+# selection - the same convention already used for every manual build this
+# cluster has run. No general build+push workflow existed for these 6
+# services despite 23 other workflow files in this repo.
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  docker:
+    name: Docker Build & Push (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: umoja-control-plane
+            context: apps/control-plane
+          - image: umoja-payment-engine
+            context: services/payment-engine
+          - image: umoja-risk-compliance-core
+            context: services/risk-compliance-core
+          - image: umoja-ledger-gateway
+            context: services/ledger-gateway
+          - image: umoja-reporting-analytics
+            context: services/reporting-analytics
+          - image: umoja-document-intelligence
+            context: services/document-intelligence
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Compute tag
+        id: tag
+        run: echo "tag=$(date -u +%Y%m%d-%H%M)" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: registry.digitalocean.com
+          username: ${{ secrets.DO_REGISTRY_TOKEN }}
+          password: ${{ secrets.DO_REGISTRY_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: registry.digitalocean.com/talentgraph-auth/${{ matrix.image }}:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
