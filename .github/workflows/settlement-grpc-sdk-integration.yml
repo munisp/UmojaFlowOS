@@ -17,6 +17,7 @@ on:
       - 'sdk/python/**'
       - 'sdk/typescript/**'
       - 'apps/control-plane/**'
+      - '.github/workflows/settlement-grpc-sdk-integration.yml'
 
 permissions:
   contents: read
