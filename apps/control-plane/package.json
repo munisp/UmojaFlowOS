@@ -48,6 +48,8 @@
     "@trpc/client": "^11.8.0",
     "@trpc/react-query": "^11.8.0",
     "@trpc/server": "^11.8.0",
+    "@bufbuild/protobuf": "1.10.0",
+    "@grpc/grpc-js": "^1.14.4",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.0.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.208.0",
