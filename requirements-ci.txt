@@ -13,3 +13,8 @@ docling>=2.0
 splink==4.0.16
 duckdb==1.5.5
 pandas==3.0.5
+opentelemetry-api>=1.28
+opentelemetry-sdk>=1.28
+opentelemetry-exporter-otlp-proto-grpc>=1.28
+opentelemetry-instrumentation-fastapi>=0.49b0
+opentelemetry-instrumentation-httpx>=0.49b0
