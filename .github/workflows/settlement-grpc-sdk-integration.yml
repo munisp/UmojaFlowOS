@@ -34,7 +34,7 @@ jobs:
       # Must precede setup-node: its cache: pnpm option needs pnpm already on
       # PATH to compute a cache key (confirmed live: "Unable to locate
       # executable file: pnpm" when this ran after setup-node instead).
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.12.1
       - uses: actions/setup-node@v4
