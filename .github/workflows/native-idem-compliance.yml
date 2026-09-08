@@ -76,7 +76,13 @@ jobs:
         uses: azure/setup-kubectl@v4
         with:
           version: v1.31.4
-      - run: kubectl apply --dry-run=client -f rendered-native-idem.yaml
+      # --validate defaults to true even under --dry-run=client, which fetches
+      # the live cluster's OpenAPI schema over the network to check the
+      # manifest against - there's no cluster here (confirmed live: "dial tcp
+      # [::1]:8080: connect: connection refused"), and this step exists to
+      # catch YAML/structural errors, not to validate against a specific
+      # cluster's API surface.
+      - run: kubectl apply --dry-run=client --validate=false -f rendered-native-idem.yaml
       - uses: actions/upload-artifact@v4
         with:
           name: native-idem-rendered-manifests

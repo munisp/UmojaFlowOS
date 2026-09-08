@@ -31,7 +31,7 @@ SENSITIVE_SOURCE_ASSIGNMENT = re.compile(
         (?P<declaration>[a-z_$][\w$]*(?:token|password|secret|api[_-]?key|client[_-]?secret|sasl[_-]?pass)[\w$]*)
         (?:\s*:\s*[^=;\n]+)?\s*=
       |
-        (?P<property>["']?[a-z_$][\w$]*(?:token|password|secret|api[_-]?key|client[_-]?secret|sasl[_-]?pass)[\w$]*["']?)\s*:
+        ["']?(?P<property>[a-z_$][\w$]*(?:token|password|secret|api[_-]?key|client[_-]?secret|sasl[_-]?pass)[\w$]*)["']?\s*:
     )
     \s*(?P<quote>["'])(?P<value>[^"'\n]{20,})(?P=quote)
     """
@@ -48,8 +48,15 @@ SENSITIVE_ASSIGNMENT = re.compile(
 
 CONFIG_SUFFIXES = {".env", ".template", ".yaml", ".yml", ".json", ".md", ".toml", ".ini", ".conf"}
 SAFE_VALUE_PREFIXES = ("${", "$", "<", "REPLACE_WITH", "example", "test", "dummy")
-SAFE_REFERENCE_SUFFIXES = ("_REF", "_REFERENCE")
+# PATH: a lookup path for where a secret lives (Vault KV path, etc.) is a
+# reference, not the secret material itself - same class as _REF/_REFERENCE.
+SAFE_REFERENCE_SUFFIXES = ("_REF", "_REFERENCE", "PATH")
 SAFE_SECRET_FILE_PREFIXES = ("/run/secrets/", "/var/run/secrets/")
+# Explicitly-synthetic fixture data for local dev seeding (self-declared via
+# a sibling "synthetic": true field) - not operational secret material, and
+# out of this scanner's stated scope ("paths most likely to leak an
+# operational secret").
+SYNTHETIC_FIXTURE_PREFIX = "synthetic_"
 
 
 def tracked_paths(repository: Path) -> list[Path]:
@@ -77,6 +84,8 @@ def find_violations(repository: Path, paths: Iterable[Path]) -> list[str]:
     violations: list[str] = []
     for path in paths:
         if not path.is_file() or path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".pdf", ".zip"}:
+            continue
+        if path.name.startswith(SYNTHETIC_FIXTURE_PREFIX):
             continue
         try:
             contents = path.read_text(encoding="utf-8")
