@@ -31,7 +31,12 @@ RUN pip install --no-cache-dir \
     "pillow>=10.0" \
     "paddleocr>=3.0" \
     "docling>=2.0" \
-    "python-multipart>=0.0.20"
+    "python-multipart>=0.0.20" \
+    "opentelemetry-api>=1.29,<2" \
+    "opentelemetry-sdk>=1.29,<2" \
+    "opentelemetry-exporter-otlp-proto-grpc>=1.29,<2" \
+    "opentelemetry-instrumentation-fastapi>=0.50b0,<1" \
+    "opentelemetry-instrumentation-httpx>=0.50b0,<1"
 
 COPY src ./src
 

@@ -135,13 +135,13 @@ BEGIN
     END LOOP;
 END $$;
 
--- These grants assume the deployment creates an application role and a separate
--- schema-owner role. The application role receives DML only; it must not own
--- the tables, alter RLS, or bypass retention/terminal constraints.
-GRANT SELECT, INSERT, UPDATE ON stablecoin_intent TO umoja_app;
-GRANT SELECT, INSERT, UPDATE ON stablecoin_idempotency_key TO umoja_app;
-GRANT SELECT, INSERT, UPDATE ON stablecoin_event_inbox TO umoja_app;
-GRANT SELECT, INSERT ON stablecoin_terminal_decision TO umoja_app;
-GRANT USAGE ON SCHEMA public TO umoja_app;
+-- Application-role privileges for these tables are granted centrally by
+-- database/postgresql/grants.sql (run separately by the schema owner against
+-- the deployment's actual app role), not hardcoded here - a literal
+-- `TO umoja_app` in a forward migration broke every environment where that
+-- role doesn't exist yet (confirmed live: every fresh migration run,
+-- including CI, since nothing anywhere creates it), and duplicated grants.sql's
+-- own single-source-of-truth INSERT/UPDATE table lists it already needs
+-- updating for the new tables above regardless.
 
 COMMIT;

@@ -12,7 +12,12 @@ RUN pip install --no-cache-dir \
     "fastapi>=0.110" \
     "uvicorn>=0.27" \
     "redis>=5.0" \
-    "boto3>=1.34"
+    "boto3>=1.34" \
+    "opentelemetry-api>=1.28" \
+    "opentelemetry-sdk>=1.28" \
+    "opentelemetry-exporter-otlp-proto-grpc>=1.28" \
+    "opentelemetry-instrumentation-fastapi>=0.49b0" \
+    "opentelemetry-instrumentation-httpx>=0.49b0"
 
 COPY src ./src
 

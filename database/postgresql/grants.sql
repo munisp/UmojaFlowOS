@@ -67,7 +67,9 @@ GRANT INSERT ON TABLE
   stablecoin_issuer_gate_decisions,
   stablecoin_settlement_attempts,
   compliance_vendor_evidence_items,
-  compliance_vendor_gate_decisions
+  compliance_vendor_gate_decisions,
+  stablecoin_terminal_decision,
+  settlement_fence_commands
 TO :"app_role_ident";
 
 -- Records with a governed, reviewable lifecycle require in-place transitions.
@@ -110,8 +112,17 @@ GRANT INSERT, UPDATE ON TABLE
   provider_unknown_reconciliation,
   provider_reconciliation_decision,
   vasp_readiness_assurance_items,
-  operator_access_requests
+  operator_access_requests,
+  stablecoin_intent,
+  stablecoin_idempotency_key,
+  stablecoin_event_inbox
 TO :"app_role_ident";
+
+-- fence_version reads its default from a sequence the app must be able to
+-- read (not write directly - nextval() is only ever invoked implicitly via
+-- the column default on INSERT, which needs USAGE, not a direct grant on
+-- the INSERT privilege alone).
+GRANT USAGE, SELECT ON SEQUENCE settlement_fence_command_version_seq TO :"app_role_ident";
 
 -- `treasury_stress_test_runs` is intentionally omitted: no application write
 -- path exists, and stress-test execution remains fail-closed until reconciled

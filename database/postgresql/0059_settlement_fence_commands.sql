@@ -28,9 +28,10 @@ CREATE INDEX IF NOT EXISTS settlement_fence_commands_expiry_idx
 CREATE INDEX IF NOT EXISTS settlement_fence_commands_environment_idx
     ON settlement_fence_commands (environment, applied_at DESC);
 
+-- Application-role privileges are granted centrally by
+-- database/postgresql/grants.sql, not hardcoded here - see 0058's grant
+-- section for why a literal `TO umoja_app` broke every environment.
 REVOKE ALL ON settlement_fence_commands FROM PUBLIC;
-GRANT SELECT, INSERT ON settlement_fence_commands TO umoja_app;
-GRANT USAGE, SELECT ON SEQUENCE settlement_fence_command_version_seq TO umoja_app;
 
 COMMENT ON TABLE settlement_fence_commands IS
     'Append-only signed settlement-fence commands. command_id is the durable replay key.';
