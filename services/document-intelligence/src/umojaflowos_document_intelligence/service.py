@@ -135,7 +135,7 @@ async def _analyse_file(request: AnalysisRequest, content: bytes) -> DocumentAna
 
 @app.get("/healthz")
 async def healthz() -> dict[str, str]:
-    return {"status": "ok", "service": "document-intelligence"}
+    return {"status": "ok", "service": "document-intelligence", "version": app.version}
 
 
 @app.post("/v1/analyse", response_model=DocumentAnalysisResult)
