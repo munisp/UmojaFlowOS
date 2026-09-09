@@ -24,6 +24,9 @@ use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use tower_http::trace::TraceLayer;
+
+mod observability;
 
 /// Service identity carried on every envelope. Must match the value the control
 /// plane's contract pins with `z.literal`.
@@ -300,6 +303,7 @@ fn router_with_screening(screening_gateway: Option<ScreeningGateway>) -> Router 
         .route("/v1/counterparty/assess", post(assess_counterparty_route))
         .route("/v1/screening/check", post(screen_subject))
         .with_state(Arc::new(ServiceState::new(screening_gateway)))
+        .layer(TraceLayer::new_for_http())
 }
 
 fn router() -> Router {
@@ -308,6 +312,7 @@ fn router() -> Router {
 
 #[tokio::main]
 async fn main() {
+    let telemetry_provider = observability::init();
     let screening_gateway = ScreeningGateway::from_environment()
         .expect("construct fail-closed screening gateway from deployment environment");
     let port = std::env::var("PORT").unwrap_or_else(|_| "8082".to_string());
@@ -321,6 +326,9 @@ async fn main() {
     axum::serve(listener, app)
         .await
         .expect("serve risk-compliance-core");
+    telemetry_provider
+        .shutdown()
+        .expect("shutdown OTLP provider");
 }
 
 #[cfg(test)]
