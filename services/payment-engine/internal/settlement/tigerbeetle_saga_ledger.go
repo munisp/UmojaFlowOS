@@ -84,6 +84,60 @@ type TigerBeetleSagaLedger struct {
 	Accounts AccountResolver
 }
 
+// LedgerObservation contains the three deterministic records that can exist
+// for one saga: the pending transfer plus exactly one commit or void transfer.
+type LedgerObservation struct {
+	Pending   ledger.TransferObservation
+	Committed ledger.TransferObservation
+	Voided    ledger.TransferObservation
+}
+
+// Observe reads all deterministic TigerBeetle operation IDs. It rejects
+// conflicting commit/void facts, account or amount mismatches, and a missing
+// pending record rather than attempting to infer a safe settlement outcome.
+func (l TigerBeetleSagaLedger) Observe(ctx context.Context, in Intent, pendingID uint64) (LedgerObservation, error) {
+	if l.Poster == nil || l.Accounts == nil || pendingID == 0 {
+		return LedgerObservation{}, errors.New("TigerBeetle poster, account resolver, and pending ID are required")
+	}
+	lookup, ok := l.Poster.(interface {
+		LookupTransfer(context.Context, uint64) (ledger.TransferObservation, error)
+	})
+	if !ok {
+		return LedgerObservation{}, errors.New("configured TigerBeetle poster does not support reconciliation lookup")
+	}
+	accounts, err := l.Accounts.ResolveSettlementAccounts(ctx, in)
+	if err != nil {
+		return LedgerObservation{}, err
+	}
+	pending, err := lookup.LookupTransfer(ctx, pendingID)
+	if err != nil {
+		return LedgerObservation{}, err
+	}
+	commitID := deterministicLedgerOperationID(in.TenantID, in.IdempotencyKey, intentPayloadDigest(in), "commit")
+	voidID := deterministicLedgerOperationID(in.TenantID, in.IdempotencyKey, intentPayloadDigest(in), "void")
+	committed, err := lookup.LookupTransfer(ctx, commitID)
+	if err != nil {
+		return LedgerObservation{}, err
+	}
+	voided, err := lookup.LookupTransfer(ctx, voidID)
+	if err != nil {
+		return LedgerObservation{}, err
+	}
+	if !pending.Exists || pending.ID != pendingID || pending.Mode != ledger.TransferPending || !strings.EqualFold(pending.Currency, in.Fiat) || pending.DebitAccountID != accounts.DebitAccountID || pending.CreditAccountID != accounts.CreditAccountID || pending.Amount != uint64(in.AmountMinor) {
+		return LedgerObservation{}, errors.New("TigerBeetle pending transfer observation does not match durable saga")
+	}
+	if committed.Exists && (committed.Mode != ledger.TransferPostPending || committed.PendingID != pendingID || !strings.EqualFold(committed.Currency, in.Fiat) || committed.DebitAccountID != accounts.DebitAccountID || committed.CreditAccountID != accounts.CreditAccountID || committed.Amount != uint64(in.AmountMinor)) {
+		return LedgerObservation{}, errors.New("TigerBeetle commit observation does not match durable saga")
+	}
+	if voided.Exists && (voided.Mode != ledger.TransferVoidPending || voided.PendingID != pendingID || !strings.EqualFold(voided.Currency, in.Fiat) || voided.DebitAccountID != accounts.DebitAccountID || voided.CreditAccountID != accounts.CreditAccountID || voided.Amount != uint64(in.AmountMinor)) {
+		return LedgerObservation{}, errors.New("TigerBeetle void observation does not match durable saga")
+	}
+	if committed.Exists && voided.Exists {
+		return LedgerObservation{}, errors.New("TigerBeetle saga has conflicting commit and void records")
+	}
+	return LedgerObservation{Pending: pending, Committed: committed, Voided: voided}, nil
+}
+
 func (l TigerBeetleSagaLedger) Prepare(ctx context.Context, in Intent) (LedgerFact, error) {
 	request, err := l.postingRequest(ctx, in, "pending", 0)
 	if err != nil {

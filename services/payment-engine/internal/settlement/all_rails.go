@@ -36,7 +36,11 @@ type Intent struct {
 	Direction                                              Direction
 	AmountMinor                                            int64
 	Payload                                                []byte
-	ExpiresAt                                              time.Time
+	// PayloadSHA256 carries the original immutable payload binding for a
+	// recovery query. New requests derive it from Payload; recovery requests
+	// supply the persisted digest and never reconstruct sensitive payload bytes.
+	PayloadSHA256 string
+	ExpiresAt     time.Time
 }
 type ProviderResult struct {
 	Reference, BlockchainTx, Reason string
@@ -120,7 +124,7 @@ func (c *Coordinator) Execute(ctx context.Context, in Intent) (ProviderResult, e
 	if c.Fiat == nil || c.Custody == nil || c.Finality == nil || c.Screening == nil || c.Ledger == nil || c.Attestor == nil || c.Routing == nil || c.Liquidity == nil || c.Saga == nil {
 		return ProviderResult{}, errors.New("fiat, custody, finality, screening, ledger, attestor, routing, liquidity verifier, and saga store are required")
 	}
-	digest := PayloadDigest(in.Payload)
+	digest := intentPayloadDigest(in)
 	record, owned, err := c.Saga.Reserve(ctx, in, digest)
 	if err != nil {
 		return ProviderResult{State: Unknown, Reason: "durable idempotency unavailable"}, fmt.Errorf("%w: %v", ErrUnknown, err)
@@ -405,7 +409,13 @@ func validateLedgerFact(fact LedgerFact, in Intent, expected State) error {
 }
 
 func validateIntent(in Intent) error {
-	if strings.TrimSpace(in.ID) == "" || strings.TrimSpace(in.IdempotencyKey) == "" || strings.TrimSpace(in.TenantID) == "" || strings.TrimSpace(in.Asset) == "" || strings.TrimSpace(in.Fiat) == "" || in.AmountMinor <= 0 || len(in.Payload) == 0 || (in.Direction != Onramp && in.Direction != Offramp) {
+	if strings.TrimSpace(in.ID) == "" || strings.TrimSpace(in.IdempotencyKey) == "" || strings.TrimSpace(in.TenantID) == "" || strings.TrimSpace(in.Asset) == "" || strings.TrimSpace(in.Fiat) == "" || in.AmountMinor <= 0 || (in.Direction != Onramp && in.Direction != Offramp) {
+		return ErrInvalidIntent
+	}
+	if len(in.Payload) == 0 && !validDigest(in.PayloadSHA256) {
+		return ErrInvalidIntent
+	}
+	if len(in.Payload) > 0 && in.PayloadSHA256 != "" && (!validDigest(in.PayloadSHA256) || in.PayloadSHA256 != PayloadDigest(in.Payload)) {
 		return ErrInvalidIntent
 	}
 	if !in.ExpiresAt.IsZero() && time.Now().After(in.ExpiresAt) {
@@ -413,6 +423,13 @@ func validateIntent(in Intent) error {
 	}
 	return nil
 }
+func intentPayloadDigest(in Intent) string {
+	if validDigest(in.PayloadSHA256) {
+		return in.PayloadSHA256
+	}
+	return PayloadDigest(in.Payload)
+}
+
 func PayloadDigest(payload []byte) string {
 	sum := sha256.Sum256(payload)
 	return hex.EncodeToString(sum[:])

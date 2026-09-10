@@ -142,3 +142,9 @@ GRANT USAGE, SELECT ON SEQUENCE settlement_fence_command_version_seq TO :"app_ro
 GRANT UPDATE (revoked_at) ON TABLE verification_consents TO :"app_role_ident";
 
 COMMIT;
+
+-- Resolution approvals are inserted only by the independent authorization service.
+-- The settlement worker may atomically consume an already verified approval.
+GRANT SELECT, UPDATE (consumed_at, consumed_by)
+ON TABLE settlement_unknown_resolution_authorization
+TO :"app_role_ident";

@@ -53,6 +53,25 @@ type Client interface {
 	CreateAccounts(context.Context, []Account) error
 	CreateTransfers(context.Context, []Transfer) error
 }
+
+// TransferObservation is a read-only TigerBeetle fact used exclusively by
+// reconciliation. It does not authorize a new transfer.
+type TransferObservation struct {
+	ID              uint64
+	PendingID       uint64
+	DebitAccountID  uint64
+	CreditAccountID uint64
+	Amount          uint64
+	Currency        string
+	Mode            TransferMode
+	Exists          bool
+}
+
+// TransferLookupClient is intentionally separate from Client so command-only
+// test clients do not gain implicit reconciliation authority.
+type TransferLookupClient interface {
+	LookupTransfer(context.Context, uint64) (TransferObservation, error)
+}
 type DisabledClient struct{}
 
 func (DisabledClient) CreateAccounts(context.Context, []Account) error {

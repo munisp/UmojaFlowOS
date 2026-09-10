@@ -2,6 +2,7 @@ package ledger
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -60,6 +61,23 @@ func (c *TigerBeetleClient) ledgerForCurrency(currency string) (uint32, error) {
 		return 0, fmt.Errorf("TigerBeetle ledger is not configured for currency %q", currency)
 	}
 	return ledger, nil
+}
+
+func (c *TigerBeetleClient) currencyForLedger(target uint32) (string, error) {
+	var currency string
+	for configured, ledgerID := range c.config.CurrencyLedgers {
+		if ledgerID != target {
+			continue
+		}
+		if currency != "" {
+			return "", fmt.Errorf("TigerBeetle ledger %d has ambiguous currency configuration", target)
+		}
+		currency = strings.ToUpper(strings.TrimSpace(configured))
+	}
+	if currency == "" {
+		return "", fmt.Errorf("TigerBeetle response ledger %d is not configured", target)
+	}
+	return currency, nil
 }
 
 func (c *TigerBeetleClient) CreateAccounts(ctx context.Context, accounts []Account) error {
@@ -139,6 +157,54 @@ func tigerBeetleTransferFlags(transfer Transfer) (tb.TransferFlags, error) {
 	default:
 		return tb.TransferFlags{}, fmt.Errorf("unsupported TigerBeetle transfer mode %q", transfer.Mode)
 	}
+}
+
+// LookupTransfer reads a single transfer fact for reconciliation. A missing
+// record returns Exists=false; it never implies that a pending transfer was
+// voided or committed. IDs outside the platform's 64-bit allocation domain are
+// rejected to avoid lossy U128 conversion.
+func (c *TigerBeetleClient) LookupTransfer(ctx context.Context, id uint64) (TransferObservation, error) {
+	if c == nil || c.client == nil || id == 0 {
+		return TransferObservation{}, fmt.Errorf("TigerBeetle transfer lookup requires a configured positive ID")
+	}
+	if err := ctx.Err(); err != nil {
+		return TransferObservation{}, err
+	}
+	records, err := c.client.LookupTransfers([]tb.Uint128{tb.ToUint128(id)})
+	if err != nil {
+		return TransferObservation{}, fmt.Errorf("TigerBeetle lookup transfers: %w", err)
+	}
+	if len(records) == 0 {
+		return TransferObservation{ID: id, Exists: false}, nil
+	}
+	if len(records) != 1 {
+		return TransferObservation{}, fmt.Errorf("TigerBeetle lookup returned %d records for one ID", len(records))
+	}
+	record := records[0]
+	transferID, hi := record.ID.Uint64()
+	pendingID, pendingHi := record.PendingID.Uint64()
+	debit, debitHi := record.DebitAccountID.Uint64()
+	credit, creditHi := record.CreditAccountID.Uint64()
+	amount, amountHi := record.Amount.Uint64()
+	if hi != 0 || pendingHi != 0 || debitHi != 0 || creditHi != 0 || amountHi != 0 {
+		return TransferObservation{}, errors.New("TigerBeetle reconciliation record exceeds 64-bit platform ID or amount domain")
+	}
+	currency, err := c.currencyForLedger(record.Ledger)
+	if err != nil {
+		return TransferObservation{}, err
+	}
+	flags := record.TransferFlags()
+	mode := TransferConfirmed
+	if flags.Pending {
+		mode = TransferPending
+	}
+	if flags.PostPendingTransfer {
+		mode = TransferPostPending
+	}
+	if flags.VoidPendingTransfer {
+		mode = TransferVoidPending
+	}
+	return TransferObservation{ID: transferID, PendingID: pendingID, DebitAccountID: debit, CreditAccountID: credit, Amount: amount, Currency: currency, Mode: mode, Exists: true}, nil
 }
 
 func (c *TigerBeetleClient) CreateTransfers(ctx context.Context, transfers []Transfer) error {

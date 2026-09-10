@@ -241,6 +241,10 @@ type pendingPostingLedger interface {
 	VoidPendingTransfer(context.Context, ledger.PostingRequest) (ledger.PostedTransferFact, error)
 }
 
+type transferLookupLedger interface {
+	LookupTransfer(context.Context, uint64) (ledger.TransferObservation, error)
+}
+
 type pendingPostingLedgerWithAdmission interface {
 	PostPendingTransferWithAdmission(context.Context, ledger.PostingRequest, ledger.AdmissionToken) (ledger.PostedTransferFact, error)
 	CommitPendingTransferWithAdmission(context.Context, ledger.PostingRequest, ledger.AdmissionToken) (ledger.PostedTransferFact, error)
@@ -278,6 +282,23 @@ func (g GuardedLedger) PostConfirmedTransfer(ctx context.Context, req ledger.Pos
 		return ledger.PostedTransferFact{}, err
 	}
 	return g.Inner.PostConfirmedTransfer(ctx, req)
+}
+
+// LookupTransfer is read-only, but it still observes the current fence state
+// so a locally fenced process cannot use stale recovery observations to issue
+// a later monetary command.
+func (g GuardedLedger) LookupTransfer(ctx context.Context, id uint64) (ledger.TransferObservation, error) {
+	if g.Fence == nil || g.Inner == nil {
+		return ledger.TransferObservation{}, errors.New("guarded ledger dependencies are required")
+	}
+	if err := g.Fence.CheckContext(ctx); err != nil {
+		return ledger.TransferObservation{}, err
+	}
+	lookup, ok := g.Inner.(transferLookupLedger)
+	if !ok {
+		return ledger.TransferObservation{}, errors.New("ledger does not support transfer lookup")
+	}
+	return lookup.LookupTransfer(ctx, id)
 }
 
 func (g GuardedLedger) PostPendingTransfer(ctx context.Context, req ledger.PostingRequest) (ledger.PostedTransferFact, error) {

@@ -157,6 +157,19 @@ func (s *PostingService) VoidPendingTransferWithAdmission(ctx context.Context, r
 	return s.VoidPendingTransfer(ctx, request)
 }
 
+// LookupTransfer returns an observed TigerBeetle transfer fact for recovery.
+// It fails closed when the configured command client cannot perform lookups.
+func (s *PostingService) LookupTransfer(ctx context.Context, id uint64) (TransferObservation, error) {
+	if s == nil || s.client == nil || id == 0 {
+		return TransferObservation{}, errors.New("TigerBeetle transfer lookup requires a configured positive ID")
+	}
+	lookup, ok := s.client.(TransferLookupClient)
+	if !ok {
+		return TransferObservation{}, errors.New("configured TigerBeetle client does not support transfer lookup")
+	}
+	return lookup.LookupTransfer(ctx, id)
+}
+
 func (s *PostingService) postTransfer(ctx context.Context, request PostingRequest, mode TransferMode, projectFinal bool) (PostedTransferFact, error) {
 	if err := s.validateRequest(request); err != nil {
 		return PostedTransferFact{}, err

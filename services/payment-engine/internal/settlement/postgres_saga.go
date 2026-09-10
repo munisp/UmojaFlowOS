@@ -255,7 +255,7 @@ func (s *PostgresSagaStore) Reserve(ctx context.Context, in Intent, digest strin
 			tenant_id,saga_id,intent_id,idempotency_key,payload_sha256,direction,asset,fiat,amount_minor,destination,stage,version,created_at,updated_at
 		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,1,$12,$12)
 		ON CONFLICT (tenant_id,idempotency_key) DO NOTHING
-		RETURNING tenant_id,saga_id,intent_id,idempotency_key,payload_sha256,direction,asset,fiat,amount_minor,destination,stage,version,created_at,updated_at,terminal_at`,
+			RETURNING tenant_id,saga_id,intent_id,idempotency_key,payload_sha256,direction,asset,fiat,amount_minor,destination,stage,version,created_at,updated_at,ledger_pending_id,ledger_transfer_id,terminal_at`,
 		in.TenantID, id, in.ID, in.IdempotencyKey, digest, string(in.Direction), in.Asset, in.Fiat, in.AmountMinor, in.Destination, string(StageReceived), now,
 	)
 	record, scanErr := scanSaga(row)
