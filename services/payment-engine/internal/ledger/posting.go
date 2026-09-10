@@ -11,6 +11,12 @@ import (
 // PostingRequest describes an already-authorised accounting fact. It is not a
 // payment instruction: the caller must have obtained the required policy,
 // provider, and human approvals before invoking this narrow boundary.
+type AdmissionToken struct {
+	Environment string
+	Version     uint64
+	Release     func() error
+}
+
 type PostingRequest struct {
 	TransferID      uint64
 	CorrelationID   string
@@ -83,6 +89,21 @@ func (s *PostingService) validateRequest(request PostingRequest) error {
 // after a confirmed TigerBeetle write, retrying this exact request reuses the
 // same immutable fact and gives the projection sink another chance to persist it.
 func (s *PostingService) PostConfirmedTransfer(ctx context.Context, request PostingRequest) (PostedTransferFact, error) {
+	return s.postConfirmedTransfer(ctx, request)
+}
+
+// PostConfirmedTransferWithAdmission is the production path used by the
+// settlement fence. The admission token owns a database row lock until the
+// TigerBeetle call returns, so a concurrent FENCE command cannot commit between
+// the fence check and the ledger submission.
+func (s *PostingService) PostConfirmedTransferWithAdmission(ctx context.Context, request PostingRequest, token AdmissionToken) (PostedTransferFact, error) {
+	if token.Environment == "" || token.Version == 0 || token.Release == nil {
+		return PostedTransferFact{}, errors.New("valid durable settlement admission token is required")
+	}
+	return s.postConfirmedTransfer(ctx, request)
+}
+
+func (s *PostingService) postConfirmedTransfer(ctx context.Context, request PostingRequest) (PostedTransferFact, error) {
 	if err := s.validateRequest(request); err != nil {
 		return PostedTransferFact{}, err
 	}

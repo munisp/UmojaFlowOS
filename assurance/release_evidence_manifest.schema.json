@@ -11,6 +11,18 @@
     "artifacts": {
       "type": "array",
       "minItems": 9,
+      "maxItems": 9,
+      "allOf": [
+        {"contains": {"properties": {"evidence_id": {"const": "E-01"}}, "required": ["evidence_id"]}},
+        {"contains": {"properties": {"evidence_id": {"const": "E-02"}}, "required": ["evidence_id"]}},
+        {"contains": {"properties": {"evidence_id": {"const": "E-03"}}, "required": ["evidence_id"]}},
+        {"contains": {"properties": {"evidence_id": {"const": "E-04"}}, "required": ["evidence_id"]}},
+        {"contains": {"properties": {"evidence_id": {"const": "E-05"}}, "required": ["evidence_id"]}},
+        {"contains": {"properties": {"evidence_id": {"const": "E-06"}}, "required": ["evidence_id"]}},
+        {"contains": {"properties": {"evidence_id": {"const": "E-07"}}, "required": ["evidence_id"]}},
+        {"contains": {"properties": {"evidence_id": {"const": "E-08"}}, "required": ["evidence_id"]}},
+        {"contains": {"properties": {"evidence_id": {"const": "E-09"}}, "required": ["evidence_id"]}}
+      ],
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -26,6 +38,13 @@
     "approvals": {
       "type": "array",
       "minItems": 4,
+      "maxItems": 4,
+      "allOf": [
+        {"contains": {"properties": {"role": {"const": "release_manager"}}, "required": ["role"]}},
+        {"contains": {"properties": {"role": {"const": "security_owner"}}, "required": ["role"]}},
+        {"contains": {"properties": {"role": {"const": "compliance_owner"}}, "required": ["role"]}},
+        {"contains": {"properties": {"role": {"const": "operations_owner"}}, "required": ["role"]}}
+      ],
       "items": {
         "type": "object",
         "additionalProperties": false,

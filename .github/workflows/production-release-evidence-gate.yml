@@ -82,11 +82,19 @@ jobs:
             --expected-gpg-fingerprint "$EXPECTED_GPG_FINGERPRINT" \
             --output-dir "${{ runner.temp }}/release-cryptography"
 
+      - name: Reject local-only evidence provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/infra/assert_production_evidence_provenance.py \
+            --manifest "${{ inputs.evidence_manifest }}"
+
       - name: Validate complete evidence and independent approvals
         shell: bash
         run: |
           set -euo pipefail
           python3 scripts/infra/verify_production_release_evidence.py \
+            --execution-mode production \
             --manifest "${{ inputs.evidence_manifest }}" \
             --repo .
 

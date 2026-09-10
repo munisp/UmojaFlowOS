@@ -1,0 +1,24 @@
+{
+  "captured_at": "2026-09-02T12:00:00Z",
+  "environment": "staging",
+  "evidence_id": "E-07",
+  "evidence_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "live_cluster_evidence": false,
+  "observations": {
+    "collector_healthy": true,
+    "dropped_spans": 0,
+    "exporter_errors": 0,
+    "reconciliation_run_id_propagated": true,
+    "services_observed": [
+      "payment-engine",
+      "opa",
+      "postgres"
+    ],
+    "tenant_isolation_verified": true,
+    "trace_context_propagated": true
+  },
+  "provenance": "local_fixture",
+  "reconciliation_run_id": "local-fixture-run-20260902",
+  "release_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "status": "PASS"
+}

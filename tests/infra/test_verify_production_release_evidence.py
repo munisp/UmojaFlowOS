@@ -51,6 +51,13 @@ def write_complete_bundle(root: Path) -> Path:
         "created_at": "2026-08-26T12:00:00Z",
         "artifacts": artifacts,
         "approvals": approvals,
+        "worm": {
+            "bucket": "release-evidence-bucket",
+            "object_key_prefix": "releases/audit",
+            "object_lock_mode": "COMPLIANCE",
+            "retain_until": "2030-08-26T12:00:00Z",
+        },
+        "reconciliation": {"run_id": "reconcile-0001"},
     }
     manifest_path = root / "release.json"
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")

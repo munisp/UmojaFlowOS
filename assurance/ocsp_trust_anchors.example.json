@@ -1,0 +1,30 @@
+{
+  "trust_anchors": [
+    {
+      "name": "umoja-production-pki-root",
+      "subject": "CN=Umoja Production Root CA,O=UmojaFlowOS,C=NG",
+      "sha256_der": "<64-lowercase-hex-sha256-of-root-certificate-der>",
+      "certificate_der_b64": "<base64-DER-root-certificate>",
+      "allowed_uses": ["ocsp_issuer", "crl_issuer"]
+    }
+  ],
+  "chains": {
+    "security_owner_ocsp": {
+      "trust_anchor": "umoja-production-pki-root",
+      "intermediates_der_b64": [
+        "<base64-DER-intermediate-ca-2>",
+        "<base64-DER-intermediate-ca-1>"
+      ],
+      "responder_certificate_der_b64": "<base64-DER-delegated-ocsp-responder>",
+      "require_ocsp_signing_eku": true,
+      "max_depth": 8,
+      "revocation": {
+        "crl_pem_b64": "<base64-PEM-or-DER-responder-CRL>",
+        "crl_issuer_certificate_der_b64": "<base64-DER-CRL-issuer>",
+        "ocsp_url": "https://pki.example/ocsp/responder-status",
+        "max_age_seconds": 3600,
+        "require_crl_and_ocsp": true
+      }
+    }
+  }
+}

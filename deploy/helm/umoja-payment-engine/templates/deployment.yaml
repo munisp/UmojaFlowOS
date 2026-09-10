@@ -30,6 +30,7 @@ spec:
       labels:
         {{- include "umoja-payment-engine.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: queue-worker
+        app.kubernetes.io/track: {{ .Values.trafficTrack | default "stable" | quote }}
       annotations:
         {{- toYaml .Values.podAnnotations | nindent 8 }}
     spec:
@@ -64,6 +65,8 @@ spec:
           env:
             - name: UMOJA_ENV
               value: {{ .Values.environment | quote }}
+            - name: UMOJA_TRAFFIC_TRACK
+              value: {{ .Values.trafficTrack | default "stable" | quote }}
             - name: UMOJA_IDEM_RECONCILIATION_TOPIC
               value: {{ .Values.idem.reconciliationTopic | quote }}
             - name: UMOJA_IDEM_OPA_ENDPOINT

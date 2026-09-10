@@ -1,0 +1,38 @@
+version: 1
+routes:
+  - id: corridor-us-ng-usdc-ngn-onramp
+    tenant_id: tenant-a
+    origin_country: US
+    destination_country: NG
+    source_currency: NGN
+    destination_currency: NGN
+    direction: onramp
+    asset: USDC
+    rails:
+      - mojaloop
+      - bank
+    provider_priority:
+      - bank-primary
+      - bank-secondary
+    min_amount_minor: 100
+    max_amount_minor: 500000000
+    quote_ttl_seconds: 300
+    liquidity_buffer_bps: 500
+    settlement_cutoff: "2026-12-31T23:59:59Z"
+    enabled: true
+    version: 1
+
+liquidity:
+  evidence_max_age_seconds: 60
+  require_provider_reference: true
+  require_treasury_source: true
+  deny_on_negative_values: true
+  deny_on_reserved_exceeds_available: true
+  deny_on_expired_evidence: true
+  deny_on_missing_evidence_digest: true
+
+telemetry:
+  emit_route_decision: true
+  emit_liquidity_decision: true
+  tenant_attribute: tenant.id
+  sensitive_attributes: false

@@ -1,0 +1,18 @@
+[run]
+branch = True
+include =
+    scripts/infra/verify_role_sidecar_authorization.py
+
+[report]
+show_missing = True
+skip_covered = False
+
+[html]
+directory = artifacts/pki-role-authorization-coverage/htmlcov
+
+# No exclude_also rule is configured. The invariant-redundant
+# `if len(path) > 1` guard was removed rather than hiding it from coverage.
+# If a future review deliberately retains an equivalent guard, add a narrowly
+# scoped exclusion only after documenting and testing the invariant:
+# exclude_also =
+#     ^\s*if len\(path\) > 1:

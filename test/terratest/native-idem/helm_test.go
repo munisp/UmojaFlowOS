@@ -10,10 +10,10 @@ import (
 func TestNativeIdemHelmRendersFailClosedMultiAZWorkload(t *testing.T) {
 	t.Parallel()
 	options := &helm.Options{SetValues: map[string]string{
-		"image.digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		"objectStorage.endpoint": "https://s3-compatible.invalid",
-		"objectStorage.bucket": "umoja-release-evidence",
-		"vault.address": "https://vault.invalid",
+		"image.digest":                  "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"objectStorage.endpoint":        "https://s3-compatible.invalid",
+		"objectStorage.bucket":          "umoja-release-evidence",
+		"vault.address":                 "https://vault.invalid",
 		"vault.objectStorageSecretPath": "secret/data/umoja/object-storage",
 	}}
 	rendered := helm.RenderTemplate(t, options, "../../../deploy/helm/umoja-payment-engine", "umoja-payment-engine", nil)

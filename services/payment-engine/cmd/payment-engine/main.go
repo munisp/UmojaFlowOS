@@ -19,9 +19,11 @@ import (
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/attestation"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/domain"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/eventing"
+	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/fencestore"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/ledger"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/observability"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/provider"
+	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/reconciliation"
 	"github.com/munisp/UmojaFlowOS/services/payment-engine/internal/settlement"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -132,7 +134,7 @@ func newHandlerWithSignerMetrics(now func() time.Time, webhook http.Handler, pos
 	return newHandlerWithSignerAndFabricMetrics(now, webhook, posting, execution, signerRetryMetrics, nil, configuredLedgerBackend...)
 }
 
-func newHandlerWithSignerAndFabricMetrics(now func() time.Time, webhook http.Handler, posting *ledger.PostingService, execution http.Handler, signerRetryMetrics *provider.SignerRetryMetrics, fabricMetrics *attestation.Metrics, configuredLedgerBackend ...string) http.Handler {
+func newHandlerWithSignerAndFabricMetrics(now func() time.Time, webhook http.Handler, posting reconciliation.AuthoritativeLedger, execution http.Handler, signerRetryMetrics *provider.SignerRetryMetrics, fabricMetrics *attestation.Metrics, configuredLedgerBackend ...string) http.Handler {
 	ledgerBackend := "disabled_without_deployed_tigerbeetle"
 	if len(configuredLedgerBackend) > 0 && configuredLedgerBackend[0] != "" {
 		ledgerBackend = configuredLedgerBackend[0]
@@ -344,6 +346,15 @@ func fabricQueueIntEnv(getenv func(string) string, key string, fallback int) (in
 	return parsed, nil
 }
 
+// exposeDirectLedgerPosting is intentionally false in production. The raw
+// PostingRequest endpoint has no independently verifiable screening, corridor,
+// liquidity, provider, and attestation context, so publishing it would create a
+// bypass around the coordinated funds-flow controls. Production settlement must
+// enter through the composed coordinator instead.
+func exposeDirectLedgerPosting(productionProfile bool, postingAvailable bool) bool {
+	return !productionProfile && postingAvailable
+}
+
 func startFabricQueueMetrics(ctx context.Context, metrics *attestation.Metrics) (func(), error) {
 	dsn := strings.TrimSpace(os.Getenv("UMOJA_FABRIC_QUEUE_DATABASE_URL"))
 	if dsn == "" {
@@ -407,7 +418,7 @@ func main() {
 		panic(err)
 	}
 	defer ledgerRuntime.Close()
-	var posting *ledger.PostingService
+	var posting reconciliation.AuthoritativeLedger
 	if ledgerRuntime.Backend == "configured_reachable_tigerbeetle" {
 		resolver := provider.FileSecretResolver{Root: os.Getenv("UMOJA_PROVIDER_MATERIAL_ROOT")}
 		sharedSecret, resolveErr := resolver.Resolve(context.Background(), os.Getenv("UMOJA_LEDGER_PROJECTION_HMAC_SECRET_REFERENCE"))
@@ -421,10 +432,29 @@ func main() {
 		if sinkErr != nil {
 			panic(sinkErr)
 		}
-		posting, err = ledgerRuntime.NewPostingService(sink, time.Now)
-		if err != nil {
-			panic(err)
+		postingService, postingErr := ledgerRuntime.NewPostingService(sink, time.Now)
+		if postingErr != nil {
+			panic(postingErr)
 		}
+		posting = postingService
+		fenceDB, fenceErr := openProductionFenceDB(context.Background(), productionProfile)
+		if fenceErr != nil {
+			panic(fenceErr)
+		}
+		if fenceDB != nil {
+			defer fenceDB.Close()
+			publicKey, keyErr := loadFencePublicKey(os.Getenv)
+			if keyErr != nil {
+				panic(keyErr)
+			}
+			fenceStore := &fencestore.PostgresStore{DB: fenceDB}
+			fence, fenceCreateErr := reconciliation.NewDurableSettlementFence(publicKey, os.Getenv("UMOJA_ENV"), fenceStore)
+			if fenceCreateErr != nil {
+				panic(fenceCreateErr)
+			}
+			posting = reconciliation.GuardedLedger{Fence: fence, Inner: postingService}
+		}
+
 	}
 	signerRetryMetrics := &provider.SignerRetryMetrics{}
 	var executionHandler http.Handler
@@ -467,7 +497,14 @@ func main() {
 		panic(queueMetricsErr)
 	}
 	defer queueMetricsClose()
-	handler := observability.Handler(newHandlerWithSignerAndFabricMetrics(time.Now, webhookRuntime, posting, executionHandler, signerRetryMetrics, fabricMetrics, ledgerRuntime.Backend))
+	// Never expose the raw ledger-posting endpoint in production. It is retained
+	// only for controlled non-production ledger integration tests; a production
+	// request must use the fully coordinated settlement path.
+	httpPosting := reconciliation.AuthoritativeLedger(nil)
+	if exposeDirectLedgerPosting(productionProfile, posting != nil) {
+		httpPosting = posting
+	}
+	handler := observability.Handler(newHandlerWithSignerAndFabricMetrics(time.Now, webhookRuntime, httpPosting, executionHandler, signerRetryMetrics, fabricMetrics, ledgerRuntime.Backend))
 	if err := http.ListenAndServe(":"+port, handler); err != nil {
 		panic(err)
 	}

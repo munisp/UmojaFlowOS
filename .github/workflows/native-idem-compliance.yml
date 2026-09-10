@@ -95,6 +95,43 @@ jobs:
           name: native-idem-rendered-manifests
           path: rendered-native-idem.yaml
 
+  evidence-validator-fixtures:
+    name: Validate E-01 through E-09 fixture contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate explicitly local E-01 through E-09 fixtures
+        run: |
+          set -Eeuo pipefail
+          python3 scripts/infra/generate_e01_e09_local_fixtures.py \
+            --output-dir "$RUNNER_TEMP/e01-e09-fixtures"
+      - name: Validate all E-01 through E-09 fixture contracts
+        run: |
+          set -Eeuo pipefail
+          release_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          run_id=local-fixture-run-20260902
+          for evidence_id in E-01 E-02 E-03 E-04 E-05; do
+            python3 scripts/infra/validate_e01_e05.py \
+              --evidence-id "$evidence_id" \
+              --artifact "$RUNNER_TEMP/e01-e09-fixtures/$evidence_id.json" \
+              --release-sha "$release_sha" \
+              --run-id "$run_id" \
+              --local-fixture
+          done
+          for evidence_id in E-06 E-07 E-08 E-09; do
+            python3 scripts/infra/validate_e06_e09.py \
+              --evidence-id "$evidence_id" \
+              --artifact "$RUNNER_TEMP/e01-e09-fixtures/$evidence_id.json" \
+              --release-sha "$release_sha" \
+              --run-id "$run_id" \
+              --local-fixture
+          done
+      - name: Assert fixtures cannot claim live evidence
+        run: |
+          set -Eeuo pipefail
+          ! grep -R '"live_cluster_evidence": true' "$RUNNER_TEMP/e01-e09-fixtures"
+          grep -R '"provenance": "local_fixture"' "$RUNNER_TEMP/e01-e09-fixtures"
+
   terratest-kind:
     needs: policy-and-manifest-validation
     runs-on: ubuntu-latest

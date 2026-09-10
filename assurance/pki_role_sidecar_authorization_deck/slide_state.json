@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "title": "Decision Snapshot",
+    "created": 1788441635.544,
+    "last_updated": 1788441737.288,
+    "total_slides": 5
+  },
+  "slides": [
+    {
+      "id": "decision",
+      "state": "edited",
+      "pageNum": 1
+    },
+    {
+      "id": "architecture",
+      "state": "edited",
+      "pageNum": 2
+    },
+    {
+      "id": "verification",
+      "state": "edited",
+      "pageNum": 3
+    },
+    {
+      "id": "testing",
+      "state": "edited",
+      "pageNum": 4
+    },
+    {
+      "id": "gates",
+      "state": "edited",
+      "pageNum": 5
+    }
+  ],
+  "outline": [
+    {
+      "id": "decision",
+      "title": "Decision Snapshot",
+      "summary": "Summarize the current implementation status, test result, and the distinction between code verification and production GO evidence.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "architecture",
+      "title": "Authorization Trust Model",
+      "summary": "Show the relationship between manifest approvals, Ed25519 sidecars, external PKI subjects, pinned trust anchors, CRL, and OCSP.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "verification",
+      "title": "Fail-Closed Verification Flow",
+      "summary": "Explain the ordered validation sequence for signatures, certificate paths, revocation, OCSP, and promotion admission.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "testing",
+      "title": "Test and Coverage Evidence",
+      "summary": "Present the 44-test result, generated-chain coverage, branch coverage, and remaining uncovered security paths.",
+      "image_plan": "Use a suitable image if needed"
+    },
+    {
+      "id": "gates",
+      "title": "Release Committee Actions",
+      "summary": "List the remaining controls required before production GO, including live evidence, stronger coverage, and PKI operational validation.",
+      "image_plan": "Use a suitable image if needed"
+    }
+  ]
+}

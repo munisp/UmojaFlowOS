@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { margin: 0; }
+      .slide-container {
+        width: 1280px;
+        min-height: 720px;
+        background: #09111f;
+        color: #edf3f8;
+        font-family: Arial, sans-serif;
+        padding: 58px 72px 0;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+      }
+      .eyebrow { font: 700 14px monospace; letter-spacing: 3px; color: #e2a84b; text-transform: uppercase; }
+      .title { font-size: 46px; margin-top: 22px; }
+      .lead { font-size: 20px; color: #aebdca; margin-top: 14px; max-width: 920px; }
+
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; margin-top: 64px; }
+      .column h3 { font-size: 20px; color: #e2a84b; margin-bottom: 24px; border-bottom: 1px solid #334255; padding-bottom: 12px; }
+
+      .action-item { display: flex; gap: 16px; margin-bottom: 28px; }
+      .icon { color: #e2a84b; font-size: 18px; margin-top: 4px; }
+      .content h4 { font-size: 18px; margin-bottom: 6px; color: #f2f6f8; }
+      .content p { font: 14px monospace; line-height: 1.5; color: #b7c5d0; }
+
+      .status-bar {
+        margin-top: auto;
+        padding-bottom: 42px;
+        border-top: 1px solid #405064;
+        padding-top: 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .status-label { font: 700 24px monospace; color: #f5c875; }
+      .status-note { font: 13px monospace; color: #708092; }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="eyebrow">04 / closure criteria</div>
+        <div class="title">Path to Production GO</div>
+        <div class="lead">The following technical and operational gaps must be closed to transition from staging to live settlement.</div>
+
+        <div class="grid">
+            <div class="column">
+                <h3>Technical Hardening</h3>
+                <div class="action-item">
+                    <div class="icon"><i class="fas fa-shield-halved"></i></div>
+                    <div class="content">
+                        <h4>Branch Coverage Expansion</h4>
+                        <p>Close the remaining 24% branch gap in OCSP response construction, RSA/ECDSA dispatch, and malformed trust-anchor handling.</p>
+                    </div>
+                </div>
+                <div class="action-item">
+                    <div class="icon"><i class="fas fa-vial"></i></div>
+                    <div class="content">
+                        <h4>Live Staging Rehearsal</h4>
+                        <p>Execute the Kind/Istio harness on authorized infrastructure to capture immutable routing, probe, and rollback evidence.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="column">
+                <h3>Operational Readiness</h3>
+                <div class="action-item">
+                    <div class="icon"><i class="fas fa-key"></i></div>
+                    <div class="content">
+                        <h4>PKI Directory Validation</h4>
+                        <p>Verify the external authenticated directory export contains all four roles with valid CRL and OCSP responder endpoints.</p>
+                    </div>
+                </div>
+                <div class="action-item">
+                    <div class="icon"><i class="fas fa-file-signature"></i></div>
+                    <div class="content">
+                        <h4>E-01 through E-09 Completion</h4>
+                        <p>Finalize and sign all nine evidence artifacts, ensuring they are bound to the identical immutable release SHA.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-label">REGULATORY STATUS: NO-GO</div>
+            <div class="status-note">Evidence required: staging-canary-rollback.txt · pki-audit-report.json</div>
+        </div>
+    </div>
+</body>
+</html>

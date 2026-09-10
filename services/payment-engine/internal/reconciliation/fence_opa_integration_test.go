@@ -73,7 +73,7 @@ func (s *integrationStore) MarkEventProcessed(context.Context, string, string, t
 
 func signedFenceCommand(t *testing.T, action FenceAction, now time.Time, priv ed25519.PrivateKey) FenceCommand {
 	t.Helper()
-	cmd := FenceCommand{CommandID: "cmd-" + string(action), Action: action, Reason: "OPA retry exhaustion", Environment: "staging", SourceAlerts: []string{"UmojaOPARetryExhaustion"}, IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Hour), Nonce: "nonce-1", Signer: "alertmanager-fence-bridge"}
+	cmd := FenceCommand{CommandID: "cmd-" + string(action), Action: action, Reason: "OPA retry exhaustion", Environment: "staging", SourceAlerts: []string{"UmojaOPARetryExhaustion"}, IssuedAt: now.Add(-time.Minute), ExpiresAt: now.Add(5 * time.Minute), Nonce: "nonce-1", Signer: "alertmanager-fence-bridge"}
 	payload, err := canonicalFencePayload(cmd)
 	if err != nil {
 		t.Fatal(err)

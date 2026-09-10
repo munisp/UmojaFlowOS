@@ -15,6 +15,18 @@ serviceAccount:
   annotations: {}
 
 environment: staging
+trafficTrack: stable
+
+traffic:
+  createVirtualService: true
+  gateway: istio-system/umoja-gateway
+  hosts:
+    - payments.example.invalid
+  stableServiceName: umoja-payment-engine
+  canaryServiceName: umoja-payment-engine-canary
+  port: 8081
+  timeout: 15s
+
 
 idem:
   enabled: true

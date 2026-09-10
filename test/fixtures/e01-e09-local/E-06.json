@@ -1,0 +1,22 @@
+{
+  "captured_at": "2026-09-02T12:00:00Z",
+  "environment": "staging",
+  "evidence_id": "E-06",
+  "evidence_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "live_cluster_evidence": false,
+  "observations": {
+    "deployment_digest_verified": true,
+    "duplicate_submission_check_passed": true,
+    "rollback_executed": true,
+    "rollback_health_verified": true,
+    "rpo_seconds": 30,
+    "rto_seconds": 120,
+    "unauthorized_settlement_attempts": 0,
+    "unknown_state_fenced": true,
+    "unresolved_reconciliation_conflicts": 0
+  },
+  "provenance": "local_fixture",
+  "reconciliation_run_id": "local-fixture-run-20260902",
+  "release_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "status": "PASS"
+}

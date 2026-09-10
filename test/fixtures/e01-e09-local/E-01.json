@@ -1,0 +1,17 @@
+{
+  "captured_at": "2026-09-02T12:00:00Z",
+  "environment": "staging",
+  "evidence_id": "E-01",
+  "evidence_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "live_cluster_evidence": false,
+  "observations": {
+    "cluster_identity_verified": true,
+    "context_authorized": true,
+    "kubernetes_server_version": "v1.31.4",
+    "ready_nodes": 3
+  },
+  "provenance": "local_fixture",
+  "reconciliation_run_id": "local-fixture-run-20260902",
+  "release_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "status": "PASS"
+}

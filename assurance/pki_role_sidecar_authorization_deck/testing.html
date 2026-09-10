@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { margin: 0; overflow: hidden; }
+      .slide-container {
+        width: 1280px;
+        min-height: 720px;
+        background: #09111f;
+        color: #edf3f8;
+        font-family: Arial, sans-serif;
+        padding: 58px 72px 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .eyebrow { font: 700 14px monospace; letter-spacing: 3px; color: #e2a84b; text-transform: uppercase; }
+      .title { font-size: 46px; margin-top: 22px; }
+      .lead { font-size: 20px; color: #aebdca; margin-top: 14px; }
+
+      .metrics-row { display: flex; gap: 40px; margin-top: 48px; }
+      .metric-card {
+        flex: 1;
+        background: #111d2c;
+        padding: 24px;
+        border-top: 3px solid #e2a84b;
+      }
+      .metric-value { font: 700 48px monospace; color: #f2f6f8; }
+      .metric-label { font: 14px monospace; color: #9babba; margin-top: 8px; text-transform: uppercase; }
+
+      .content-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 40px; margin-top: 40px; }
+
+      table { width: 100%; border-collapse: collapse; font: 15px monospace; color: #b7c5d0; }
+      th { text-align: left; color: #e2a84b; padding-bottom: 16px; border-bottom: 1px solid #334255; }
+      td { padding: 12px 0; border-bottom: 1px solid #1a2636; }
+      .status-pass { color: #4ade80; }
+      .status-partial { color: #f5c875; }
+
+      .gap-list { background: #1a2636; padding: 24px; border-left: 4px solid #e2a84b; }
+      .gap-list h3 { font-size: 18px; color: #e2a84b; margin-bottom: 16px; text-transform: uppercase; }
+      .gap-item { font: 14px monospace; line-height: 1.6; color: #dce7ee; margin-bottom: 12px; display: flex; align-items: flex-start; }
+      .gap-item i { margin-right: 12px; margin-top: 4px; color: #e2a84b; font-size: 12px; }
+
+      .footer { margin-top: auto; padding-top: 20px; border-top: 1px solid #334255; font: 12px monospace; color: #708092; }
+    </style>
+</head>
+<body>
+    <div class="slide-container">
+        <div class="eyebrow">03 / test & coverage evidence</div>
+        <div class="title">Verified logic, identified branch gaps</div>
+        <div class="lead">The 44-test suite establishes a baseline for path validation but leaves critical security branches uncovered.</div>
+
+        <div class="metrics-row">
+            <div class="metric-card">
+                <div class="metric-value">44</div>
+                <div class="metric-label">Tests Passing</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">76%</div>
+                <div class="metric-label">Branch Coverage</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">64%</div>
+                <div class="metric-label">Statement Coverage</div>
+            </div>
+        </div>
+
+        <div class="content-grid">
+            <div class="table-section">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Functional Area</th>
+                            <th>Status</th>
+                            <th>Evidence</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Ed25519 Signature Verification</td>
+                            <td class="status-pass">VERIFIED</td>
+                            <td>Detached sidecar validation</td>
+                        </tr>
+                        <tr>
+                            <td>Multi-Intermediate Path Building</td>
+                            <td class="status-pass">VERIFIED</td>
+                            <td>8-level bounded chain fixtures</td>
+                        </tr>
+                        <tr>
+                            <td>Circular Chain Detection</td>
+                            <td class="status-pass">VERIFIED</td>
+                            <td>Explicit visited-set cycle error</td>
+                        </tr>
+                        <tr>
+                            <td>Signed CRL Parsing</td>
+                            <td class="status-partial">PARTIAL</td>
+                            <td>Valid PEM/DER; missing malformed</td>
+                        </tr>
+                        <tr>
+                            <td>OCSP Response Validation</td>
+                            <td class="status-partial">PARTIAL</td>
+                            <td>GOOD status; missing REVOKED/STALE</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="gap-section">
+                <div class="gap-list">
+                    <h3>Remaining Security Gaps</h3>
+                    <div class="gap-item"><i class="fas fa-exclamation-triangle"></i> <span>Malformed but base64-valid DER CRL fallback failure paths.</span></div>
+                    <div class="gap-item"><i class="fas fa-exclamation-triangle"></i> <span>OCSP responses with REVOKED or UNKNOWN status codes.</span></div>
+                    <div class="gap-item"><i class="fas fa-exclamation-triangle"></i> <span>OCSP responses for mismatched certificate serials.</span></div>
+                    <div class="gap-item"><i class="fas fa-exclamation-triangle"></i> <span>RSA/ECDSA/Ed448 dispatch alternatives in production.</span></div>
+                    <div class="gap-item"><i class="fas fa-exclamation-triangle"></i> <span>Malformed trust-anchor configuration and CA constraint failures.</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            Source: targeted-branch-test-output.txt · targeted-branch-coverage-report.txt · Sep 03, 2026
+        </div>
+    </div>
+</body>
+</html>

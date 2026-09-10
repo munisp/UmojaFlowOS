@@ -1,0 +1,24 @@
+{
+  "captured_at": "2026-09-02T12:00:00Z",
+  "environment": "staging",
+  "evidence_id": "E-08",
+  "evidence_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "live_cluster_evidence": false,
+  "observations": {
+    "backup_restore_verified": true,
+    "duplicate_transfers": 0,
+    "hsm_quorum_verified": true,
+    "ledger_discrepancies": 0,
+    "old_writer_fenced": true,
+    "postgres_timeline_verified": true,
+    "rpo_seconds": 60,
+    "rto_seconds": 300,
+    "tigerbeetle_quorum_recovered": true,
+    "unknown_states_reconciled_safely": true,
+    "vault_rotation_verified": true
+  },
+  "provenance": "local_fixture",
+  "reconciliation_run_id": "local-fixture-run-20260902",
+  "release_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "status": "PASS"
+}

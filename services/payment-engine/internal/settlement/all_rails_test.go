@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 type mockScreen struct {
@@ -50,14 +51,24 @@ func (m *mockAttestor) Attest(context.Context, Intent, string) (AttestationFact,
 func (m *mockAttestor) Verify(context.Context, AttestationFact) (bool, error) { return m.verified, nil }
 
 func validIntent() Intent {
-	return Intent{ID: "intent-1", IdempotencyKey: "idem-1", TenantID: "tenant-a", Asset: "USDC", Fiat: "NGN", Destination: "wallet-1", Direction: Onramp, AmountMinor: 1000, Payload: []byte(`{"asset":"USDC","fiat":"NGN","amount":1000}`)}
+	return Intent{ID: "intent-1", IdempotencyKey: "idem-1", TenantID: "tenant-a", Asset: "USDC", Fiat: "NGN", Destination: "wallet-1", DestinationCountry: "NG", Direction: Onramp, AmountMinor: 1000, Payload: []byte(`{"asset":"USDC","fiat":"NGN","amount":1000}`)}
 }
+
+func testRoutingAndLiquidity() (CorridorRouter, LiquidityVerifier) {
+	route := CorridorRoute{ID: "ng-onramp", TenantID: "tenant-a", OriginCountry: "US", DestinationCountry: "NG", SourceCurrency: "NGN", Direction: Onramp, Asset: "USDC", Rails: []string{"mojaloop"}, ProviderPriority: []string{"bank-primary"}, MinAmountMinor: 1, MaxAmountMinor: 1000000, QuoteTTL: time.Hour, Enabled: true}
+	return StaticCorridorRouter{Routes: []CorridorRoute{route}}, StaticLiquidityVerifier{Evidence: LiquidityEvidence{AvailableMinor: 100000, ReservedMinor: 0, RequiredBufferMinor: 1000, ObservedAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour)}}
+}
+
+func coordinatorWith(l *mockLedger, a *mockAttestor, decision string) *Coordinator {
+	routing, liquidity := testRoutingAndLiquidity()
+	return &Coordinator{Screening: mockScreen{decision: decision}, Ledger: l, Attestor: a, Routing: routing, Liquidity: liquidity}
+}
+
 func TestCoordinatorSettlesOnlyAfterLedgerAndFabricVerification(t *testing.T) {
 	in := validIntent()
 	l := &mockLedger{fact: LedgerFact{TransferID: "tb-1", DebitAccount: "a", CreditAccount: "b", AmountMinor: 1000, Currency: "NGN", State: string(Settled)}}
 	a := &mockAttestor{fact: AttestationFact{ID: "fab-1", EvidenceID: "E-06", Digest: PayloadDigest(in.Payload)}, verified: true}
-	c := Coordinator{Screening: mockScreen{decision: "clear"}, Ledger: l, Attestor: a}
-	out, err := c.Execute(context.Background(), in)
+	out, err := coordinatorWith(l, a, "clear").Execute(context.Background(), in)
 	if err != nil || out.State != Settled {
 		t.Fatalf("out=%+v err=%v", out, err)
 	}
@@ -68,8 +79,7 @@ func TestCoordinatorSettlesOnlyAfterLedgerAndFabricVerification(t *testing.T) {
 func TestCoordinatorHoldsWhenScreeningNotClear(t *testing.T) {
 	l := &mockLedger{}
 	a := &mockAttestor{}
-	c := Coordinator{Screening: mockScreen{decision: "review"}, Ledger: l, Attestor: a}
-	out, err := c.Execute(context.Background(), validIntent())
+	out, err := coordinatorWith(l, a, "review").Execute(context.Background(), validIntent())
 	if err == nil || out.State != Held || l.posts != 0 || a.calls != 0 {
 		t.Fatalf("out=%+v err=%v posts=%d calls=%d", out, err, l.posts, a.calls)
 	}
@@ -77,8 +87,7 @@ func TestCoordinatorHoldsWhenScreeningNotClear(t *testing.T) {
 func TestCoordinatorHoldsOnLedgerFailure(t *testing.T) {
 	l := &mockLedger{err: errors.New("ledger unavailable")}
 	a := &mockAttestor{}
-	c := Coordinator{Screening: mockScreen{decision: "clear"}, Ledger: l, Attestor: a}
-	out, err := c.Execute(context.Background(), validIntent())
+	out, err := coordinatorWith(l, a, "clear").Execute(context.Background(), validIntent())
 	if !errors.Is(err, ErrUnknown) || out.State != Unknown || a.calls != 0 {
 		t.Fatalf("out=%+v err=%v calls=%d", out, err, a.calls)
 	}
@@ -87,9 +96,38 @@ func TestCoordinatorRejectsByzantineAttestation(t *testing.T) {
 	in := validIntent()
 	l := &mockLedger{fact: LedgerFact{TransferID: "tb-1", DebitAccount: "a", CreditAccount: "b", AmountMinor: 1000, Currency: "NGN", State: string(Settled)}}
 	a := &mockAttestor{fact: AttestationFact{ID: "fab-1", EvidenceID: "E-06", Digest: PayloadDigest([]byte("wrong"))}, verified: true}
-	c := Coordinator{Screening: mockScreen{decision: "clear"}, Ledger: l, Attestor: a}
-	out, err := c.Execute(context.Background(), in)
+	out, err := coordinatorWith(l, a, "clear").Execute(context.Background(), in)
 	if !errors.Is(err, ErrMismatch) || out.State != Held {
+		t.Fatalf("out=%+v err=%v", out, err)
+	}
+}
+func TestCoordinatorHoldsWhenRouteUnavailable(t *testing.T) {
+	l := &mockLedger{}
+	a := &mockAttestor{}
+	c := coordinatorWith(l, a, "clear")
+	c.Routing = StaticCorridorRouter{}
+	out, err := c.Execute(context.Background(), validIntent())
+	if !errors.Is(err, ErrCorridorUnavailable) || out.State != Held || l.posts != 0 {
+		t.Fatalf("out=%+v err=%v posts=%d", out, err, l.posts)
+	}
+}
+func TestCoordinatorHoldsWhenLiquidityInsufficient(t *testing.T) {
+	l := &mockLedger{}
+	a := &mockAttestor{}
+	c := coordinatorWith(l, a, "clear")
+	c.Liquidity = StaticLiquidityVerifier{Evidence: LiquidityEvidence{AvailableMinor: 1000, RequiredBufferMinor: 1000, ObservedAt: time.Now(), ExpiresAt: time.Now().Add(time.Hour)}}
+	out, err := c.Execute(context.Background(), validIntent())
+	if !errors.Is(err, ErrLiquidityInsufficient) || out.State != Held || l.posts != 0 {
+		t.Fatalf("out=%+v err=%v posts=%d", out, err, l.posts)
+	}
+}
+func TestCoordinatorRequiresAdmissionDependencies(t *testing.T) {
+	in := validIntent()
+	l := &mockLedger{}
+	a := &mockAttestor{}
+	c := &Coordinator{Screening: mockScreen{decision: "clear"}, Ledger: l, Attestor: a}
+	out, err := c.Execute(context.Background(), in)
+	if err == nil || out.State != "" || l.posts != 0 {
 		t.Fatalf("out=%+v err=%v", out, err)
 	}
 }

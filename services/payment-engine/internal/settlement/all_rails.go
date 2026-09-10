@@ -30,6 +30,8 @@ const (
 
 type Intent struct {
 	ID, IdempotencyKey, TenantID, Asset, Fiat, Destination string
+	OriginCountry, DestinationCountry, CorridorID          string
+	PreferredRail                                          string
 	Direction                                              Direction
 	AmountMinor                                            int64
 	Payload                                                []byte
@@ -92,14 +94,16 @@ type Coordinator struct {
 	Screening ScreeningProvider
 	Ledger    Ledger
 	Attestor  Attestor
+	Routing   CorridorRouter
+	Liquidity LiquidityVerifier
 }
 
 func (c *Coordinator) Execute(ctx context.Context, in Intent) (ProviderResult, error) {
 	if err := validateIntent(in); err != nil {
 		return ProviderResult{}, err
 	}
-	if c.Screening == nil || c.Ledger == nil || c.Attestor == nil {
-		return ProviderResult{}, errors.New("screening, ledger, and attestor are required")
+	if c.Screening == nil || c.Ledger == nil || c.Attestor == nil || c.Routing == nil || c.Liquidity == nil {
+		return ProviderResult{}, errors.New("screening, ledger, attestor, routing, and liquidity verifier are required")
 	}
 	screen, err := c.Screening.Screen(ctx, in)
 	if err != nil {
@@ -107,6 +111,17 @@ func (c *Coordinator) Execute(ctx context.Context, in Intent) (ProviderResult, e
 	}
 	if screen.Decision != "clear" {
 		return ProviderResult{State: Held, Reason: screen.Reason, Reference: screen.CaseID}, errors.New("settlement held by compliance screening")
+	}
+	route, err := c.Routing.Route(ctx, in)
+	if err != nil {
+		return ProviderResult{State: Held, Reason: "corridor route unavailable"}, ErrCorridorUnavailable
+	}
+	liquidity, err := c.Liquidity.Verify(ctx, in, route)
+	if err != nil || !liquidity.Allowed {
+		if err == nil {
+			err = ErrLiquidityUnavailable
+		}
+		return ProviderResult{State: Held, Reason: liquidity.Reason}, err
 	}
 	fact, err := c.Ledger.Post(ctx, in)
 	if err != nil {

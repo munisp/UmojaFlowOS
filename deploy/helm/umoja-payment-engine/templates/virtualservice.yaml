@@ -1,0 +1,31 @@
+{{- if .Values.traffic.createVirtualService }}
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: {{ include "umoja-payment-engine.fullname" . }}
+  labels:
+    {{- include "umoja-payment-engine.labels" . | nindent 4 }}
+spec:
+  hosts:
+    {{- toYaml .Values.traffic.hosts | nindent 4 }}
+  gateways:
+    - {{ .Values.traffic.gateway | quote }}
+  http:
+    - name: payment-engine
+      timeout: {{ .Values.traffic.timeout | quote }}
+      retries:
+        attempts: 2
+        perTryTimeout: 5s
+        retryOn: connect-failure,refused-stream,unavailable,5xx
+      route:
+        - destination:
+            host: {{ .Values.traffic.stableServiceName | quote }}
+            port:
+              number: {{ .Values.traffic.port }}
+          weight: 100
+        - destination:
+            host: {{ .Values.traffic.canaryServiceName | quote }}
+            port:
+              number: {{ .Values.traffic.port }}
+          weight: 0
+{{- end }}

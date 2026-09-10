@@ -87,7 +87,11 @@ def expected_git_sha(repo: Path) -> str:
     return result.stdout.strip()
 
 
-def verify_manifest(manifest_path: Path, expected_sha: str | None = None) -> list[VerifiedArtifact]:
+def verify_manifest(
+    manifest_path: Path,
+    expected_sha: str | None = None,
+    execution_mode: str = "production",
+) -> list[VerifiedArtifact]:
     try:
         document: dict[str, Any] = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
@@ -100,6 +104,14 @@ def verify_manifest(manifest_path: Path, expected_sha: str | None = None) -> lis
         raise EvidenceValidationError(
             f"release_sha {release_sha} does not match expected immutable revision {expected_sha}"
         )
+
+    if execution_mode not in {"production", "local_fixture"}:
+        raise EvidenceValidationError("execution_mode must be production or local_fixture")
+    if execution_mode == "production":
+        if document.get("provenance") == "local_fixture":
+            raise EvidenceValidationError("local_fixture provenance is forbidden in production mode")
+        if document.get("live_cluster_evidence") is False:
+            raise EvidenceValidationError("live_cluster_evidence=false is forbidden in production mode")
 
     environment = document.get("environment")
     if environment not in {"staging", "production"}:
@@ -155,6 +167,16 @@ def verify_manifest(manifest_path: Path, expected_sha: str | None = None) -> lis
         actual_sha = sha256_file(artifact_path)
         if actual_sha != declared_sha:
             raise EvidenceValidationError(f"{evidence_id} SHA-256 mismatch for {declared_path}")
+        if execution_mode == "production" and artifact_path.suffix.lower() == ".json":
+            try:
+                artifact_document = json.loads(artifact_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as error:
+                raise EvidenceValidationError(f"{evidence_id} JSON artifact cannot be inspected: {error}") from error
+            if isinstance(artifact_document, dict):
+                if artifact_document.get("provenance") == "local_fixture":
+                    raise EvidenceValidationError(f"{evidence_id} uses local_fixture provenance in production mode")
+                if artifact_document.get("live_cluster_evidence") is False:
+                    raise EvidenceValidationError(f"{evidence_id} has live_cluster_evidence=false in production mode")
         seen_ids.add(evidence_id)
         verified.append(VerifiedArtifact(evidence_id, artifact_path, actual_sha))
 
@@ -197,6 +219,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Validate a production release evidence manifest.")
     parser.add_argument("--manifest", required=True, type=Path, help="JSON release evidence manifest")
     parser.add_argument(
+        "--execution-mode",
+        choices=("production", "local_fixture"),
+        default="production",
+        help="production rejects local-fixture provenance",
+    )
+    parser.add_argument(
         "--expected-sha",
         help="Expected immutable 40-character release SHA; use the checked-out revision in CI",
     )
@@ -215,7 +243,7 @@ def main() -> int:
         parser.error("expected SHA must be a lowercase 40-character Git SHA")
 
     try:
-        verified = verify_manifest(args.manifest, expected_sha)
+        verified = verify_manifest(args.manifest, expected_sha, args.execution_mode)
     except EvidenceValidationError as error:
         print(f"release evidence verification: FAILED: {error}", file=sys.stderr)
         return 1

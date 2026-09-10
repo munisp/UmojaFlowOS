@@ -1,0 +1,20 @@
+{
+  "captured_at": "2026-09-02T12:00:00Z",
+  "environment": "staging",
+  "evidence_id": "E-04",
+  "evidence_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "live_cluster_evidence": false,
+  "observations": {
+    "duplicate_transfer_ids": 0,
+    "partition_write_fenced": true,
+    "quorum_healthy": true,
+    "reconciliation_mismatches": 0,
+    "replica_count": 3,
+    "tigerbeetle_cluster_id": "local-tigerbeetle-cluster",
+    "views_converged": true
+  },
+  "provenance": "local_fixture",
+  "reconciliation_run_id": "local-fixture-run-20260902",
+  "release_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "status": "PASS"
+}

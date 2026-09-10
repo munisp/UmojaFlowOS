@@ -1,0 +1,86 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "title": "Umoja Settlement Liquidity and Corridor Routing",
+  "uid": "umoja-settlement-liquidity",
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "tenant",
+        "type": "query",
+        "label": "Tenant",
+        "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+        "query": "label_values(umoja_settlement_liquidity_denials_total, tenant_id)",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Liquidity denials / 5m",
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"refId": "A", "expr": "sum(rate(umoja_settlement_liquidity_denials_total{tenant_id=~\"$tenant\"}[5m])) * 300"}],
+      "fieldConfig": {"defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 1}, {"color": "red", "value": 10}]}}},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}}
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Liquidity denials by reason",
+      "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"refId": "A", "expr": "sum by (reason) (rate(umoja_settlement_liquidity_denials_total{tenant_id=~\"$tenant\"}[5m]))", "legendFormat": "{{reason}}"}],
+      "fieldConfig": {"defaults": {"unit": "reqps", "custom": {"lineInterpolation": "smooth", "fillOpacity": 12, "showPoints": "never"}}},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Liquidity check latency p50/p95/p99",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {"refId": "A", "expr": "histogram_quantile(0.50, sum by (le) (rate(umoja_settlement_liquidity_check_duration_ms_bucket{tenant_id=~\"$tenant\"}[5m])))", "legendFormat": "p50"},
+        {"refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(umoja_settlement_liquidity_check_duration_ms_bucket{tenant_id=~\"$tenant\"}[5m])))", "legendFormat": "p95"},
+        {"refId": "C", "expr": "histogram_quantile(0.99, sum by (le) (rate(umoja_settlement_liquidity_check_duration_ms_bucket{tenant_id=~\"$tenant\"}[5m])))", "legendFormat": "p99"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "custom": {"lineInterpolation": "smooth", "fillOpacity": 8, "showPoints": "never"}}}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Route decisions by corridor/provider",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"refId": "A", "expr": "sum by (route_id, provider, decision) (rate(umoja_settlement_route_decisions_total{tenant_id=~\"$tenant\"}[5m]))", "legendFormat": "{{route_id}} / {{provider}} / {{decision}}"}],
+      "fieldConfig": {"defaults": {"unit": "reqps", "custom": {"lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "never"}}}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Liquidity denial ratio",
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 16},
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [{"refId": "A", "expr": "sum(rate(umoja_settlement_liquidity_denials_total{tenant_id=~\"$tenant\"}[15m])) / clamp_min(sum(rate(umoja_settlement_liquidity_checks_total{tenant_id=~\"$tenant\"}[15m])), 1)"}],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 0.01}, {"color": "red", "value": 0.05}]}}}
+    }
+  ]
+}

@@ -41,35 +41,133 @@ type FenceAudit interface {
 	RecordFenceCommand(FenceCommand, string) error
 }
 
+type FenceState struct {
+	Environment string
+	Fenced      bool
+	Version     uint64
+	Reason      string
+	CommandID   string
+}
+
+type DurableFenceStore interface {
+	LoadState(context.Context, string) (FenceState, error)
+}
+
+type DurableAdmissionStore interface {
+	AcquireAdmission(context.Context, string) (ledger.AdmissionToken, error)
+}
+
+type FenceStateCommandStore interface {
+	FenceAudit
+	DurableFenceStore
+	RecordFenceCommandContext(context.Context, FenceCommand, string) error
+}
+
 type SettlementFence struct {
-	mu       sync.RWMutex
-	fenced   bool
-	version  uint64
-	reason   string
-	audit    FenceAudit
-	verifier ed25519.PublicKey
-	seen     map[string]time.Time
+	mu          sync.RWMutex
+	fenced      bool
+	version     uint64
+	reason      string
+	environment string
+	audit       FenceAudit
+	durable     DurableFenceStore
+	verifier    ed25519.PublicKey
+	seen        map[string]time.Time
 }
 
 func NewSettlementFence(verifier ed25519.PublicKey, audit FenceAudit) (*SettlementFence, error) {
 	if len(verifier) != ed25519.PublicKeySize {
 		return nil, errors.New("Ed25519 fence verifier key is required")
 	}
-	return &SettlementFence{fenced: true, audit: audit, verifier: verifier, seen: map[string]time.Time{}}, nil
+	return &SettlementFence{
+		fenced:   true,
+		reason:   "startup fail-closed fence",
+		audit:    audit,
+		verifier: verifier,
+		seen:     map[string]time.Time{},
+	}, nil
 }
-func (f *SettlementFence) IsFenced() bool { f.mu.RLock(); defer f.mu.RUnlock(); return f.fenced }
-func (f *SettlementFence) Reason() string { f.mu.RLock(); defer f.mu.RUnlock(); return f.reason }
+
+func NewDurableSettlementFence(verifier ed25519.PublicKey, environment string, store FenceStateCommandStore) (*SettlementFence, error) {
+	if store == nil {
+		return nil, errors.New("durable fence store is required")
+	}
+	if environment == "" {
+		return nil, errors.New("fence environment is required")
+	}
+	fence, err := NewSettlementFence(verifier, store)
+	if err != nil {
+		return nil, err
+	}
+	fence.environment = environment
+	fence.durable = store
+	return fence, nil
+}
+
+func (f *SettlementFence) IsFenced() bool {
+	if f == nil {
+		return true
+	}
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.fenced
+}
+
+func (f *SettlementFence) Reason() string {
+	if f == nil {
+		return "settlement fence is unavailable"
+	}
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.reason
+}
+
+func (f *SettlementFence) setLocalState(state FenceState) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.fenced = state.Fenced
+	f.version = state.Version
+	f.reason = state.Reason
+}
+
 func (f *SettlementFence) Check() error {
+	return f.CheckContext(context.Background())
+}
+
+// CheckContext refreshes the durable state on every authoritative ledger
+// attempt. A missing row or any store error is fenced, never opened.
+func (f *SettlementFence) CheckContext(ctx context.Context) error {
 	if f == nil {
 		return errors.New("settlement fence is unavailable")
+	}
+	if f.durable != nil {
+		state, err := f.durable.LoadState(ctx, f.environment)
+		if err != nil {
+			f.setLocalState(FenceState{Fenced: true, Reason: "durable fence state unavailable"})
+			return fmt.Errorf("settlement fence state unavailable: %w", err)
+		}
+		f.setLocalState(state)
+		if state.Fenced {
+			return fmt.Errorf("settlement fenced: %s", state.Reason)
+		}
+		return nil
 	}
 	if f.IsFenced() {
 		return fmt.Errorf("settlement fenced: %s", f.Reason())
 	}
 	return nil
 }
-func canonicalFencePayload(c FenceCommand) ([]byte, error) { c.Signature = ""; return json.Marshal(c) }
+
+func canonicalFencePayload(c FenceCommand) ([]byte, error) {
+	c.Signature = ""
+	return json.Marshal(c)
+}
+
 func (f *SettlementFence) Apply(c FenceCommand, now time.Time) error {
+	return f.ApplyContext(context.Background(), c, now)
+}
+
+func (f *SettlementFence) ApplyContext(ctx context.Context, c FenceCommand, now time.Time) error {
 	if f == nil {
 		return errors.New("settlement fence is unavailable")
 	}
@@ -79,17 +177,19 @@ func (f *SettlementFence) Apply(c FenceCommand, now time.Time) error {
 	if c.Action != FenceActionFence && c.Action != FenceActionOpen {
 		return errors.New("unsupported fence action")
 	}
-	if now.Before(c.IssuedAt) || !now.Before(c.ExpiresAt) {
+	if f.environment != "" && c.Environment != f.environment {
+		return errors.New("fence command environment does not match payment-engine environment")
+	}
+	if !now.Before(c.ExpiresAt) || now.Before(c.IssuedAt) {
 		return errors.New("fence command is outside its validity window")
+	}
+	if c.ExpiresAt.Sub(c.IssuedAt) > 15*time.Minute {
+		return errors.New("fence command validity window exceeds 15 minutes")
 	}
 	if len(c.SourceAlerts) == 0 {
 		return errors.New("source alerts are required")
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if _, ok := f.seen[c.CommandID]; ok {
-		return nil
-	}
+
 	payload, err := canonicalFencePayload(c)
 	if err != nil {
 		return err
@@ -98,13 +198,31 @@ func (f *SettlementFence) Apply(c FenceCommand, now time.Time) error {
 	if err != nil || len(sig) != ed25519.SignatureSize || !ed25519.Verify(f.verifier, payload, sig) {
 		return errors.New("invalid fence command signature")
 	}
+
 	digest := sha256.Sum256(payload)
 	auditHash := hex.EncodeToString(digest[:])
-	if f.audit != nil {
+	f.mu.RLock()
+	_, locallySeen := f.seen[c.CommandID]
+	f.mu.RUnlock()
+	if locallySeen {
+		return nil
+	}
+	if contextStore, ok := f.audit.(FenceStateCommandStore); ok {
+		if err := contextStore.RecordFenceCommandContext(ctx, c, auditHash); err != nil {
+			return fmt.Errorf("durable fence command failed: %w", err)
+		}
+	} else if f.audit != nil {
 		if err := f.audit.RecordFenceCommand(c, auditHash); err != nil {
 			return fmt.Errorf("fence audit failed: %w", err)
 		}
 	}
+
+	f.mu.Lock()
+	if _, ok := f.seen[c.CommandID]; ok {
+		f.mu.Unlock()
+		return nil
+	}
+	defer f.mu.Unlock()
 	f.fenced = c.Action == FenceActionFence
 	f.reason = c.Reason
 	f.version++
@@ -121,7 +239,30 @@ func (g GuardedLedger) PostConfirmedTransfer(ctx context.Context, req ledger.Pos
 	if g.Fence == nil || g.Inner == nil {
 		return ledger.PostedTransferFact{}, errors.New("guarded ledger dependencies are required")
 	}
-	if err := g.Fence.Check(); err != nil {
+	if g.Fence.durable != nil {
+		if admissionStore, ok := g.Fence.durable.(DurableAdmissionStore); ok {
+			token, err := admissionStore.AcquireAdmission(ctx, g.Fence.environment)
+			if err != nil {
+				g.Fence.setLocalState(FenceState{Fenced: true, Reason: "durable admission unavailable"})
+				return ledger.PostedTransferFact{}, fmt.Errorf("settlement admission unavailable: %w", err)
+			}
+			if aware, ok := g.Inner.(interface {
+				PostConfirmedTransferWithAdmission(context.Context, ledger.PostingRequest, ledger.AdmissionToken) (ledger.PostedTransferFact, error)
+			}); ok {
+				fact, postErr := aware.PostConfirmedTransferWithAdmission(ctx, req, token)
+				releaseErr := token.Release()
+				if postErr != nil {
+					return fact, postErr
+				}
+				if releaseErr != nil {
+					return fact, fmt.Errorf("release settlement admission: %w", releaseErr)
+				}
+				return fact, nil
+			}
+			defer token.Release()
+		}
+	}
+	if err := g.Fence.CheckContext(ctx); err != nil {
 		return ledger.PostedTransferFact{}, err
 	}
 	return g.Inner.PostConfirmedTransfer(ctx, req)
@@ -133,25 +274,33 @@ type FenceHTTPHandler struct {
 }
 
 func (h FenceHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
+	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.Fence == nil {
+		http.Error(w, "settlement fence unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	defer r.Body.Close()
 	limited := io.LimitReader(r.Body, 1<<20)
 	var c FenceCommand
 	if err := json.NewDecoder(limited).Decode(&c); err != nil {
-		http.Error(w, "invalid JSON", 400)
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
 		return
 	}
 	now := time.Now().UTC()
 	if h.Now != nil {
 		now = h.Now().UTC()
 	}
-	if err := h.Fence.Apply(c, now); err != nil {
+	if err := h.Fence.ApplyContext(r.Context(), c, now); err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"accepted": true, "command_id": c.CommandID, "fenced": h.Fence.IsFenced()})
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"accepted":   true,
+		"command_id": c.CommandID,
+		"fenced":     h.Fence.IsFenced(),
+	})
 }

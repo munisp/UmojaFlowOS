@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><style>
+*{box-sizing:border-box} body{margin:0}
+.slide-container{width:1280px;min-height:720px;background:#09111f;color:#edf3f8;font-family:Arial,sans-serif;padding:58px 72px 0;display:flex;flex-direction:column;position:relative}
+.eyebrow{font:700 15px monospace;letter-spacing:3px;color:#e2a84b;text-transform:uppercase}
+.title{font-size:62px;line-height:1.02;margin-top:24px;max-width:790px}
+.sub{font-size:23px;line-height:1.35;color:#aebdca;margin-top:18px;max-width:730px}
+.rule{height:2px;width:520px;background:#e2a84b;margin-top:20px}
+.decision{font-size:31px;font-weight:700;margin-top:16px;color:#f5c875}
+.metrics{display:flex;gap:46px;margin-top:34px}
+.metric{border-top:1px solid #405064;padding-top:12px;width:190px}
+.num{font-size:42px;font-weight:700;color:#f2f6f8}
+.label{font:14px monospace;color:#9babba;margin-top:8px;line-height:1.3}
+.side{position:absolute;right:72px;top:180px;width:300px;border-left:1px solid #334255;padding-left:18px}
+.side h3{font-size:16px;color:#aebdca;margin:0 0 18px}
+.side p{font:15px monospace;line-height:1.55;color:#dce7ee;margin:0 0 14px}
+.amber{color:#e2a84b}
+.foot{margin-top:auto;padding-bottom:12px;font:13px monospace;color:#708092}
+</style></head><body><div class="slide-container"><div class="eyebrow">Release committee / PKI authorization</div><div class="title">A strong control plane—<span class="amber">not yet a production GO</span></div><div class="sub">The verifier now binds four approval roles to Ed25519 sidecars, pinned trust anchors, certificate paths, CRL evidence, and OCSP status.</div><div class="rule"></div><div class="decision">Current decision: approve controlled staging validation only.</div><div class="metrics"><div class="metric"><div class="num">44</div><div class="label">tests passing</div></div><div class="metric"><div class="num">76%</div><div class="label">branch coverage</div></div><div class="metric"><div class="num">64%</div><div class="label">current statement coverage</div></div></div><div class="side"><h3>Committee readout</h3><p><span class="amber">PASS</span> syntax and regression suite</p><p><span class="amber">PASS</span> generated chain cases</p><p><span class="amber">HOLD</span> remaining security branches and live evidence</p></div><div class="foot">Evidence basis: generated-chain-status-final.txt · targeted-branch-coverage-report.txt</div></div></body></html>

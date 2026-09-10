@@ -1,0 +1,21 @@
+{{- if .Values.service.enabled | default true }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "umoja-payment-engine.fullname" . }}
+  labels:
+    {{- include "umoja-payment-engine.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.service.annotations | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app.kubernetes.io/name: {{ include "umoja-payment-engine.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/track: {{ .Values.trafficTrack | default "stable" | quote }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: metrics
+      protocol: TCP
+{{- end }}

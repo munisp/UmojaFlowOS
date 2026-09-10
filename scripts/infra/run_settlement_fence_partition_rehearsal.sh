@@ -31,7 +31,11 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 
-docker exec -i "$CONTAINER" psql -v ON_ERROR_STOP=1 -U "$DB_USER" -d "$DB_NAME" < "$ROOT/database/postgresql/0059_settlement_fence_commands.sql"
+for migration in \
+  "$ROOT/database/postgresql/0059_settlement_fence_commands.sql" \
+  "$ROOT/database/postgresql/0060_durable_settlement_fence_state.sql"; do
+  docker exec -i "$CONTAINER" psql -v ON_ERROR_STOP=1 -U "$DB_USER" -d "$DB_NAME" < "$migration"
+done
 
 export UMOJA_FENCE_TEST_DATABASE_URL="$DSN"
 export PATH="$ROOT/.toolchain/go/bin:$ENGINE/.toolchain/go/bin:$PATH"

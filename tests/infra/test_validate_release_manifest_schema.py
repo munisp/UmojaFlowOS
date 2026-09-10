@@ -27,6 +27,13 @@ def valid_manifest() -> dict:
             {"role": role, "subject": f"subject-{role}", "release_sha": "a" * 40, "approved_at": "2026-08-26T12:00:00Z"}
             for role in ("release_manager", "security_owner", "compliance_owner", "operations_owner")
         ],
+        "worm": {
+            "bucket": "release-evidence-bucket",
+            "object_key_prefix": "releases/audit",
+            "object_lock_mode": "COMPLIANCE",
+            "retain_until": "2030-08-26T12:00:00Z",
+        },
+        "reconciliation": {"run_id": "reconcile-0001"},
     }
 
 

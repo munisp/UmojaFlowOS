@@ -161,3 +161,20 @@ func TestWebhookRouteIsAbsentWhenRuntimeIsDisabled(t *testing.T) {
 		t.Fatalf("expected disabled webhook route to be absent, got %d", response.Code)
 	}
 }
+
+func TestDirectLedgerPostingIsNeverExposedInProduction(t *testing.T) {
+	if exposeDirectLedgerPosting(true, false) {
+		t.Fatal("production must not expose an absent direct ledger posting service")
+	}
+	// This decision is driven by the production profile, not merely the
+	// availability of a configured posting backend.
+	if exposeDirectLedgerPosting(true, true) {
+		t.Fatal("production must not expose the direct ledger posting route")
+	}
+	if !exposeDirectLedgerPosting(false, true) {
+		t.Fatal("controlled non-production environments should retain the integration route")
+	}
+	if exposeDirectLedgerPosting(false, false) {
+		t.Fatal("an absent posting backend must never expose a route")
+	}
+}
