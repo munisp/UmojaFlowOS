@@ -7,7 +7,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.35.0
 	github.com/hyperledger/fabric-gateway v1.12.0
 	github.com/jackc/pgx/v5 v5.7.2
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.12.3
 	github.com/minio/minio-go/v7 v7.0.97
 	github.com/redis/go-redis/v9 v9.7.3
 	github.com/testcontainers/testcontainers-go v0.39.0
