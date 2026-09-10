@@ -24,6 +24,19 @@ type Account struct {
 	Currency    string
 	UserData128 [16]byte
 }
+type TransferMode string
+
+const (
+	// TransferConfirmed creates a normal final double-entry transfer.
+	TransferConfirmed TransferMode = "confirmed"
+	// TransferPending reserves funds in a TigerBeetle pending transfer.
+	TransferPending TransferMode = "pending"
+	// TransferPostPending posts a previously created pending transfer.
+	TransferPostPending TransferMode = "post_pending"
+	// TransferVoidPending voids a previously created pending transfer.
+	TransferVoidPending TransferMode = "void_pending"
+)
+
 type Transfer struct {
 	ID              uint64
 	DebitAccountID  uint64
@@ -31,6 +44,7 @@ type Transfer struct {
 	Amount          uint64
 	Currency        string
 	PendingID       uint64
+	Mode            TransferMode
 }
 
 // Client intentionally matches the minimal command boundary required by a TigerBeetle adapter.

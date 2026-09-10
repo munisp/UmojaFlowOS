@@ -69,7 +69,8 @@ GRANT INSERT ON TABLE
   compliance_vendor_evidence_items,
   compliance_vendor_gate_decisions,
   stablecoin_terminal_decision,
-  settlement_fence_commands
+  settlement_fence_commands,
+  settlement_saga_transition
 TO :"app_role_ident";
 
 -- Records with a governed, reviewable lifecycle require in-place transitions.
@@ -115,7 +116,11 @@ GRANT INSERT, UPDATE ON TABLE
   operator_access_requests,
   stablecoin_intent,
   stablecoin_idempotency_key,
-  stablecoin_event_inbox
+  stablecoin_event_inbox,
+  settlement_saga,
+  settlement_account_binding,
+  settlement_outbox,
+  settlement_inbox
 TO :"app_role_ident";
 
 -- fence_version reads its default from a sequence the app must be able to

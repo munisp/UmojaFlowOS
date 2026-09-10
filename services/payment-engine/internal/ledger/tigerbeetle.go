@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	tb "github.com/tigerbeetle/tigerbeetle-go"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	tb "github.com/tigerbeetle/tigerbeetle-go"
 )
 
 // TigerBeetleClient is the real official-client adapter. It is intentionally
@@ -110,6 +110,37 @@ func (c *TigerBeetleClient) CreateAccounts(ctx context.Context, accounts []Accou
 	return nil
 }
 
+func tigerBeetleTransferFlags(transfer Transfer) (tb.TransferFlags, error) {
+	mode := transfer.Mode
+	if mode == "" {
+		mode = TransferConfirmed
+	}
+	switch mode {
+	case TransferConfirmed:
+		if transfer.PendingID != 0 {
+			return tb.TransferFlags{}, fmt.Errorf("confirmed transfer must not reference a pending transfer")
+		}
+		return tb.TransferFlags{}, nil
+	case TransferPending:
+		if transfer.PendingID != 0 {
+			return tb.TransferFlags{}, fmt.Errorf("pending transfer must not reference another pending transfer")
+		}
+		return tb.TransferFlags{Pending: true}, nil
+	case TransferPostPending:
+		if transfer.PendingID == 0 {
+			return tb.TransferFlags{}, fmt.Errorf("post-pending transfer requires pending id")
+		}
+		return tb.TransferFlags{PostPendingTransfer: true}, nil
+	case TransferVoidPending:
+		if transfer.PendingID == 0 {
+			return tb.TransferFlags{}, fmt.Errorf("void-pending transfer requires pending id")
+		}
+		return tb.TransferFlags{VoidPendingTransfer: true}, nil
+	default:
+		return tb.TransferFlags{}, fmt.Errorf("unsupported TigerBeetle transfer mode %q", transfer.Mode)
+	}
+}
+
 func (c *TigerBeetleClient) CreateTransfers(ctx context.Context, transfers []Transfer) error {
 	ctx, span := otel.Tracer("umojaflowos.payment-engine.tigerbeetle").Start(ctx, "tigerbeetle.create_transfers")
 	defer span.End()
@@ -135,6 +166,10 @@ func (c *TigerBeetleClient) CreateTransfers(ctx context.Context, transfers []Tra
 		if err != nil {
 			return err
 		}
+		flags, err := tigerBeetleTransferFlags(transfer)
+		if err != nil {
+			return err
+		}
 		mapped = append(mapped, tb.Transfer{
 			ID:              tb.ToUint128(transfer.ID),
 			DebitAccountID:  tb.ToUint128(transfer.DebitAccountID),
@@ -143,7 +178,9 @@ func (c *TigerBeetleClient) CreateTransfers(ctx context.Context, transfers []Tra
 			PendingID:       tb.ToUint128(transfer.PendingID),
 			Ledger:          ledger,
 			Code:            c.config.TransferCode,
+			Flags:           flags.ToUint16(),
 		})
+
 	}
 	results, err := c.client.CreateTransfers(mapped)
 	if err != nil {

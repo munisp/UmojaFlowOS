@@ -235,6 +235,18 @@ type GuardedLedger struct {
 	Inner AuthoritativeLedger
 }
 
+type pendingPostingLedger interface {
+	PostPendingTransfer(context.Context, ledger.PostingRequest) (ledger.PostedTransferFact, error)
+	CommitPendingTransfer(context.Context, ledger.PostingRequest) (ledger.PostedTransferFact, error)
+	VoidPendingTransfer(context.Context, ledger.PostingRequest) (ledger.PostedTransferFact, error)
+}
+
+type pendingPostingLedgerWithAdmission interface {
+	PostPendingTransferWithAdmission(context.Context, ledger.PostingRequest, ledger.AdmissionToken) (ledger.PostedTransferFact, error)
+	CommitPendingTransferWithAdmission(context.Context, ledger.PostingRequest, ledger.AdmissionToken) (ledger.PostedTransferFact, error)
+	VoidPendingTransferWithAdmission(context.Context, ledger.PostingRequest, ledger.AdmissionToken) (ledger.PostedTransferFact, error)
+}
+
 func (g GuardedLedger) PostConfirmedTransfer(ctx context.Context, req ledger.PostingRequest) (ledger.PostedTransferFact, error) {
 	if g.Fence == nil || g.Inner == nil {
 		return ledger.PostedTransferFact{}, errors.New("guarded ledger dependencies are required")
@@ -266,6 +278,77 @@ func (g GuardedLedger) PostConfirmedTransfer(ctx context.Context, req ledger.Pos
 		return ledger.PostedTransferFact{}, err
 	}
 	return g.Inner.PostConfirmedTransfer(ctx, req)
+}
+
+func (g GuardedLedger) PostPendingTransfer(ctx context.Context, req ledger.PostingRequest) (ledger.PostedTransferFact, error) {
+	return g.postPendingOperation(ctx, req, "prepare")
+}
+
+func (g GuardedLedger) CommitPendingTransfer(ctx context.Context, req ledger.PostingRequest) (ledger.PostedTransferFact, error) {
+	return g.postPendingOperation(ctx, req, "commit")
+}
+
+func (g GuardedLedger) VoidPendingTransfer(ctx context.Context, req ledger.PostingRequest) (ledger.PostedTransferFact, error) {
+	return g.postPendingOperation(ctx, req, "void")
+}
+
+func (g GuardedLedger) postPendingOperation(ctx context.Context, req ledger.PostingRequest, operation string) (ledger.PostedTransferFact, error) {
+	if g.Fence == nil || g.Inner == nil {
+		return ledger.PostedTransferFact{}, errors.New("guarded ledger dependencies are required")
+	}
+	inner, ok := g.Inner.(pendingPostingLedger)
+	if !ok {
+		return ledger.PostedTransferFact{}, errors.New("ledger does not support pending settlement operations")
+	}
+	invoke := func(token *ledger.AdmissionToken) (ledger.PostedTransferFact, error) {
+		if token != nil {
+			if aware, ok := g.Inner.(pendingPostingLedgerWithAdmission); ok {
+				switch operation {
+				case "prepare":
+					return aware.PostPendingTransferWithAdmission(ctx, req, *token)
+				case "commit":
+					return aware.CommitPendingTransferWithAdmission(ctx, req, *token)
+				case "void":
+					return aware.VoidPendingTransferWithAdmission(ctx, req, *token)
+				}
+			}
+		}
+		switch operation {
+		case "prepare":
+			return inner.PostPendingTransfer(ctx, req)
+		case "commit":
+			return inner.CommitPendingTransfer(ctx, req)
+		case "void":
+			return inner.VoidPendingTransfer(ctx, req)
+		default:
+			return ledger.PostedTransferFact{}, errors.New("unsupported guarded pending operation")
+		}
+	}
+	if g.Fence.durable != nil {
+		admissionStore, ok := g.Fence.durable.(DurableAdmissionStore)
+		if !ok {
+			g.Fence.setLocalState(FenceState{Fenced: true, Reason: "durable admission store unavailable"})
+			return ledger.PostedTransferFact{}, errors.New("durable settlement admission is required")
+		}
+		token, err := admissionStore.AcquireAdmission(ctx, g.Fence.environment)
+		if err != nil {
+			g.Fence.setLocalState(FenceState{Fenced: true, Reason: "durable admission unavailable"})
+			return ledger.PostedTransferFact{}, fmt.Errorf("settlement admission unavailable: %w", err)
+		}
+		fact, invokeErr := invoke(&token)
+		releaseErr := token.Release()
+		if invokeErr != nil {
+			return fact, invokeErr
+		}
+		if releaseErr != nil {
+			return fact, fmt.Errorf("release settlement admission: %w", releaseErr)
+		}
+		return fact, nil
+	}
+	if err := g.Fence.CheckContext(ctx); err != nil {
+		return ledger.PostedTransferFact{}, err
+	}
+	return invoke(nil)
 }
 
 type FenceHTTPHandler struct {

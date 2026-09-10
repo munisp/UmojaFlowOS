@@ -165,3 +165,48 @@ func TestFenceCommandRejectsInvalidSignature(t *testing.T) {
 		t.Fatal("expected invalid signature rejection")
 	}
 }
+
+type pendingCountingLedger struct {
+	countingLedger
+	pendingCalls int
+}
+
+func (l *pendingCountingLedger) PostPendingTransfer(context.Context, ledger.PostingRequest) (ledger.PostedTransferFact, error) {
+	l.pendingCalls++
+	return ledger.PostedTransferFact{}, nil
+}
+func (l *pendingCountingLedger) CommitPendingTransfer(context.Context, ledger.PostingRequest) (ledger.PostedTransferFact, error) {
+	return ledger.PostedTransferFact{}, nil
+}
+func (l *pendingCountingLedger) VoidPendingTransfer(context.Context, ledger.PostingRequest) (ledger.PostedTransferFact, error) {
+	return ledger.PostedTransferFact{}, nil
+}
+
+func TestSettlementFenceRejectsPendingLedgerOperationsWhileFenced(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fence, err := NewSettlementFence(pub, &fenceAuditTest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := fence.Apply(signedFenceCommand(t, FenceActionOpen, now, priv), now); err != nil {
+		t.Fatal(err)
+	}
+	inner := &pendingCountingLedger{}
+	guarded := GuardedLedger{Fence: fence, Inner: inner}
+	if _, err := guarded.PostPendingTransfer(context.Background(), ledger.PostingRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := fence.Apply(signedFenceCommand(t, FenceActionFence, now, priv), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := guarded.PostPendingTransfer(context.Background(), ledger.PostingRequest{}); err == nil {
+		t.Fatal("fenced pending operation must be rejected")
+	}
+	if inner.pendingCalls != 1 {
+		t.Fatalf("pending calls=%d, want 1", inner.pendingCalls)
+	}
+}

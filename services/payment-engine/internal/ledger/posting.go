@@ -84,12 +84,45 @@ func (s *PostingService) validateRequest(request PostingRequest) error {
 	return nil
 }
 
-// PostConfirmedTransfer is intentionally idempotent. The concrete TigerBeetle
-// client accepts TransferExists for the same transfer ID. If projection failed
-// after a confirmed TigerBeetle write, retrying this exact request reuses the
-// same immutable fact and gives the projection sink another chance to persist it.
+// PostConfirmedTransfer creates an idempotent final transfer. New multi-rail
+// flows should create a pending transfer first, then call CommitPendingTransfer
+// only after all independent commercial facts are verified.
 func (s *PostingService) PostConfirmedTransfer(ctx context.Context, request PostingRequest) (PostedTransferFact, error) {
-	return s.postConfirmedTransfer(ctx, request)
+	return s.postTransfer(ctx, request, TransferConfirmed, true)
+}
+
+// PostPendingTransfer creates a TigerBeetle pending transfer. It reserves the
+// accounting fact but never projects it as a final customer-visible transfer.
+func (s *PostingService) PostPendingTransfer(ctx context.Context, request PostingRequest) (PostedTransferFact, error) {
+	if request.PendingID != 0 {
+		return PostedTransferFact{}, errors.New("pending transfer request must not carry pending id")
+	}
+	return s.postTransfer(ctx, request, TransferPending, false)
+}
+
+// CommitPendingTransfer posts the exact pending transfer named by PendingID.
+// Its TransferID must be a new, deterministic final transfer ID.
+func (s *PostingService) CommitPendingTransfer(ctx context.Context, request PostingRequest) (PostedTransferFact, error) {
+	if request.PendingID == 0 {
+		return PostedTransferFact{}, errors.New("commit pending transfer requires pending id")
+	}
+	return s.postTransfer(ctx, request, TransferPostPending, true)
+}
+
+// VoidPendingTransfer voids the exact pending transfer named by PendingID. It
+// does not emit a final transfer projection.
+func (s *PostingService) VoidPendingTransfer(ctx context.Context, request PostingRequest) (PostedTransferFact, error) {
+	if request.PendingID == 0 {
+		return PostedTransferFact{}, errors.New("void pending transfer requires pending id")
+	}
+	return s.postTransfer(ctx, request, TransferVoidPending, false)
+}
+
+func validAdmissionToken(token AdmissionToken) error {
+	if token.Environment == "" || token.Version == 0 || token.Release == nil {
+		return errors.New("valid durable settlement admission token is required")
+	}
+	return nil
 }
 
 // PostConfirmedTransferWithAdmission is the production path used by the
@@ -97,13 +130,34 @@ func (s *PostingService) PostConfirmedTransfer(ctx context.Context, request Post
 // TigerBeetle call returns, so a concurrent FENCE command cannot commit between
 // the fence check and the ledger submission.
 func (s *PostingService) PostConfirmedTransferWithAdmission(ctx context.Context, request PostingRequest, token AdmissionToken) (PostedTransferFact, error) {
-	if token.Environment == "" || token.Version == 0 || token.Release == nil {
-		return PostedTransferFact{}, errors.New("valid durable settlement admission token is required")
+	if err := validAdmissionToken(token); err != nil {
+		return PostedTransferFact{}, err
 	}
-	return s.postConfirmedTransfer(ctx, request)
+	return s.PostConfirmedTransfer(ctx, request)
 }
 
-func (s *PostingService) postConfirmedTransfer(ctx context.Context, request PostingRequest) (PostedTransferFact, error) {
+func (s *PostingService) PostPendingTransferWithAdmission(ctx context.Context, request PostingRequest, token AdmissionToken) (PostedTransferFact, error) {
+	if err := validAdmissionToken(token); err != nil {
+		return PostedTransferFact{}, err
+	}
+	return s.PostPendingTransfer(ctx, request)
+}
+
+func (s *PostingService) CommitPendingTransferWithAdmission(ctx context.Context, request PostingRequest, token AdmissionToken) (PostedTransferFact, error) {
+	if err := validAdmissionToken(token); err != nil {
+		return PostedTransferFact{}, err
+	}
+	return s.CommitPendingTransfer(ctx, request)
+}
+
+func (s *PostingService) VoidPendingTransferWithAdmission(ctx context.Context, request PostingRequest, token AdmissionToken) (PostedTransferFact, error) {
+	if err := validAdmissionToken(token); err != nil {
+		return PostedTransferFact{}, err
+	}
+	return s.VoidPendingTransfer(ctx, request)
+}
+
+func (s *PostingService) postTransfer(ctx context.Context, request PostingRequest, mode TransferMode, projectFinal bool) (PostedTransferFact, error) {
 	if err := s.validateRequest(request); err != nil {
 		return PostedTransferFact{}, err
 	}
@@ -115,8 +169,9 @@ func (s *PostingService) postConfirmedTransfer(ctx context.Context, request Post
 		Amount:          request.Amount,
 		Currency:        currency,
 		PendingID:       request.PendingID,
+		Mode:            mode,
 	}}); err != nil {
-		return PostedTransferFact{}, fmt.Errorf("post TigerBeetle transfer: %w", err)
+		return PostedTransferFact{}, fmt.Errorf("post TigerBeetle %s transfer: %w", mode, err)
 	}
 	fact := PostedTransferFact{
 		TransferID:      request.TransferID,
@@ -126,6 +181,9 @@ func (s *PostingService) postConfirmedTransfer(ctx context.Context, request Post
 		DebitAccountID:  request.DebitAccountID,
 		CreditAccountID: request.CreditAccountID,
 		PostedAt:        s.now().UTC(),
+	}
+	if !projectFinal {
+		return fact, nil
 	}
 	if err := ProjectConfirmedTransfer(ctx, s.sink, fact); err != nil {
 		return fact, fmt.Errorf("TigerBeetle transfer is confirmed but PostgreSQL projection is pending: %w", err)

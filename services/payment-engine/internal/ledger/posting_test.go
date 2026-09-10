@@ -120,3 +120,60 @@ func TestRuntimeOnlyBuildsPostingServiceWhenTigerBeetleIsEnabled(t *testing.T) {
 		t.Fatalf("enabled runtime should build posting service: %v", err)
 	}
 }
+
+func TestPostingServiceUsesExplicitPendingCommitAndVoidModes(t *testing.T) {
+	client := &postingClient{}
+	sink := &postingSink{}
+	service, err := NewPostingService(client, sink, time.Now)
+	if err != nil {
+		t.Fatalf("construct posting service: %v", err)
+	}
+
+	pending := validPostingRequest()
+	pending.TransferID = 2001
+	if _, err := service.PostPendingTransfer(context.Background(), pending); err != nil {
+		t.Fatalf("prepare pending transfer: %v", err)
+	}
+	if len(client.transfers) != 1 || client.transfers[0].Mode != TransferPending || len(sink.facts) != 0 {
+		t.Fatalf("pending operation must not project a final fact: transfers=%+v projections=%+v", client.transfers, sink.facts)
+	}
+
+	commit := validPostingRequest()
+	commit.TransferID = 2002
+	commit.PendingID = pending.TransferID
+	if _, err := service.CommitPendingTransfer(context.Background(), commit); err != nil {
+		t.Fatalf("commit pending transfer: %v", err)
+	}
+	if len(client.transfers) != 2 || client.transfers[1].Mode != TransferPostPending || client.transfers[1].PendingID != pending.TransferID || len(sink.facts) != 1 {
+		t.Fatalf("commit must reference pending transfer and create one final projection: transfers=%+v projections=%+v", client.transfers, sink.facts)
+	}
+
+	void := validPostingRequest()
+	void.TransferID = 2003
+	void.PendingID = pending.TransferID
+	if _, err := service.VoidPendingTransfer(context.Background(), void); err != nil {
+		t.Fatalf("void pending transfer: %v", err)
+	}
+	if len(client.transfers) != 3 || client.transfers[2].Mode != TransferVoidPending || client.transfers[2].PendingID != pending.TransferID || len(sink.facts) != 1 {
+		t.Fatalf("void must reference pending transfer without final projection: transfers=%+v projections=%+v", client.transfers, sink.facts)
+	}
+}
+
+func TestPostingServiceRejectsInvalidPendingOperationBindings(t *testing.T) {
+	service, err := NewPostingService(&postingClient{}, &postingSink{}, time.Now)
+	if err != nil {
+		t.Fatalf("construct posting service: %v", err)
+	}
+	request := validPostingRequest()
+	request.PendingID = 1
+	if _, err := service.PostPendingTransfer(context.Background(), request); err == nil {
+		t.Fatal("pending transfer must reject a nested pending ID")
+	}
+	request = validPostingRequest()
+	if _, err := service.CommitPendingTransfer(context.Background(), request); err == nil {
+		t.Fatal("commit transfer must require a pending ID")
+	}
+	if _, err := service.VoidPendingTransfer(context.Background(), request); err == nil {
+		t.Fatal("void transfer must require a pending ID")
+	}
+}

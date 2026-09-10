@@ -12,7 +12,8 @@ DECLARE
     'external_stakeholder_assignments', 'external_stakeholder_evidence',
     'vasp_regulatory_profiles', 'vasp_regulatory_evidence_items', 'vasp_travel_rule_evidence_items', 'vasp_travel_rule_route_assessments',
     'vasp_offshore_counterparty_profiles', 'vasp_offshore_counterparty_evidence_items', 'vasp_offshore_counterparty_assessments',
-    'ledger_account_bindings', 'tigerbeetle_transfer_facts', 'aml_screening_checks', 'provider_send_requests', 'regulatory_submission_attempts', 'vasp_readiness_assurance_items', 'segregation_of_duties_evaluation_runs', 'ledger_posting_intents', 'ledger_reconciliation_runs', 'ledger_reconciliation_discrepancies'
+    'ledger_account_bindings', 'tigerbeetle_transfer_facts', 'aml_screening_checks', 'provider_send_requests', 'regulatory_submission_attempts', 'vasp_readiness_assurance_items', 'segregation_of_duties_evaluation_runs', 'ledger_posting_intents', 'ledger_reconciliation_runs', 'ledger_reconciliation_discrepancies',
+    'settlement_saga', 'settlement_account_binding', 'settlement_saga_transition', 'settlement_outbox', 'settlement_inbox'
   ];
 BEGIN
   IF EXISTS (SELECT 1 FROM unnest(expected_tables) AS expected(tablename) WHERE to_regclass('public.' || expected.tablename) IS NULL) THEN
@@ -59,6 +60,11 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='segregation_of_duties_evaluation_runs' AND column_name='evaluation_state')
      OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='segregation_of_duties_evaluation_runs' AND column_name='exception_digest') THEN
     RAISE EXCEPTION 'segregation-of-duties evaluator evidence must retain state and digest';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='settlement_saga' AND column_name='ledger_pending_id')
+     OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='settlement_outbox' AND column_name='leased_until')
+     OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='settlement_inbox' AND column_name='payload_sha256') THEN
+    RAISE EXCEPTION 'settlement saga must retain pending-ledger, leased-outbox, and immutable-inbox controls';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='operator_role_assignments' AND column_name='subject')
      OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='external_stakeholder_assignments' AND column_name='stakeholder_subject')
