@@ -52,8 +52,16 @@ jobs:
           cache-dependency-path: apps/control-plane/pnpm-lock.yaml
       - name: Enable pinned package manager
         run: corepack enable
+      - name: Create least-privilege application role for schema validation
+        run: |
+          set -Eeuo pipefail
+          if ! psql "$POSTGRES_DATABASE_URL" -Atqc "SELECT 1 FROM pg_roles WHERE rolname = 'umoja_app'" | grep -qx '1'; then
+            psql "$POSTGRES_DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE ROLE umoja_app NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT'
+          fi
+
       - name: Apply canonical PostgreSQL schema
         run: |
+          set -Eeuo pipefail
           for migration in database/postgresql/[0-9]*.sql; do
             psql "$POSTGRES_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
           done
