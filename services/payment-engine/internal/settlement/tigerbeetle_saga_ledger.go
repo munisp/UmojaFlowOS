@@ -183,6 +183,9 @@ func (l TigerBeetleSagaLedger) Void(ctx context.Context, in Intent, pending Ledg
 }
 
 func (l TigerBeetleSagaLedger) postingRequest(ctx context.Context, in Intent, operation string, pendingID uint64) (ledger.PostingRequest, error) {
+	if err := validateIntent(in); err != nil {
+		return ledger.PostingRequest{}, err
+	}
 	if l.Poster == nil || l.Accounts == nil {
 		return ledger.PostingRequest{}, errors.New("TigerBeetle poster and tenant account resolver are required")
 	}
@@ -193,7 +196,10 @@ func (l TigerBeetleSagaLedger) postingRequest(ctx context.Context, in Intent, op
 	if in.AmountMinor <= 0 {
 		return ledger.PostingRequest{}, ErrInvalidIntent
 	}
-	id := deterministicLedgerOperationID(in.TenantID, in.IdempotencyKey, PayloadDigest(in.Payload), operation)
+	// intentPayloadDigest uses the raw payload for a new request and the
+	// immutable persisted digest for recovery. Both paths must derive the same
+	// operation ID; otherwise a timeout recovery could submit a second command.
+	id := deterministicLedgerOperationID(in.TenantID, in.IdempotencyKey, intentPayloadDigest(in), operation)
 	return ledger.PostingRequest{TransferID: id, CorrelationID: in.ID + ":" + operation, Currency: in.Fiat, Amount: uint64(in.AmountMinor), DebitAccountID: accounts.DebitAccountID, CreditAccountID: accounts.CreditAccountID, PendingID: pendingID}, nil
 }
 

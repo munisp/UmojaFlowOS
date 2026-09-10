@@ -99,3 +99,40 @@ func TestTigerBeetleSagaLedgerFailsClosedWithoutGovernedDependencies(t *testing.
 		t.Fatal("missing tenant binding must fail")
 	}
 }
+
+func TestTigerBeetleSagaLedgerRecoveryUsesPersistedPayloadDigestForOperationIDs(t *testing.T) {
+	accounts := &staticAccounts{accounts: LedgerAccounts{DebitAccountID: 10, CreditAccountID: 20}}
+	adapter := TigerBeetleSagaLedger{Poster: &sagaLedgerPoster{}, Accounts: accounts}
+	original := validIntent()
+	original.Payload = []byte("immutable-recovery-payload")
+	original.PayloadSHA256 = ""
+	baseDigest := PayloadDigest(original.Payload)
+
+	recovery := original
+	recovery.Payload = nil
+	recovery.PayloadSHA256 = baseDigest
+
+	for _, operation := range []string{"pending", "commit", "void"} {
+		originalRequest, err := adapter.postingRequest(context.Background(), original, operation, 77)
+		if err != nil {
+			t.Fatalf("original %s request: %v", operation, err)
+		}
+		recoveryRequest, err := adapter.postingRequest(context.Background(), recovery, operation, 77)
+		if err != nil {
+			t.Fatalf("recovery %s request: %v", operation, err)
+		}
+		if originalRequest.TransferID != recoveryRequest.TransferID {
+			t.Fatalf("%s operation ID changed across digest-only recovery: original=%d recovery=%d", operation, originalRequest.TransferID, recoveryRequest.TransferID)
+		}
+	}
+}
+
+func TestTigerBeetleSagaLedgerRejectsRecoveryWithoutValidPayloadDigest(t *testing.T) {
+	adapter := TigerBeetleSagaLedger{Poster: &sagaLedgerPoster{}, Accounts: &staticAccounts{accounts: LedgerAccounts{DebitAccountID: 10, CreditAccountID: 20}}}
+	in := validIntent()
+	in.Payload = nil
+	in.PayloadSHA256 = "not-a-valid-digest"
+	if _, err := adapter.postingRequest(context.Background(), in, "commit", 77); err == nil {
+		t.Fatal("recovery with no raw payload and invalid persisted digest must fail closed")
+	}
+}
