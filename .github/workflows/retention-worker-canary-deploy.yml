@@ -37,7 +37,7 @@ jobs:
       OPENSEARCH_URL: ${{ inputs.opensearch_url || github.event.inputs.opensearch_url }}
       TEST_INDEX: ${{ inputs.test_index || github.event.inputs.test_index }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Configure Kubernetes context
         env:
           KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}
@@ -71,7 +71,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Configure Kubernetes context
         env:
           KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}

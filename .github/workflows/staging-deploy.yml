@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging-gates
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: services/payment-engine/go.mod
@@ -85,7 +85,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Deploy through approved Kubernetes context
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
@@ -112,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging-rollback
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Configure approved Kubernetes context
         env:
           KUBECONFIG_B64: ${{ secrets.STAGING_KUBECONFIG_B64 }}

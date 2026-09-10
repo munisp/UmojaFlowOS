@@ -40,7 +40,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.9.8
@@ -69,7 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: amp-alerting-plan
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.9.8
@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production-amp-alerting
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.9.8

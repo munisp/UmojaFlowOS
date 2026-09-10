@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production-verification
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.release_sha }}
           fetch-depth: 0
@@ -125,7 +125,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging-grpc-promotion
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.release_sha }}
       - name: Install tools
@@ -187,7 +187,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.release_sha }}
       - name: Configure approved production kubeconfig

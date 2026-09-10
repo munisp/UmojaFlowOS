@@ -21,7 +21,7 @@ jobs:
   policy-and-manifest-validation:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install OPA
         uses: open-policy-agent/setup-opa@v2
         with:
@@ -108,7 +108,7 @@ jobs:
     name: Validate E-01 through E-09 fixture contracts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Generate explicitly local E-01 through E-09 fixtures
         run: |
           set -Eeuo pipefail
@@ -145,7 +145,7 @@ jobs:
     needs: policy-and-manifest-validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: helm/kind-action@v1.10.0
         with:
           version: v0.25.0
