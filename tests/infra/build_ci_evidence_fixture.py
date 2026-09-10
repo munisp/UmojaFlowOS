@@ -33,6 +33,13 @@ def main() -> int:
         "created_at": "2026-08-26T00:00:00Z",
         "artifacts": artifacts,
         "approvals": approvals,
+        "worm": {
+            "bucket": "ci-contract-evidence-bucket",
+            "object_key_prefix": "ci-contract/evidence",
+            "object_lock_mode": "COMPLIANCE",
+            "retain_until": "2030-08-26T00:00:00Z",
+        },
+        "reconciliation": {"run_id": "ci-contract-run-0001"},
     }, indent=2) + "\n", encoding="utf-8")
     print(root / "release.json")
     return 0

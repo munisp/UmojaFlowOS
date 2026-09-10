@@ -8,6 +8,7 @@ on:
       - 'deploy/helm/umoja-payment-engine/**'
       - 'infra/terraform/**'
       - 'test/terratest/**'
+      - 'scripts/infra/validate_rendered_istio_virtualservice.py'
       - '.github/workflows/native-idem-compliance.yml'
   push:
     branches: [main]
@@ -89,7 +90,15 @@ jobs:
             | tar -xz kubeconform
           sudo install -m 0755 kubeconform /usr/local/bin/kubeconform
       - name: Kubernetes manifest validation (offline schema, no cluster)
-        run: kubeconform --strict --summary rendered-native-idem.yaml
+        # Istio CRDs are validated immediately below by a dedicated structural
+        # validator. kubeconform remains strict for every built-in Kubernetes
+        # object and may only skip CRDs whose schemas are unavailable offline.
+        run: kubeconform --strict --ignore-missing-schemas --summary rendered-native-idem.yaml
+      - name: Istio VirtualService structural validation
+        run: |
+          set -Eeuo pipefail
+          python3 -m pip install --disable-pip-version-check --no-input 'PyYAML==6.0.2'
+          python3 scripts/infra/validate_rendered_istio_virtualservice.py --manifest rendered-native-idem.yaml
       - uses: actions/upload-artifact@v4
         with:
           name: native-idem-rendered-manifests

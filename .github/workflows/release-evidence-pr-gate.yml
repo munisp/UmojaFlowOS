@@ -36,6 +36,9 @@ jobs:
       - name: Validate verifier and fixture syntax
         run: python3 -m py_compile scripts/infra/verify_production_release_evidence.py tests/infra/build_ci_evidence_fixture.py
 
+      - name: Install release-evidence test dependencies
+        run: python -m pip install --disable-pip-version-check --no-input -r requirements-ci.txt
+
       - name: Run verifier unit tests
         run: pytest -q tests/infra/test_verify_production_release_evidence.py tests/infra/test_draft_approver_authorization.py
 
