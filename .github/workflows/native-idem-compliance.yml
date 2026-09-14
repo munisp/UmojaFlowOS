@@ -34,7 +34,7 @@ jobs:
             | tar -xz conftest
           sudo install -m 0755 conftest /usr/local/bin/conftest
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
         with:
           version: v3.16.4
       - name: Install promtool
@@ -150,7 +150,7 @@ jobs:
         with:
           version: v0.25.0
           node_image: kindest/node:v1.31.2
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@v5
         with:
           version: v3.16.4
       - uses: actions/setup-go@v7
