@@ -5,7 +5,7 @@ go 1.25.4
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/alicebob/miniredis/v2 v2.35.0
-	github.com/hyperledger/fabric-gateway v1.12.0
+	github.com/hyperledger/fabric-gateway v1.12.1
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/lib/pq v1.12.3
 	github.com/minio/minio-go/v7 v7.0.97
