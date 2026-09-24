@@ -1,0 +1,37 @@
+{
+  "advisory_only": true,
+  "data_provenance": "transaction graph built from synthetic_nigeria flows with mule labels",
+  "epochs_run": 16,
+  "feature_config": {
+    "node_features": [
+      "out_degree",
+      "in_degree",
+      "log_total_sent",
+      "log_total_received",
+      "fan_in_out_ratio",
+      "night_ratio",
+      "unique_devices",
+      "passthrough_ratio",
+      "avg_sent",
+      "avg_received",
+      "kyc_tier",
+      "burst_max_1h"
+    ],
+    "num_edges": 17590,
+    "num_nodes": 1500
+  },
+  "metrics": {
+    "f1": 0.1509433962264151,
+    "positive_rate": 0.013333333333333334,
+    "pr_auc": 1.0,
+    "roc_auc": 1.0
+  },
+  "model_name": "mule_graphsage",
+  "n_train": 1200,
+  "n_val": 300,
+  "seed": 42,
+  "trained_at": "2026-09-24T00:27:36.716169+00:00",
+  "training_window": "2026-01-01 00:00:00+00:00..2026-01-30 23:52:00+00:00",
+  "version": "v20260924002724",
+  "weights_sha256": "e48e37a81fc71375dca4bde65d2eb1843410a4cd3bb6c6a51fd2bd53920b3aed"
+}

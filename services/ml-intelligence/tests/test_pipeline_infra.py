@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 
 import numpy as np
+import pytest
 
 from umojaflowos_ml.ab_testing import (ABExperimentStore, Experiment,
                                        evaluate_experiment, route_assignment)
@@ -116,3 +117,18 @@ def test_continuous_cycle_first_run_promotes(tmp_path):
     history = json.loads((tmp_path / "monitoring" / "cycle_history.json").read_text())
     assert history[-1]["cycle_id"] == report.cycle_id
     assert (tmp_path / "monitoring" / "baseline_drift.json").exists()
+
+
+def test_lakehouse_from_env_wiring(tmp_path, monkeypatch):
+    """The governed infra/lakehouse boundary wires to the ML pipeline via env."""
+    from umojaflowos_ml.lakehouse import MLLakehouse
+
+    monkeypatch.setenv("UMOJA_LAKEHOUSE_ROOT", str(tmp_path / "lh"))
+    monkeypatch.delenv("UMOJA_LAKEHOUSE_ENABLED", raising=False)
+    lh = MLLakehouse.from_env()
+    assert lh.root == tmp_path / "lh"
+    assert (tmp_path / "lh" / "bronze").is_dir()
+
+    monkeypatch.setenv("UMOJA_LAKEHOUSE_ENABLED", "false")
+    with pytest.raises(RuntimeError, match="disabled"):
+        MLLakehouse.from_env()

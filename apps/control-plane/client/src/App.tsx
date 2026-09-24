@@ -1,21 +1,38 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
+import { lazy, Suspense } from "react";
 import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
 import PublicLanding from "./pages/PublicLanding";
-import StakeholderOnboarding from "./pages/StakeholderOnboarding";
+
+// Route-level code splitting (perf/slo.yaml mobile budget): the console and
+// enrollment flows are heavy and must not block first paint of the landing
+// page on 3G/4G. PublicLanding stays eager — it IS the first paint.
+const Home = lazy(() => import("./pages/Home"));
+const StakeholderOnboarding = lazy(() => import("./pages/StakeholderOnboarding"));
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       <Route path={"/"} component={PublicLanding} />
-      <Route path={"/enroll"} component={StakeholderOnboarding} />
-      <Route path={"/console"} component={Home} />
-      <Route path={"/console/:module"} component={Home} />
+      <Route path={"/enroll"}>
+        <Suspense fallback={null}>
+          <StakeholderOnboarding />
+        </Suspense>
+      </Route>
+      <Route path={"/console"}>
+        <Suspense fallback={null}>
+          <Home />
+        </Suspense>
+      </Route>
+      <Route path={"/console/:module"}>
+        <Suspense fallback={null}>
+          <Home />
+        </Suspense>
+      </Route>
       {/* Bare module paths (e.g. bookmarked or shared links) redirect into the console shell */}
       {(["overview", "registry", "integrations", "governance", "treasury", "markets", "payments", "compliance", "reports", "alerts"] as const).map((module) => (
         <Route key={module} path={`/${module}`}>
