@@ -1,0 +1,19 @@
+[Unit]
+Description=UmojaFlowOS filesystem anti-wipe verification (fail-closed)
+Documentation=https://github.com/munisp/UmojaFlowOS
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/umojaflowos
+# Build once at deploy: build; then verify on a timer. Non-zero exit = wipe/tamper detected.
+ExecStart=/usr/bin/python3 scripts/infra/filesystem_anti_wipe.py verify \
+    --root /opt/umojaflowos \
+    --config infra/anti-wipe/protected-paths.json \
+    --manifest /var/lib/umojaflowos/anti-wipe/manifest.json \
+    --log /var/log/umojaflowos/anti-wipe-audit.jsonl
+# Optional hardening pass (requires CAP_LINUX_IMMUTABLE for chattr):
+ExecStartPost=-/usr/bin/python3 scripts/infra/filesystem_anti_wipe.py enforce \
+    --root /opt/umojaflowos \
+    --config infra/anti-wipe/protected-paths.json
+ProtectSystem=full
+NoNewPrivileges=true

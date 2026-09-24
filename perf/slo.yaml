@@ -1,0 +1,81 @@
+# UmojaFlowOS latency SLOs — industry-standard millisecond budgets.
+# Budgets are p99 unless stated. Measurement: OpenTelemetry histograms
+# (http_server_duration / db_client_duration / custom spans) evaluated in
+# Grafana against these thresholds; k6 gates in perf/k6 enforce them in CI.
+version: 1
+currency_of_truth: "milliseconds, p99 over 5m windows, 28d rolling"
+
+# ------------------------------ API services --------------------------------
+services:
+  payment-engine:            # Go — hot path, sits in front of TigerBeetle
+    grpc_authorize:      { p50: 5,   p99: 50,   p999: 120 }
+    grpc_settle_prepare: { p50: 8,   p99: 80,   p999: 200 }
+    http_healthz:        { p50: 1,   p99: 5 }
+    notes: "no per-request DB connect; PgBouncer checkout <1ms"
+  risk-compliance-core:      # Rust — screening on the authorize path
+    screen_payment:      { p50: 4,   p99: 40,   p999: 100 }
+    rules_eval:          { p50: 2,   p99: 20 }
+  ledger-gateway:            # Rust — TigerBeetle client
+    transfer_create:     { p50: 3,   p99: 30,   p999: 80 }
+    account_lookup:      { p50: 1,   p99: 10 }
+  evidence-gateway:          # Python/FastAPI
+    evidence_write:      { p50: 10,  p99: 100,  p999: 300 }
+    evidence_read:       { p50: 5,   p99: 50 }
+  document-intelligence:     # Python — async OCR; synchronous budget is queue-admit only
+    admit_document:      { p50: 10,  p99: 100 }
+    ocr_job_e2e:         { p50: 4000, p99: 30000 }  # async, off the request path
+  reporting-analytics:
+    dashboard_query:     { p50: 50,  p99: 400 }
+    export_prepare:      { p50: 200, p99: 2000 }
+  remittance-bdc:            # Python/FastAPI (this audit)
+    create_remittance:   { p50: 8,   p99: 80 }
+    rate_lock:           { p50: 5,   p99: 50 }
+    bdc_ticket:          { p50: 6,   p99: 60 }
+    daily_return:        { p50: 30,  p99: 300 }
+  ml-intelligence:           # CPU inference, models warm in memory
+    score_fraud:         { p50: 6,   p99: 50 }
+    score_credit:        { p50: 6,   p99: 50 }
+    score_gnn:           { p50: 15,  p99: 120 }   # 2-hop graph slice
+    score_autoencoder:   { p50: 6,   p99: 50 }
+
+# --------------------------- integrations -----------------------------------
+integrations:
+  postgres:     { lookup_p99: 10,  pool_checkout_p99: 1,  replication_lag_s: 1 }
+  tigerbeetle:  { transfer_p99: 5, lookup_p99: 2 }        # in-process batch protocol
+  redis:        { get_p99: 2,      set_p99: 2,  pipeline_100_p99: 8 }
+  kafka:        { produce_ack_p99: 25, consumer_lag_s: 5 }
+  fluvio:       { produce_ack_p99: 20, consumer_lag_s: 5 }
+  mojaloop:     { quote_p99: 2000, transfer_p99: 4000 }   # external scheme SLA-bound
+  apisix:       { gateway_added_p99: 3 }                  # proxy overhead only
+  keycloak:     { token_verify_local_p99: 2, introspect_p99: 30 }  # prefer local JWT verify
+  permify:      { check_p99: 25,  check_cached_p99: 5 }
+  opensearch:   { index_p99: 200, search_p99: 150, audit_write: "async bulk, off hot path" }
+  openappsec:   { inline_inspect_added_p99: 8 }
+
+# ------------------------------- mobile -------------------------------------
+mobile:
+  # Control-plane PWA + operator mobile flows on Nigerian networks (3G/4G).
+  api:
+    p99_budget: 300           # any endpoint the mobile client calls synchronously
+    payload_kb_gzip_max: 64   # per screen payload
+  web_vitals:
+    LCP:   { good: 2500, budget: 4000 }    # 4G Moto G4 throttling
+    INP:   { good: 200,  budget: 500 }
+    CLS:   { good: 0.1,  budget: 0.25 }
+    TTFB:  { good: 800,  budget: 1500 }
+  bundle:
+    initial_js_kb_gzip: 170   # route-level code splitting enforced in vite config
+    route_chunk_kb_gzip: 90
+    total_js_kb_gzip: 600
+    long_task_ms_max: 200
+  offline:
+    queue_retry: "mutations queued in IndexedDB; sync on connectivity restore"
+    stale_while_revalidate: ["reference-data", "rate-boards", "corridors"]
+
+# ------------------------------ error budget --------------------------------
+policy:
+  availability_target: 99.95          # control plane
+  burn_alerts:
+    fast: { window: 1h,  threshold: 2%  of monthly budget }
+    slow: { window: 6h,  threshold: 5%  of monthly budget }
+  gate: "CI k6 smoke must hold p99 budgets at 50 RPS before merge"
