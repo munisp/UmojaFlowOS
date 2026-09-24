@@ -65,7 +65,7 @@ describe("trend series construction", () => {
       [
         { service: "risk-compliance-core", status: "healthy", latencyMs: 5, counters: { evaluations: 500 }, collectedAt: at(3) },
         // Service restarted; the counter went backwards.
-        { service: "risk-compliance-core", status: "unreachable", latencyMs: null, counters: { evaluations: 4 }, collectedAt: at(2) },
+        { service: "risk-compliance-core", status: "healthy", latencyMs: 5, counters: { evaluations: 4 }, collectedAt: at(2) },
         { service: "risk-compliance-core", status: "healthy", latencyMs: 5, counters: { evaluations: 9 }, collectedAt: at(1) },
       ],
       "evaluations",
