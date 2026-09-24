@@ -6,7 +6,6 @@ import { CounterpartyAuthorizationForm, CounterpartyAuthorizationTable } from "@
 import { KycAnalysisJobTable } from "@/components/KycEvidenceControls";
 import { AnalysisJobSubmissionForm } from "@/components/AnalysisJobSubmissionForm";
 import { ComplianceCaseDispositionControls, VerificationConsentForm } from "@/components/ComplianceCaseWorkflowControls";
-import { KycEvidenceWorkspace } from "@/components/KycEvidenceWorkspace";
 import { canOperatePayments, PaymentLegForm, PaymentLegLedger, PaymentOrderForm, PaymentOrderLedger, RateLockExpiryControl } from "@/components/PaymentWorkflowControls";
 import { canProposeRebalancing, TreasuryBufferPolicyTable, TreasuryRecommendationForm, TreasuryRecommendationTable } from "@/components/TreasuryRebalancingControls";
 import { PostgresReportTransitionForm } from "@/components/PostgresReportTransitionForm";
@@ -14,23 +13,10 @@ import { PostgresReportDraftForm } from "@/components/PostgresReportDraftForm";
 import { SarStrFilingForm, SarStrFilingTable } from "@/components/SarStrFilingControls";
 import { KycDocumentReviewTable } from "@/components/KycDocumentReviewControls";
 import { KycDocumentUploadForm } from "@/components/KycDocumentUploadControls";
-import { EnterpriseCustomersWorkspace } from "@/components/EnterpriseCustomersWorkspace";
-import { LiquidityProviderWorkspace } from "@/components/LiquidityProviderWorkspace";
-import { BankingPartnerWorkspace } from "@/components/BankingPartnerWorkspace";
-import { PayoutPspWorkspace } from "@/components/PayoutPspWorkspace";
-import { StablecoinIssuerWorkspace } from "@/components/StablecoinIssuerWorkspace";
-import { ComplianceVendorWorkspace } from "@/components/ComplianceVendorWorkspace";
-import { AuditorEngagementWorkspace } from "@/components/AuditorEngagementWorkspace";
-import { OperatorsWorkspace } from "@/components/OperatorsWorkspace";
 import { LegalEntityRegistrationForm } from "@/components/LegalEntityRegistrationForm";
 import { canConfigureCredentials, CredentialAuditTrail, IntegrationCredentialForm, IntegrationCredentialTable } from "@/components/IntegrationCredentialControls";
-import { ServiceTrendCharts } from "@/components/ServiceTrendCharts";
-import { ServiceStatusDashboard } from "@/components/ServiceStatusDashboard";
-import { GovernedControlPosture } from "@/components/GovernedControlPosture";
-import { StakeholderOnboardingWorkspace } from "@/components/StakeholderOnboardingWorkspace";
 import { StakeholderPortal, StakeholderPortalGallery } from "@/components/StakeholderPortal";
 import { CounterpartyOnboardingControls } from "@/components/CounterpartyOnboardingControls";
-import { CbnSandboxWorkspace } from "@/components/CbnSandboxWorkspace";
 import { OperatorOnboardingControls } from "@/components/OperatorOnboardingControls";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -44,9 +30,40 @@ import type { OperatorRole } from "@/lib/roleCapabilities";
 import { ConsoleModuleActions } from "@/components/ConsoleModuleActions";
 import { canPerformConsoleAction } from "@/lib/roleCapabilities";
 import { AlertTriangle, ArrowUpRight, CircleAlert, DatabaseZap, FileCheck2, Plus, ShieldAlert } from "lucide-react";
-import { FormEvent, ReactNode, useMemo, useState } from "react";
+import { FormEvent, ReactNode, Suspense, lazy, useMemo, useState, type ComponentType, type LazyExoticComponent } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+
+// Bundle budget (perf/slo.yaml → mobile.bundle): heavy workspaces, charting
+// (recharts), and audit dashboards are lazy-loaded per console module so the
+// entry chunk stays within the 90KB gzip route budget. Identifiers are
+// preserved intentionally — source-level role/boundary checks match on them.
+const chunkFallback = (
+  <div className="border border-black/10 p-5 text-xs font-bold uppercase tracking-wide text-black/45">
+    Loading module…
+  </div>
+);
+function withChunk<P extends object>(Comp: LazyExoticComponent<ComponentType<P>>) {
+  function Chunked(props: P) {
+    return <Suspense fallback={chunkFallback}><Comp {...props} /></Suspense>;
+  }
+  Chunked.displayName = "ChunkedWorkspace";
+  return Chunked;
+}
+const KycEvidenceWorkspace = withChunk(lazy(() => import("@/components/KycEvidenceWorkspace").then(m => ({ default: m.KycEvidenceWorkspace }))));
+const EnterpriseCustomersWorkspace = withChunk(lazy(() => import("@/components/EnterpriseCustomersWorkspace").then(m => ({ default: m.EnterpriseCustomersWorkspace }))));
+const LiquidityProviderWorkspace = withChunk(lazy(() => import("@/components/LiquidityProviderWorkspace").then(m => ({ default: m.LiquidityProviderWorkspace }))));
+const BankingPartnerWorkspace = withChunk(lazy(() => import("@/components/BankingPartnerWorkspace").then(m => ({ default: m.BankingPartnerWorkspace }))));
+const PayoutPspWorkspace = withChunk(lazy(() => import("@/components/PayoutPspWorkspace").then(m => ({ default: m.PayoutPspWorkspace }))));
+const StablecoinIssuerWorkspace = withChunk(lazy(() => import("@/components/StablecoinIssuerWorkspace").then(m => ({ default: m.StablecoinIssuerWorkspace }))));
+const ComplianceVendorWorkspace = withChunk(lazy(() => import("@/components/ComplianceVendorWorkspace").then(m => ({ default: m.ComplianceVendorWorkspace }))));
+const AuditorEngagementWorkspace = withChunk(lazy(() => import("@/components/AuditorEngagementWorkspace").then(m => ({ default: m.AuditorEngagementWorkspace }))));
+const OperatorsWorkspace = withChunk(lazy(() => import("@/components/OperatorsWorkspace").then(m => ({ default: m.OperatorsWorkspace }))));
+const ServiceTrendCharts = withChunk(lazy(() => import("@/components/ServiceTrendCharts").then(m => ({ default: m.ServiceTrendCharts }))));
+const ServiceStatusDashboard = withChunk(lazy(() => import("@/components/ServiceStatusDashboard").then(m => ({ default: m.ServiceStatusDashboard }))));
+const GovernedControlPosture = withChunk(lazy(() => import("@/components/GovernedControlPosture").then(m => ({ default: m.GovernedControlPosture }))));
+const StakeholderOnboardingWorkspace = withChunk(lazy(() => import("@/components/StakeholderOnboardingWorkspace").then(m => ({ default: m.StakeholderOnboardingWorkspace }))));
+const CbnSandboxWorkspace = withChunk(lazy(() => import("@/components/CbnSandboxWorkspace").then(m => ({ default: m.CbnSandboxWorkspace }))));
 
 type ModuleKey = "overview" | "payments" | "treasury" | "markets" | "compliance" | "reports" | "sandbox" | "registry" | "integrations" | "governance" | "alerts" | "admins";
 
