@@ -18,6 +18,20 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    // Mobile performance (perf/slo.yaml): initial JS ≤170KB gzip, route
+    // chunks ≤90KB gzip. Vendor splitting keeps the landing paint light on
+    // Nigerian 3G/4G; console code loads per-route via React.lazy in App.tsx.
+    target: "es2020",
+    cssCodeSplit: true,
+    modulePreload: { polyfill: false },
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom", "wouter"],
+          "vendor-query": ["@tanstack/react-query"],
+        },
+      },
+    },
   },
   server: {
     host: true,

@@ -1,0 +1,29 @@
+{
+  "ci": {
+    "collect": {
+      "staticDistDir": "dist/public",
+      "numberOfRuns": 3,
+      "settings": {
+        "preset": "mobile",
+        "throttling": {
+          "cpuSlowdownMultiplier": 4
+        }
+      }
+    },
+    "assert": {
+      "assertions": {
+        "categories:performance": ["error", { "minScore": 0.85 }],
+        "largest-contentful-paint": ["error", { "maxNumericValue": 4000 }],
+        "interactive": ["error", { "maxNumericValue": 5000 }],
+        "cumulative-layout-shift": ["error", { "maxNumericValue": 0.25 }],
+        "total-blocking-time": ["error", { "maxNumericValue": 600 }],
+        "first-contentful-paint": ["error", { "maxNumericValue": 2500 }],
+        "uses-text-compression": "error",
+        "uses-responsive-images": "warn",
+        "offscreen-images": "warn",
+        "unminified-javascript": "error",
+        "unused-javascript": ["warn", { "maxNumericValue": 60000 }]
+      }
+    }
+  }
+}
