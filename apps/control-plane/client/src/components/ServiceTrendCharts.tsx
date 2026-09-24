@@ -1,5 +1,4 @@
-import { useMemo, useState } from "react";
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useMemo, useRef, useState } from "react";
 
 /**
  * Trend charts over recorded service health samples.
@@ -10,6 +9,11 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
  * Second, a service that was unreachable contributes a break in the latency
  * line rather than a zero, since zero milliseconds reads as the fastest
  * possible response when it actually means no response at all.
+ *
+ * The chart is hand-rolled SVG rather than a charting library: the bundle
+ * budget (perf/slo.yaml → mobile.bundle) allows this route 90KB gzip, and a
+ * general-purpose charting dependency alone exceeded that. Everything drawn
+ * here is derivable from the recorded samples with plain geometry.
  */
 
 export type TrendSample = {
@@ -56,7 +60,8 @@ export const TREND_WINDOWS = [
  * Pivots samples into one row per collection time with a column per service.
  *
  * `null` is deliberately preserved for a service that was not healthy at that
- * moment: Recharts renders a gap for null, which is the honest representation.
+ * moment: the renderer breaks the line at null, which is the honest
+ * representation.
  */
 export function buildLatencySeries(samples: TrendSample[]): Array<Record<string, number | string | null>> {
   const byTime = new Map<number, Record<string, number | string | null>>();
@@ -102,6 +107,156 @@ function EmptyHistory({ detail }: { detail: string }) {
   return (
     <div className="px-5 py-10 text-sm leading-6 text-black/55" data-testid="trend-empty">
       {detail}
+    </div>
+  );
+}
+
+const CHART_WIDTH = 720;
+const CHART_HEIGHT = 224;
+const PAD = { top: 8, right: 12, bottom: 22, left: 44 };
+
+/**
+ * Multi-series latency line chart as plain SVG.
+ *
+ * Null values split a series into separate paths: the gap stays a gap. A hover
+ * guide snaps to the nearest recorded moment and lists each service's value at
+ * that moment, or "no response recorded" where the observation was a failure.
+ */
+function LatencyChart({
+  rows,
+  services,
+}: {
+  rows: Array<Record<string, number | string | null>>;
+  services: string[];
+}) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [hover, setHover] = useState<number | null>(null);
+
+  const { max, yTicks } = useMemo(() => {
+    let peak = 0;
+    for (const row of rows) {
+      for (const service of services) {
+        const value = row[service];
+        if (typeof value === "number" && value > peak) peak = value;
+      }
+    }
+    const ceiling = peak <= 0 ? 1 : peak * 1.1;
+    const steps = 4;
+    const ticks = Array.from({ length: steps + 1 }, (_, i) => Math.round((ceiling / steps) * i));
+    return { max: ceiling, yTicks: ticks };
+  }, [rows, services]);
+
+  const plotW = CHART_WIDTH - PAD.left - PAD.right;
+  const plotH = CHART_HEIGHT - PAD.top - PAD.bottom;
+  const x = (index: number) => PAD.left + (rows.length <= 1 ? plotW / 2 : (index / (rows.length - 1)) * plotW);
+  const y = (value: number) => PAD.top + plotH - (value / max) * plotH;
+
+  const segments = useMemo(() => {
+    const byService = new Map<string, string[]>();
+    for (const service of services) {
+      const paths: string[] = [];
+      let current: string[] = [];
+      rows.forEach((row, index) => {
+        const value = row[service];
+        if (typeof value === "number") {
+          current.push(`${current.length === 0 ? "M" : "L"}${x(index).toFixed(1)},${y(value).toFixed(1)}`);
+        } else if (current.length > 0) {
+          // Break the line: a moment with no recorded response is not drawn
+          // as any response time at all.
+          if (current.length > 1) paths.push(current.join(""));
+          current = [];
+        }
+      });
+      if (current.length > 1) paths.push(current.join(""));
+      byService.set(service, paths);
+    }
+    return byService;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, services, max]);
+
+  const labelEvery = Math.max(1, Math.ceil(rows.length / 6));
+
+  const onMove = (event: React.MouseEvent<SVGSVGElement>) => {
+    const svg = svgRef.current;
+    if (!svg || rows.length === 0) return;
+    const rect = svg.getBoundingClientRect();
+    const px = ((event.clientX - rect.left) / rect.width) * CHART_WIDTH;
+    const ratio = rows.length <= 1 ? 0 : (px - PAD.left) / plotW;
+    const index = Math.round(ratio * (rows.length - 1));
+    setHover(Math.max(0, Math.min(rows.length - 1, index)));
+  };
+
+  const hoverRow = hover === null ? null : rows[hover];
+
+  return (
+    <div className="relative">
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+        className="h-56 w-full"
+        role="img"
+        aria-label="Recorded response times per service"
+        onMouseMove={onMove}
+        onMouseLeave={() => setHover(null)}
+      >
+        {yTicks.map(tick => (
+          <g key={tick}>
+            <line x1={PAD.left} x2={CHART_WIDTH - PAD.right} y1={y(tick)} y2={y(tick)} stroke="#00000010" />
+            <text x={PAD.left - 6} y={y(tick) + 3} textAnchor="end" fontSize={10} fill="#00000055">
+              {tick}
+            </text>
+          </g>
+        ))}
+        {rows.map((row, index) =>
+          index % labelEvery === 0 ? (
+            <text
+              key={String(row.time)}
+              x={x(index)}
+              y={CHART_HEIGHT - 6}
+              textAnchor="middle"
+              fontSize={10}
+              fill="#00000055"
+            >
+              {String(row.label)}
+            </text>
+          ) : null,
+        )}
+        {services.map(service =>
+          (segments.get(service) ?? []).map((d, i) => (
+            <path key={`${service}-${i}`} d={d} fill="none" stroke={SERIES_COLOUR[service] ?? "#000"} strokeWidth={2} />
+          )),
+        )}
+        {hover !== null && (
+          <line
+            x1={x(hover)}
+            x2={x(hover)}
+            y1={PAD.top}
+            y2={CHART_HEIGHT - PAD.bottom}
+            stroke="#00000035"
+            strokeDasharray="3 3"
+          />
+        )}
+      </svg>
+      {hoverRow && (
+        <div
+          className="pointer-events-none absolute top-2 right-2 border border-black/20 bg-white px-3 py-2 text-xs shadow-sm"
+          data-testid="latency-tooltip"
+        >
+          <div className="mb-1 font-bold">{String(hoverRow.label)}</div>
+          {services.map(service => {
+            const value = hoverRow[service];
+            return (
+              <div key={service} className="flex items-center gap-2">
+                <span className="inline-block h-2 w-2" style={{ backgroundColor: SERIES_COLOUR[service] ?? "#000" }} />
+                <span>{SERVICE_LABEL[service] ?? service}</span>
+                <span className="ml-auto pl-3 font-bold">
+                  {typeof value === "number" ? `${value} ms` : "no response recorded"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -182,35 +337,8 @@ export function ServiceTrendCharts({
             <div className="mb-2 text-[10px] font-black uppercase tracking-[0.14em] text-black/50">
               Response time, milliseconds
             </div>
-            <div className="h-56 w-full" data-testid="latency-chart">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={latency} margin={{ top: 4, right: 8, bottom: 4, left: -12 }}>
-                  <CartesianGrid stroke="#00000010" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="#00000055" minTickGap={28} />
-                  <YAxis tick={{ fontSize: 10 }} stroke="#00000055" width={44} />
-                  <Tooltip
-                    contentStyle={{ borderRadius: 0, border: "1px solid #00000022", fontSize: 12 }}
-                    formatter={(value, name) => [
-                      value === null || value === undefined ? "no response recorded" : `${value} ms`,
-                      SERVICE_LABEL[String(name)] ?? String(name),
-                    ]}
-                  />
-                  {visible.map(service => (
-                    <Line
-                      key={service}
-                      type="monotone"
-                      dataKey={service}
-                      stroke={SERIES_COLOUR[service] ?? "#000"}
-                      strokeWidth={2}
-                      dot={false}
-                      // Gaps are left as gaps. Connecting them would draw a
-                      // response time for a moment when nothing responded.
-                      connectNulls={false}
-                      isAnimationActive={false}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
+            <div data-testid="latency-chart">
+              <LatencyChart rows={latency} services={visible} />
             </div>
           </div>
 
