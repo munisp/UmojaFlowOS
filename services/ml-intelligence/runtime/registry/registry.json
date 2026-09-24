@@ -1,0 +1,255 @@
+{
+  "models": {
+    "credit_net": {
+      "v20260924002519": {
+        "metrics": {
+          "band_accuracy": 0.92375,
+          "f1": 0.5626204238921002,
+          "positive_rate": 0.2462500035762787,
+          "pr_auc": 0.541224324091508,
+          "roc_auc": 0.7828034110328224
+        },
+        "name": "credit_net",
+        "promoted_at": "2026-09-24T00:26:50.348239+00:00",
+        "registered_at": "2026-09-24T00:26:50.217129+00:00",
+        "stage": "production",
+        "version": "v20260924002519",
+        "weights_sha256": "b195fd1c4e88c7061f370d2fae68e4e36a8cdb71e6615ced7861839fe86e6017"
+      },
+      "v20260924002724": {
+        "metrics": {
+          "band_accuracy": 0.7766666666666666,
+          "f1": 0.5483870967741935,
+          "positive_rate": 0.2433333396911621,
+          "pr_auc": 0.5791881606156302,
+          "roc_auc": 0.7662784382354715
+        },
+        "name": "credit_net",
+        "registered_at": "2026-09-24T00:27:38.783111+00:00",
+        "stage": "staging",
+        "version": "v20260924002724",
+        "weights_sha256": "45ec9fbe3301ecf8e02c5ee38a436fac3cd107cec504afb52bddb503042c5b3b"
+      },
+      "v20260924003004": {
+        "metrics": {
+          "band_accuracy": 0.92375,
+          "best_f1": 0.5884861407249466,
+          "best_threshold": 0.5700000000000001,
+          "f1": 0.5626204238921002,
+          "positive_rate": 0.2462500035762787,
+          "pr_auc": 0.541224324091508,
+          "roc_auc": 0.7828034110328224
+        },
+        "name": "credit_net",
+        "registered_at": "2026-09-24T00:31:53.986769+00:00",
+        "stage": "staging",
+        "version": "v20260924003004",
+        "weights_sha256": "51fd42518887bc70b7a2c494c83cc22fc2c93afc8edf195defd31b9482d6a4a7"
+      },
+      "v20260924003212": {
+        "metrics": {
+          "band_accuracy": 0.92375,
+          "best_f1": 0.5884861407249466,
+          "best_threshold": 0.5700000000000001,
+          "f1": 0.5626204238921002,
+          "positive_rate": 0.2462500035762787,
+          "pr_auc": 0.541224324091508,
+          "roc_auc": 0.7828034110328224
+        },
+        "name": "credit_net",
+        "registered_at": "2026-09-24T00:34:01.006419+00:00",
+        "stage": "staging",
+        "version": "v20260924003212",
+        "weights_sha256": "9e573a1c4fb1ab6cd222322bdf816ef5cbef32cb1859b652ed8d425bdd5cd774"
+      }
+    },
+    "fraud_autoencoder": {
+      "v20260924002519": {
+        "metrics": {
+          "alert_rate_at_threshold": 0.07428716904276986,
+          "f1": 0.7191367819739766,
+          "fraud_catch_rate_at_threshold": 0.641,
+          "positive_rate": 0.10183299389002037,
+          "pr_auc": 0.9051415101721679,
+          "roc_auc": 0.9719934807256235
+        },
+        "name": "fraud_autoencoder",
+        "promoted_at": "2026-09-24T00:26:50.349950+00:00",
+        "registered_at": "2026-09-24T00:26:50.345983+00:00",
+        "stage": "production",
+        "version": "v20260924002519",
+        "weights_sha256": "6003d4f5df7556164591b0baa0a97c06da7c065e35e0a9202968cd7d3f256e3b"
+      },
+      "v20260924002724": {
+        "metrics": {
+          "alert_rate_at_threshold": 0.07952047952047953,
+          "f1": 0.6624888093106536,
+          "fraud_catch_rate_at_threshold": 0.5932773109243697,
+          "positive_rate": 0.11888111888111888,
+          "pr_auc": 0.7386333656699484,
+          "roc_auc": 0.8698866213151927
+        },
+        "name": "fraud_autoencoder",
+        "registered_at": "2026-09-24T00:27:38.880831+00:00",
+        "stage": "staging",
+        "version": "v20260924002724",
+        "weights_sha256": "5839494a93f4ab7886fb565a650b4c2d7b9f9aa65cb8297553dfcd5c79bab40d"
+      },
+      "v20260924003004": {
+        "metrics": {
+          "alert_rate_at_threshold": 0.07428716904276986,
+          "best_f1": 0.8532634587899,
+          "best_threshold": 0.060000000000000005,
+          "f1": 0.7191367819739766,
+          "fraud_catch_rate_at_threshold": 0.641,
+          "positive_rate": 0.10183299389002037,
+          "pr_auc": 0.9051415101721679,
+          "roc_auc": 0.9719934807256235
+        },
+        "name": "fraud_autoencoder",
+        "registered_at": "2026-09-24T00:31:54.104323+00:00",
+        "stage": "staging",
+        "version": "v20260924003004",
+        "weights_sha256": "9dea6ce28ea0cbc58ecb436f1a7cc8a4a7ee7d18a6da6c99e89cae9fcb89ab9d"
+      },
+      "v20260924003212": {
+        "metrics": {
+          "alert_rate_at_threshold": 0.07428716904276986,
+          "best_f1": 0.8532634587899,
+          "best_threshold": 0.060000000000000005,
+          "f1": 0.7191367819739766,
+          "fraud_catch_rate_at_threshold": 0.641,
+          "positive_rate": 0.10183299389002037,
+          "pr_auc": 0.9051415101721679,
+          "roc_auc": 0.9719934807256235
+        },
+        "name": "fraud_autoencoder",
+        "registered_at": "2026-09-24T00:34:01.128732+00:00",
+        "stage": "staging",
+        "version": "v20260924003212",
+        "weights_sha256": "7e456affe339caf1e4767409d2a61b6055255de024af5e40acb1b561abc52e1a"
+      }
+    },
+    "fraud_net": {
+      "v20260924002519": {
+        "metrics": {
+          "f1": 0.8316831683168316,
+          "positive_rate": 0.019542481750249863,
+          "pr_auc": 0.9806335576267677,
+          "roc_auc": 0.9994814948389616
+        },
+        "name": "fraud_net",
+        "promoted_at": "2026-09-24T00:26:50.347395+00:00",
+        "registered_at": "2026-09-24T00:26:50.147781+00:00",
+        "stage": "staging",
+        "version": "v20260924002519",
+        "weights_sha256": "afab60700942232dc2e13918d737a511f63347a86c289ed3a63127a265fd30b0"
+      },
+      "v20260924002724": {
+        "metrics": {
+          "f1": 0.8029197080291971,
+          "positive_rate": 0.019669944420456886,
+          "pr_auc": 0.9463726781454019,
+          "roc_auc": 0.9961726790382128
+        },
+        "name": "fraud_net",
+        "promoted_at": "2026-09-24T00:27:39.403371+00:00",
+        "registered_at": "2026-09-24T00:27:38.732690+00:00",
+        "stage": "staging",
+        "version": "v20260924002724",
+        "weights_sha256": "6d0c38c7fb76b14329b104e7ee0907550f9fd1a6ed4dc609c6f0f458f37de09a"
+      },
+      "v20260924003004": {
+        "metrics": {
+          "best_f1": 0.9347593582887701,
+          "best_threshold": 0.98,
+          "f1": 0.8316831683168316,
+          "positive_rate": 0.019542481750249863,
+          "pr_auc": 0.9806335576267677,
+          "roc_auc": 0.9994814948389616
+        },
+        "name": "fraud_net",
+        "promoted_at": "2026-09-24T00:31:55.768986+00:00",
+        "registered_at": "2026-09-24T00:31:53.923045+00:00",
+        "stage": "staging",
+        "version": "v20260924003004",
+        "weights_sha256": "215ccd4227de9aa4214a5be7d7b68c03bce39038a52ee92ac313c79b3ca0ba6e"
+      },
+      "v20260924003212": {
+        "metrics": {
+          "best_f1": 0.9347593582887701,
+          "best_threshold": 0.98,
+          "f1": 0.8316831683168316,
+          "positive_rate": 0.019542481750249863,
+          "pr_auc": 0.9806335576267677,
+          "roc_auc": 0.9994814948389616
+        },
+        "name": "fraud_net",
+        "promoted_at": "2026-09-24T00:34:02.653823+00:00",
+        "registered_at": "2026-09-24T00:34:00.938879+00:00",
+        "stage": "production",
+        "version": "v20260924003212",
+        "weights_sha256": "fefe9ecde5afe736dec4219ca3e422255cf6529c76b2f02bc7685c07aede219f"
+      }
+    },
+    "mule_graphsage": {
+      "v20260924002519": {
+        "metrics": {
+          "f1": 0.14414414414414414,
+          "positive_rate": 0.01,
+          "pr_auc": 1.0,
+          "roc_auc": 1.0
+        },
+        "name": "mule_graphsage",
+        "promoted_at": "2026-09-24T00:26:50.349086+00:00",
+        "registered_at": "2026-09-24T00:26:50.283202+00:00",
+        "stage": "production",
+        "version": "v20260924002519",
+        "weights_sha256": "fe038d453c869e4e40f00e660a37e05e8d2300fe7abbd3482dd84d49c82e715d"
+      },
+      "v20260924002724": {
+        "metrics": {
+          "f1": 0.1509433962264151,
+          "positive_rate": 0.013333333333333334,
+          "pr_auc": 1.0,
+          "roc_auc": 1.0
+        },
+        "name": "mule_graphsage",
+        "registered_at": "2026-09-24T00:27:38.831488+00:00",
+        "stage": "staging",
+        "version": "v20260924002724",
+        "weights_sha256": "e48e37a81fc71375dca4bde65d2eb1843410a4cd3bb6c6a51fd2bd53920b3aed"
+      },
+      "v20260924003004": {
+        "metrics": {
+          "best_f1": 0.9411764705882353,
+          "best_threshold": 0.5700000000000001,
+          "f1": 0.14414414414414414,
+          "positive_rate": 0.01,
+          "pr_auc": 1.0,
+          "roc_auc": 1.0
+        },
+        "name": "mule_graphsage",
+        "registered_at": "2026-09-24T00:31:54.051196+00:00",
+        "stage": "staging",
+        "version": "v20260924003004",
+        "weights_sha256": "c724317753910bd96e28468e62d378756c02d5633cc6325a1d3669a31aeb89ed"
+      },
+      "v20260924003212": {
+        "metrics": {
+          "best_f1": 0.9411764705882353,
+          "best_threshold": 0.5700000000000001,
+          "f1": 0.14414414414414414,
+          "positive_rate": 0.01,
+          "pr_auc": 1.0,
+          "roc_auc": 1.0
+        },
+        "name": "mule_graphsage",
+        "registered_at": "2026-09-24T00:34:01.074432+00:00",
+        "stage": "staging",
+        "version": "v20260924003212",
+        "weights_sha256": "9cc2b86e088e4c597baa4372d74ebf2eb548e320236f2d3fb59330e625892d4d"
+      }
+    }
+  }
+}

@@ -1,0 +1,210 @@
+[
+  {
+    "early_stopped": true,
+    "epochs_run": 21,
+    "metrics": {
+      "f1": 0.8316831683168316,
+      "positive_rate": 0.019542481750249863,
+      "pr_auc": 0.9806335576267677,
+      "roc_auc": 0.9994814948389616
+    },
+    "model": "fraud_net",
+    "version": "v20260924002519"
+  },
+  {
+    "epochs_run": 25,
+    "metrics": {
+      "band_accuracy": 0.92375,
+      "f1": 0.5626204238921002,
+      "positive_rate": 0.2462500035762787,
+      "pr_auc": 0.541224324091508,
+      "roc_auc": 0.7828034110328224
+    },
+    "model": "credit_net",
+    "version": "v20260924002519"
+  },
+  {
+    "epochs_run": 16,
+    "metrics": {
+      "f1": 0.14414414414414414,
+      "positive_rate": 0.01,
+      "pr_auc": 1.0,
+      "roc_auc": 1.0
+    },
+    "model": "mule_graphsage",
+    "version": "v20260924002519"
+  },
+  {
+    "epochs_run": 15,
+    "metrics": {
+      "alert_rate_at_threshold": 0.07428716904276986,
+      "f1": 0.7191367819739766,
+      "fraud_catch_rate_at_threshold": 0.641,
+      "positive_rate": 0.10183299389002037,
+      "pr_auc": 0.9051415101721679,
+      "roc_auc": 0.9719934807256235
+    },
+    "model": "fraud_autoencoder",
+    "version": "v20260924002519"
+  },
+  {
+    "early_stopped": false,
+    "epochs_run": 8,
+    "metrics": {
+      "f1": 0.8029197080291971,
+      "positive_rate": 0.019669944420456886,
+      "pr_auc": 0.9463726781454019,
+      "roc_auc": 0.9961726790382128
+    },
+    "model": "fraud_net",
+    "version": "v20260924002724"
+  },
+  {
+    "epochs_run": 8,
+    "metrics": {
+      "band_accuracy": 0.7766666666666666,
+      "f1": 0.5483870967741935,
+      "positive_rate": 0.2433333396911621,
+      "pr_auc": 0.5791881606156302,
+      "roc_auc": 0.7662784382354715
+    },
+    "model": "credit_net",
+    "version": "v20260924002724"
+  },
+  {
+    "epochs_run": 16,
+    "metrics": {
+      "f1": 0.1509433962264151,
+      "positive_rate": 0.013333333333333334,
+      "pr_auc": 1.0,
+      "roc_auc": 1.0
+    },
+    "model": "mule_graphsage",
+    "version": "v20260924002724"
+  },
+  {
+    "epochs_run": 6,
+    "metrics": {
+      "alert_rate_at_threshold": 0.07952047952047953,
+      "f1": 0.6624888093106536,
+      "fraud_catch_rate_at_threshold": 0.5932773109243697,
+      "positive_rate": 0.11888111888111888,
+      "pr_auc": 0.7386333656699484,
+      "roc_auc": 0.8698866213151927
+    },
+    "model": "fraud_autoencoder",
+    "version": "v20260924002724"
+  },
+  {
+    "early_stopped": true,
+    "epochs_run": 21,
+    "metrics": {
+      "best_f1": 0.9347593582887701,
+      "best_threshold": 0.98,
+      "f1": 0.8316831683168316,
+      "positive_rate": 0.019542481750249863,
+      "pr_auc": 0.9806335576267677,
+      "roc_auc": 0.9994814948389616
+    },
+    "model": "fraud_net",
+    "version": "v20260924003004"
+  },
+  {
+    "epochs_run": 25,
+    "metrics": {
+      "band_accuracy": 0.92375,
+      "best_f1": 0.5884861407249466,
+      "best_threshold": 0.5700000000000001,
+      "f1": 0.5626204238921002,
+      "positive_rate": 0.2462500035762787,
+      "pr_auc": 0.541224324091508,
+      "roc_auc": 0.7828034110328224
+    },
+    "model": "credit_net",
+    "version": "v20260924003004"
+  },
+  {
+    "epochs_run": 16,
+    "metrics": {
+      "best_f1": 0.9411764705882353,
+      "best_threshold": 0.5700000000000001,
+      "f1": 0.14414414414414414,
+      "positive_rate": 0.01,
+      "pr_auc": 1.0,
+      "roc_auc": 1.0
+    },
+    "model": "mule_graphsage",
+    "version": "v20260924003004"
+  },
+  {
+    "epochs_run": 15,
+    "metrics": {
+      "alert_rate_at_threshold": 0.07428716904276986,
+      "best_f1": 0.8532634587899,
+      "best_threshold": 0.060000000000000005,
+      "f1": 0.7191367819739766,
+      "fraud_catch_rate_at_threshold": 0.641,
+      "positive_rate": 0.10183299389002037,
+      "pr_auc": 0.9051415101721679,
+      "roc_auc": 0.9719934807256235
+    },
+    "model": "fraud_autoencoder",
+    "version": "v20260924003004"
+  },
+  {
+    "early_stopped": true,
+    "epochs_run": 21,
+    "metrics": {
+      "best_f1": 0.9347593582887701,
+      "best_threshold": 0.98,
+      "f1": 0.8316831683168316,
+      "positive_rate": 0.019542481750249863,
+      "pr_auc": 0.9806335576267677,
+      "roc_auc": 0.9994814948389616
+    },
+    "model": "fraud_net",
+    "version": "v20260924003212"
+  },
+  {
+    "epochs_run": 25,
+    "metrics": {
+      "band_accuracy": 0.92375,
+      "best_f1": 0.5884861407249466,
+      "best_threshold": 0.5700000000000001,
+      "f1": 0.5626204238921002,
+      "positive_rate": 0.2462500035762787,
+      "pr_auc": 0.541224324091508,
+      "roc_auc": 0.7828034110328224
+    },
+    "model": "credit_net",
+    "version": "v20260924003212"
+  },
+  {
+    "epochs_run": 16,
+    "metrics": {
+      "best_f1": 0.9411764705882353,
+      "best_threshold": 0.5700000000000001,
+      "f1": 0.14414414414414414,
+      "positive_rate": 0.01,
+      "pr_auc": 1.0,
+      "roc_auc": 1.0
+    },
+    "model": "mule_graphsage",
+    "version": "v20260924003212"
+  },
+  {
+    "epochs_run": 15,
+    "metrics": {
+      "alert_rate_at_threshold": 0.07428716904276986,
+      "best_f1": 0.8532634587899,
+      "best_threshold": 0.060000000000000005,
+      "f1": 0.7191367819739766,
+      "fraud_catch_rate_at_threshold": 0.641,
+      "positive_rate": 0.10183299389002037,
+      "pr_auc": 0.9051415101721679,
+      "roc_auc": 0.9719934807256235
+    },
+    "model": "fraud_autoencoder",
+    "version": "v20260924003212"
+  }
+]

@@ -1,0 +1,14 @@
+{"alert": "feature_drift", "severity": "critical", "detail": {"model": "fraud_net", "feature": "src_txn_count_30d", "psi": 1.6438619369707304}, "raised_at": "2026-09-24T00:27:30.315764+00:00"}
+{"alert": "feature_drift", "severity": "warning", "detail": {"model": "fraud_net", "feature": "src_avg_amount_30d", "psi": 0.23395717688068757}, "raised_at": "2026-09-24T00:27:30.315781+00:00"}
+{"alert": "feature_drift", "severity": "warning", "detail": {"model": "fraud_net", "feature": "src_std_amount_30d", "psi": 0.17602819325060054}, "raised_at": "2026-09-24T00:27:30.315786+00:00"}
+{"alert": "feature_drift", "severity": "warning", "detail": {"model": "fraud_net", "feature": "src_night_ratio_30d", "psi": 0.1120738043212106}, "raised_at": "2026-09-24T00:27:30.315791+00:00"}
+{"alert": "feature_drift", "severity": "critical", "detail": {"model": "fraud_net", "feature": "src_unique_counterparties", "psi": 1.7257380265124782}, "raised_at": "2026-09-24T00:27:30.315794+00:00"}
+{"alert": "feature_drift", "severity": "critical", "detail": {"model": "fraud_net", "feature": "src_burst_max_1h", "psi": 1.620252471789447}, "raised_at": "2026-09-24T00:27:30.315798+00:00"}
+{"alert": "feature_drift", "severity": "critical", "detail": {"model": "fraud_net", "feature": "dst_in_degree", "psi": 0.7598266007817177}, "raised_at": "2026-09-24T00:27:30.315802+00:00"}
+{"alert": "feature_drift", "severity": "critical", "detail": {"model": "fraud_net", "feature": "src_txn_count_30d", "psi": 0.2720050581997796}, "raised_at": "2026-09-24T00:30:23.049633+00:00"}
+{"alert": "feature_drift", "severity": "critical", "detail": {"model": "fraud_net", "feature": "src_avg_amount_30d", "psi": 0.2690680227661196}, "raised_at": "2026-09-24T00:30:23.049654+00:00"}
+{"alert": "feature_drift", "severity": "warning", "detail": {"model": "fraud_net", "feature": "src_std_amount_30d", "psi": 0.18064226472739123}, "raised_at": "2026-09-24T00:30:23.049659+00:00"}
+{"alert": "feature_drift", "severity": "warning", "detail": {"model": "fraud_net", "feature": "src_night_ratio_30d", "psi": 0.21367268094509467}, "raised_at": "2026-09-24T00:30:23.049665+00:00"}
+{"alert": "feature_drift", "severity": "warning", "detail": {"model": "fraud_net", "feature": "src_unique_counterparties", "psi": 0.2163106195361105}, "raised_at": "2026-09-24T00:30:23.049668+00:00"}
+{"alert": "feature_drift", "severity": "warning", "detail": {"model": "fraud_net", "feature": "src_burst_max_1h", "psi": 0.16336163034495663}, "raised_at": "2026-09-24T00:30:23.049673+00:00"}
+{"alert": "feature_drift", "severity": "critical", "detail": {"model": "fraud_net", "feature": "dst_in_degree", "psi": 1.0203689569596772}, "raised_at": "2026-09-24T00:30:23.049676+00:00"}
