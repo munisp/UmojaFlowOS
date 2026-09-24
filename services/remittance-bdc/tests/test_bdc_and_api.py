@@ -146,7 +146,7 @@ def test_api_boundary_and_flow():
     bad = client.post("/v1/bdc/tickets", json={
         "ticket_id": "TKT-API-2", "bdc_operator_id": "BDC-LAG-01", "branch_id": "BR-IKEJA",
         "side": "sell_fx", "fx_currency": "USD", "fx_amount_minor": 100_00,
-        "rate_ngn": "1999.00", "ngn_amount_minor": "199_900_00" if False else 199_900_00,
+        "rate_ngn": "1999.00", "ngn_amount_minor": 199_900_00,
         "customer_subject_id": "CUST-9", "id_evidence_sha256": "e" * 64, "actor": "op-1",
     })
     assert bad.status_code == 422  # off-board rate rejected
