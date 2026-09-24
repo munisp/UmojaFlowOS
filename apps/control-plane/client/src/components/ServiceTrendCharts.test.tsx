@@ -65,7 +65,7 @@ describe("trend series construction", () => {
       [
         { service: "risk-compliance-core", status: "healthy", latencyMs: 5, counters: { evaluations: 500 }, collectedAt: at(3) },
         // Service restarted; the counter went backwards.
-        { service: "risk-compliance-core", status: "healthy", latencyMs: 5, counters: { evaluations: 4 }, collectedAt: at(2) },
+        { service: "risk-compliance-core", status: "unreachable", latencyMs: null, counters: { evaluations: 4 }, collectedAt: at(2) },
         { service: "risk-compliance-core", status: "healthy", latencyMs: 5, counters: { evaluations: 9 }, collectedAt: at(1) },
       ],
       "evaluations",
@@ -162,7 +162,7 @@ describe("service trend charts", () => {
     render(
       <ServiceTrendCharts
         samples={[{ service: "risk-compliance-core", status: "healthy", latencyMs: 9, counters: {}, collectedAt: at(2) }]}
-        availability={availability}
+        availability={[]}
         loading={false}
         windowMinutes={1440}
         onWindowChange={() => {}}
