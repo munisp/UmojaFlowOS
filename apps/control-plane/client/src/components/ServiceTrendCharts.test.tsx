@@ -162,7 +162,7 @@ describe("service trend charts", () => {
     render(
       <ServiceTrendCharts
         samples={[{ service: "risk-compliance-core", status: "healthy", latencyMs: 9, counters: {}, collectedAt: at(2) }]}
-        availability={[]}
+        availability={availability}
         loading={false}
         windowMinutes={1440}
         onWindowChange={() => {}}
