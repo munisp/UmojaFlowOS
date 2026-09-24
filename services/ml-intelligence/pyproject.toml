@@ -2,7 +2,7 @@
 name = "umojaflowos-ml-intelligence"
 version = "1.0.0"
 requires-python = ">=3.11"
-description = "Real end-to-end AI/ML/DL/GNN stack for UmojaFlowOS: PyTorch fraud, credit, GNN mule-detection and deep anomaly models with trained weights, training loops, Lakehouse integration, Ray distributed compute, MLflow registry, A/B testing, drift monitoring and continuous training"
+description = "Real end-to-end AI/ML/DL/GNN stack for UmojaFlowOS: PyTorch fraud, credit, GNN mule-detection and deep anomaly models with trained weights, training loops, Lakehouse integration, Ray distributed compute, MLflow registry, A/B testing, drift monitoring, continuous training, MCMC Bayesian calibration, insider-threat fusion, EPR KGQA evidence retrieval, CocoIndex incremental KG flows, FalkorDB export, ollama advisory narration, and ART adversarial robustness evaluation"
 dependencies = [
   "torch>=2.1",
   "numpy>=1.26",
@@ -17,7 +17,10 @@ dependencies = [
 [project.optional-dependencies]
 registry = ["mlflow>=2.10"]
 distributed = ["ray>=2.9"]
-graph = ["neo4j>=5.14"]
+graph = ["neo4j>=5.14", "falkordb>=1.0", "redis>=5.0"]
+knowledge = ["cocoindex>=0.1"]
+llm = ["ollama>=0.3"]
+robustness = ["adversarial-robustness-toolbox>=1.18"]
 dev = ["pytest>=8.0", "httpx>=0.27"]
 
 [tool.pytest.ini_options]
