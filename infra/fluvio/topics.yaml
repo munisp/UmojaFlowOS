@@ -1,0 +1,32 @@
+# Fluvio topic declarations for the risk-compliance-core evidence publisher.
+# Apply against a running cluster with:  fluvio topic create -f infra/fluvio/topics.yaml
+# The publisher (services/risk-compliance-core/src/eventing.rs) is evidence-only:
+# these topics carry immutable policy/payment *evidence* events, never commands.
+apiVersion: fluvio.infinyon.com/v2
+kind: Topic
+metadata:
+  name: payment.order.validated.v1
+spec:
+  partitions: 3
+  replicationFactor: 2
+  retention:
+    segmentMs: 604800000   # 7 days minimum; WORM archive drains to object storage
+---
+apiVersion: fluvio.infinyon.com/v2
+kind: Topic
+metadata:
+  name: compliance.policy.decision.v1
+spec:
+  partitions: 3
+  replicationFactor: 2
+  retention:
+    segmentMs: 604800000
+---
+# Cluster provisioning (Kubernetes, mirrors the env template contract):
+#   helm repo add infinyon https://infinyon.github.io/fluvio-helm
+#   helm install fluvio infinyon/fluvio -n fluvio --create-namespace
+# Client TLS material comes from the secrets referenced in fluvio.env.template
+# (UMOJAFLOWOS_FLUVIO_TLS_CA_SECRET_REFERENCE, _CLIENT_CERT_, _CLIENT_KEY_).
+# UMOJAFLOWOS_FLUVIO_ENABLED must remain false until the live-publish evidence
+# gate (cargo test live_fluvio_publish_accepts_an_evidence_only_policy_event)
+# passes against the target cluster.

@@ -32,3 +32,6 @@ assurance/evidence/
 validation-artifacts/
 artifacts-toolchain-bootstrap.log
 artifacts-staging-verifier-no-cluster.log
+
+# ml-intelligence regenerable data (weights & registry ARE committed)
+services/ml-intelligence/runtime/lakehouse/
