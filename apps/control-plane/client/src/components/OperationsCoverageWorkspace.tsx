@@ -2,7 +2,9 @@ import { FormEvent, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
+import { RouterCoverageWorkspace } from "@/components/RouterCoverageWorkspace";
 import type { OperatorRole } from "@/lib/roleCapabilities";
 
 /**
@@ -400,17 +402,28 @@ function ReadinessEvidencePanel({ role }: { role: OperatorRole | undefined }) {
 }
 
 export function OperationsCoverageWorkspace({ role }: { role: OperatorRole | undefined }) {
-  return <div className="grid gap-5 xl:grid-cols-2">
-    <AlertLifecyclePanel role={role} />
-    <div className="grid gap-5">
-      <OperationalEvaluatorsPanel role={role} />
-      <NotificationDeliveriesPanel />
-    </div>
-    <BeneficiaryPanel role={role} />
-    <div className="grid gap-5">
-      <MarketObservationPanel role={role} />
-      <CounterpartyRiskPanel role={role} />
-    </div>
-    <div className="xl:col-span-2"><ReadinessEvidencePanel role={role} /></div>
-  </div>;
+  return <Tabs defaultValue="operational" className="gap-5">
+    <TabsList className="h-auto flex-wrap justify-start gap-1.5 rounded-none bg-transparent p-0">
+      <TabsTrigger className="rounded-none border border-black/20 px-4 py-2 text-xs font-black uppercase tracking-wide data-[state=active]:bg-black data-[state=active]:text-white" value="operational">Operational coverage</TabsTrigger>
+      <TabsTrigger className="rounded-none border border-black/20 px-4 py-2 text-xs font-black uppercase tracking-wide data-[state=active]:bg-black data-[state=active]:text-white" value="routers">Router coverage</TabsTrigger>
+    </TabsList>
+    <TabsContent value="operational">
+      <div className="grid gap-5 xl:grid-cols-2">
+        <AlertLifecyclePanel role={role} />
+        <div className="grid gap-5">
+          <OperationalEvaluatorsPanel role={role} />
+          <NotificationDeliveriesPanel />
+        </div>
+        <BeneficiaryPanel role={role} />
+        <div className="grid gap-5">
+          <MarketObservationPanel role={role} />
+          <CounterpartyRiskPanel role={role} />
+        </div>
+        <div className="xl:col-span-2"><ReadinessEvidencePanel role={role} /></div>
+      </div>
+    </TabsContent>
+    <TabsContent value="routers">
+      <RouterCoverageWorkspace role={role} />
+    </TabsContent>
+  </Tabs>;
 }

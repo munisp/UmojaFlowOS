@@ -59,3 +59,14 @@ createRoot(document.getElementById("root")!).render(
     </QueryClientProvider>
   </trpc.Provider>
 );
+
+// PWA installability (perf/slo.yaml mobile budget). The service worker caches
+// only the static shell and never any /api or /trpc payload — control-plane
+// records are always live. Registration failure must not break the console.
+if (typeof navigator !== "undefined" && "serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(error => {
+      console.warn("[PWA] service worker registration failed", error);
+    });
+  });
+}

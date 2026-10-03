@@ -1,0 +1,39 @@
+{
+  "name": "UmojaFlowOS Control Plane",
+  "short_name": "UmojaFlowOS",
+  "description": "Evidence-first control plane for Africa-linked cross-border payments (NGN, KES, ZAR).",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#e11919",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Payments console",
+      "url": "/console/payments",
+      "description": "Open the payment orchestration module"
+    },
+    {
+      "name": "Compliance console",
+      "url": "/console/compliance",
+      "description": "Open the compliance operations module"
+    }
+  ]
+}
