@@ -59,13 +59,14 @@ const StablecoinIssuerWorkspace = withChunk(lazy(() => import("@/components/Stab
 const ComplianceVendorWorkspace = withChunk(lazy(() => import("@/components/ComplianceVendorWorkspace").then(m => ({ default: m.ComplianceVendorWorkspace }))));
 const AuditorEngagementWorkspace = withChunk(lazy(() => import("@/components/AuditorEngagementWorkspace").then(m => ({ default: m.AuditorEngagementWorkspace }))));
 const OperatorsWorkspace = withChunk(lazy(() => import("@/components/OperatorsWorkspace").then(m => ({ default: m.OperatorsWorkspace }))));
+const OperationsCoverageWorkspace = withChunk(lazy(() => import("@/components/OperationsCoverageWorkspace").then(m => ({ default: m.OperationsCoverageWorkspace }))));
 const ServiceTrendCharts = withChunk(lazy(() => import("@/components/ServiceTrendCharts").then(m => ({ default: m.ServiceTrendCharts }))));
 const ServiceStatusDashboard = withChunk(lazy(() => import("@/components/ServiceStatusDashboard").then(m => ({ default: m.ServiceStatusDashboard }))));
 const GovernedControlPosture = withChunk(lazy(() => import("@/components/GovernedControlPosture").then(m => ({ default: m.GovernedControlPosture }))));
 const StakeholderOnboardingWorkspace = withChunk(lazy(() => import("@/components/StakeholderOnboardingWorkspace").then(m => ({ default: m.StakeholderOnboardingWorkspace }))));
 const CbnSandboxWorkspace = withChunk(lazy(() => import("@/components/CbnSandboxWorkspace").then(m => ({ default: m.CbnSandboxWorkspace }))));
 
-type ModuleKey = "overview" | "payments" | "treasury" | "markets" | "compliance" | "reports" | "sandbox" | "registry" | "integrations" | "governance" | "alerts" | "admins";
+type ModuleKey = "overview" | "payments" | "treasury" | "markets" | "compliance" | "reports" | "sandbox" | "registry" | "integrations" | "governance" | "alerts" | "operations" | "admins";
 
 const moduleMeta: Record<ModuleKey, { number: string; title: string; subtitle: string }> = {
   overview: { number: "00", title: "Operating posture", subtitle: "A source-honest view of configured control-plane records across Nigeria (NGN), Kenya (KES), and South Africa (ZAR)." },
@@ -79,7 +80,8 @@ const moduleMeta: Record<ModuleKey, { number: string; title: string; subtitle: s
   integrations: { number: "08", title: "Integration control", subtitle: "Register documented provider connections. Activation is reserved for verified secret-backed health checks, not a manual dashboard toggle." },
   governance: { number: "09", title: "Corridor governance", subtitle: "Version explicit Nigeria (NGN), Kenya (KES), and South Africa (ZAR) policy controls for CBN, CBK, and SARB review." },
   alerts: { number: "10", title: "Alert policy", subtitle: "Define owner-facing threshold, payment failure, compliance flag, and regulatory deadline alert policies without asserting delivery before the relevant channel is active." },
-  admins: { number: "11", title: "Admins & operators", subtitle: "Every identity-provider account cross-referenced with its current role. Change a role or deactivate an account; nothing here is ever hard-deleted." },
+  operations: { number: "11", title: "Operations coverage", subtitle: "Compliance alert lifecycle, on-demand operational evaluators, beneficiary screening, market observations, counterparty risk assessments, and the notification delivery ledger." },
+  admins: { number: "12", title: "Admins & operators", subtitle: "Every identity-provider account cross-referenced with its current role. Change a role or deactivate an account; nothing here is ever hard-deleted." },
 };
 
 function moduleFromPath(path: string): ModuleKey {
@@ -482,6 +484,7 @@ export default function Home() {
         <TabsContent value="action"><Panel eyebrow="Action" title="Define and evaluate policy" action={<div className="flex flex-wrap items-center justify-end gap-2">{moduleActions("alerts", evaluateDeadlines.isPending ? ["evaluate-deadlines"] : [])}</div>}>{composer === "alert" ? <AlertForm pending={createAlert.isPending} submit={createAlert.mutate} /> : <Empty title="Alert policy is not delivery evidence" detail="Policies are stored with the configured threshold. An administrator may evaluate deadline records; scheduled evaluation becomes available only after deployment. Owner delivery is contingent on the relevant source event." />}</Panel></TabsContent>
         <TabsContent value="ledger"><Panel eyebrow="Alert ledger" title="Configured policies"><AlertTable rows={alerts.data ?? []} loading={alerts.isLoading} /></Panel></TabsContent>
       </Tabs>}
+      {module === "operations" && <OperationsCoverageWorkspace role={user?.role as OperatorRole | undefined} />}
       {module === "admins" && <OperatorsWorkspace role={user?.role as OperatorRole | undefined} currentSubject={user?.openId} />}
     </main>
   </div></DashboardLayout>;
