@@ -1,153 +1,106 @@
 /**
- * Multi-rail failover coordinator with durable idempotency records.
+ * Multi-rail failover coordinator.
  *
- * Persistence: submission records MUST be durable so that a retry after a
- * process restart returns the original outcome instead of double-submitting
- * to a payment rail. Use `createPostgresSubmissionRecordStore()` in
- * production (migration 0067); the in-memory store is for tests/dev only.
+ * Idempotency records are business data: losing them across a restart can turn
+ * a client retry into a duplicate provider submission. The coordinator
+ * therefore persists every recorded outcome through a SubmissionRecordStore.
+ * The Postgres store (migration 0067) is the production path and is race-safe
+ * across replicas (INSERT ... ON CONFLICT DO NOTHING, then authoritative
+ * SELECT). The in-memory store remains for unit tests and single-process local
+ * development only — wiring it into a deployed environment is a defect.
  */
+export type Status = 'submitted'|'pending'|'settled'|'failed'|'held'|'unknown';
+export type Intent = { id:string; idempotencyKey:string };
+export type Submission = { status:Status; providerRef?:string; safeToRetry?:boolean };
+export type SubmissionRecord = { rail:string; submission:Submission };
+export interface Rail { readonly name:string; submit(i:Intent):Promise<Submission>; query(i:Intent):Promise<Submission>; }
+export class UnknownOutcome extends Error { constructor(message='provider outcome unknown; fallback prohibited'){super(message);this.name='UnknownOutcome';} }
 
-export type RailStatus = "submitted" | "pending" | "settled" | "failed" | "held" | "unknown";
-
-export interface SubmissionRecord {
-  idempotencyKey: string;
-  intentId: string;
-  rail: string;
-  status: RailStatus;
-  providerRef?: string | null;
-  safeToRetry?: boolean | null;
-}
-
+/** Minimal pg-compatible surface so the store is testable against PGlite. */
 export interface Querier {
-  query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<{ rows: T[] }>;
+  query<T = unknown>(text:string, params?:unknown[]):Promise<{ rows:T[] }>;
 }
 
 export interface SubmissionRecordStore {
-  get(idempotencyKey: string): Promise<SubmissionRecord | undefined>;
-  /** First-writer-wins: returns the authoritative record for the key. */
-  putIfAbsent(record: SubmissionRecord): Promise<SubmissionRecord>;
+  get(idempotencyKey:string):Promise<SubmissionRecord|undefined>;
+  /** Insert or return the authoritative existing record (replica race-safe). */
+  putIfAbsent(idempotencyKey:string, intentId:string, record:SubmissionRecord):Promise<SubmissionRecord>;
 }
 
-/** TESTS/DEV ONLY — loses all records on restart. */
+/**
+ * TESTS AND SINGLE-PROCESS LOCAL DEVELOPMENT ONLY. Records vanish on restart
+ * and are invisible to other replicas; never wire this into a deployment.
+ */
 export class InMemorySubmissionRecordStore implements SubmissionRecordStore {
-  private readonly records = new Map<string, SubmissionRecord>();
-  async get(key: string) {
-    return this.records.get(key);
-  }
-  async putIfAbsent(record: SubmissionRecord) {
-    const existing = this.records.get(record.idempotencyKey);
-    if (existing) return existing;
-    this.records.set(record.idempotencyKey, record);
+  private readonly records = new Map<string,SubmissionRecord>();
+  async get(idempotencyKey:string){ return this.records.get(idempotencyKey); }
+  async putIfAbsent(_key:string, _intentId:string, record:SubmissionRecord){
+    const prior = this.records.get(_key);
+    if (prior) return prior;
+    this.records.set(_key, record);
     return record;
   }
 }
 
-interface Row {
-  idempotency_key: string;
-  intent_id: string;
-  rail: string;
-  status: RailStatus;
-  provider_ref: string | null;
-  safe_to_retry: boolean | null;
+type Row = { rail:string; status:Status; provider_ref:string|null; safe_to_retry:boolean|null };
+
+function toRecord(row:Row):SubmissionRecord {
+  return { rail:row.rail, submission:{ status:row.status, providerRef:row.provider_ref ?? undefined, safeToRetry:row.safe_to_retry ?? undefined } };
 }
 
-const toRecord = (r: Row): SubmissionRecord => ({
-  idempotencyKey: r.idempotency_key,
-  intentId: r.intent_id,
-  rail: r.rail,
-  status: r.status,
-  providerRef: r.provider_ref,
-  safeToRetry: r.safe_to_retry,
-});
-
+/** Canonical durable store backed by PostgreSQL (migration 0067). */
 export class PostgresSubmissionRecordStore implements SubmissionRecordStore {
-  constructor(private readonly db: Querier) {}
-
-  async get(key: string): Promise<SubmissionRecord | undefined> {
-    const { rows } = await this.db.query<Row>(
-      "SELECT idempotency_key, intent_id, rail, status, provider_ref, safe_to_retry FROM multirail_submission_records WHERE idempotency_key = $1",
-      [key],
+  constructor(private readonly db:Querier){}
+  async get(idempotencyKey:string){
+    const res = await this.db.query<Row>(
+      'SELECT rail, status, provider_ref, safe_to_retry FROM multirail_submission_records WHERE idempotency_key=$1',
+      [idempotencyKey],
     );
-    return rows[0] ? toRecord(rows[0]) : undefined;
+    return res.rows[0] ? toRecord(res.rows[0]) : undefined;
   }
-
-  async putIfAbsent(record: SubmissionRecord): Promise<SubmissionRecord> {
-    const { rows } = await this.db.query<Row>(
+  async putIfAbsent(idempotencyKey:string, intentId:string, record:SubmissionRecord){
+    const inserted = await this.db.query<Row>(
       `INSERT INTO multirail_submission_records (idempotency_key, intent_id, rail, status, provider_ref, safe_to_retry)
-       VALUES ($1, $2, $3, $4, $5, $6)
+       VALUES ($1,$2,$3,$4,$5,$6)
        ON CONFLICT (idempotency_key) DO NOTHING
-       RETURNING idempotency_key, intent_id, rail, status, provider_ref, safe_to_retry`,
-      [record.idempotencyKey, record.intentId, record.rail, record.status, record.providerRef ?? null, record.safeToRetry ?? null],
+       RETURNING rail, status, provider_ref, safe_to_retry`,
+      [idempotencyKey, intentId, record.rail, record.submission.status, record.submission.providerRef ?? null, record.submission.safeToRetry ?? null],
     );
-    if (rows[0]) return toRecord(rows[0]);
-    // Lost the insert race: the winner's row is authoritative.
-    const existing = await this.get(record.idempotencyKey);
-    if (!existing) {
-      throw new Error(`multirail_submission_records row vanished for key ${record.idempotencyKey}`);
-    }
+    if (inserted.rows[0]) return toRecord(inserted.rows[0]);
+    // Lost the insert race (or replay): the stored row is authoritative.
+    const existing = await this.get(idempotencyKey);
+    if (!existing) throw new Error('multirail submission record vanished after insert conflict');
     return existing;
   }
 }
 
-/** Production factory: resolves the shared pool lazily to avoid import cycles. */
-export async function createPostgresSubmissionRecordStore(): Promise<PostgresSubmissionRecordStore> {
-  const mod = await import("./postgres");
-  return new PostgresSubmissionRecordStore(mod.getPool());
+/** Production factory: binds the store to the server pool. */
+export async function createPostgresSubmissionRecordStore():Promise<PostgresSubmissionRecordStore> {
+  const { getPool } = await import('./postgres');
+  return new PostgresSubmissionRecordStore(getPool());
 }
-
-export interface RailSubmissionResult {
-  status: RailStatus;
-  providerRef?: string;
-  safeToRetry?: boolean;
-}
-
-export interface RailAdapter {
-  name: string;
-  submit(intentId: string): Promise<RailSubmissionResult>;
-}
-
-const BLOCKING: RailStatus[] = ["submitted", "pending", "settled", "held", "unknown"];
 
 export class MultiRailCoordinator {
-  constructor(private readonly store: SubmissionRecordStore = new InMemorySubmissionRecordStore()) {}
-
   /**
-   * Submit with idempotency: a retry of the same key returns the original
-   * outcome; only a record that is explicitly failed AND safeToRetry may
-   * fall through to the next rail.
+   * @param store defaults to the in-memory store so existing unit tests keep
+   * working unchanged; production wiring must pass
+   * `await createPostgresSubmissionRecordStore()`.
    */
-  async execute(intentId: string, idempotencyKey: string, rails: RailAdapter[]): Promise<SubmissionRecord> {
-    const prior = await this.store.get(idempotencyKey);
-    if (prior) return prior;
-
-    let lastFailure: SubmissionRecord | undefined;
-    for (const rail of rails) {
-      const result = await rail.submit(intentId);
-      const record = await this.store.putIfAbsent({
-        idempotencyKey,
-        intentId,
-        rail: rail.name,
-        status: result.status,
-        providerRef: result.providerRef ?? null,
-        safeToRetry: result.safeToRetry ?? null,
-      });
-      if (record.idempotencyKey !== idempotencyKey || record.intentId !== intentId) {
-        // Another concurrent execution owns this key.
-        return record;
-      }
-      if (BLOCKING.includes(record.status)) return record;
-      if (record.status === "failed" && record.safeToRetry) {
-        lastFailure = record;
-        continue;
-      }
-      return record;
+  constructor(private readonly store:SubmissionRecordStore = new InMemorySubmissionRecordStore()){}
+  async execute(i:Intent,primary:Rail,secondary:Rail):Promise<{rail:string;submission:Submission}>{
+    if(!i.id||!i.idempotencyKey) throw new Error('intent and idempotency key required');
+    const cached=await this.store.get(i.idempotencyKey); if(cached)return cached;
+    let first:Submission;
+    try{first=await primary.submit(i);}catch{
+      try{first=await primary.query(i);}catch{throw new UnknownOutcome();}
     }
-    return lastFailure ?? {
-      idempotencyKey,
-      intentId,
-      rail: "none",
-      status: "failed",
-      safeToRetry: false,
-    };
+    if(['submitted','pending','settled'].includes(first.status)) return this.record(i,primary.name,first);
+    if(!first.safeToRetry || !['failed','held'].includes(first.status)) throw new UnknownOutcome();
+    const second=await secondary.submit(i);
+    if(!['submitted','pending','settled'].includes(second.status))throw new UnknownOutcome('secondary outcome not accepted');
+    return this.record(i,secondary.name,second);
+  }
+  private async record(i:Intent,rail:string,submission:Submission){
+    return this.store.putIfAbsent(i.idempotencyKey, i.id, {rail,submission});
   }
 }

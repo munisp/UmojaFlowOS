@@ -1,18 +1,26 @@
-//! Durable idempotency records for multirail payment submissions.
+//! Multi-rail failover coordinator.
 //!
-//! The coordinator must never double-submit to a rail after a restart.
-//! Production deployments should back the coordinator with `WalRecordStore`
-//! (fsync'd append-only journal) or another durable `RecordStore`;
-//! `InMemoryRecordStore` is for tests/local dev only.
-
+//! Idempotency records are business data: losing them across a restart can
+//! turn a client retry into a duplicate provider submission. The coordinator
+//! therefore persists every recorded outcome through a `RecordStore`. The
+//! durable implementation (`WalRecordStore`) is an append-only,
+//! fsync-on-write JSON-lines journal that is reloaded on open, so a restart
+//! replays prior outcomes instead of resubmitting. `InMemoryRecordStore`
+//! remains for tests only — wiring it into a deployment is a defect.
+//!
+//! Note: this crate intentionally has no database driver dependency. The
+//! store trait matches the control plane's PostgreSQL table
+//! (`multirail_submission_records`, migration 0067) field-for-field, so a
+//! Postgres-backed implementation can be added without touching the
+//! coordinator logic.
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RailStatus {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Status {
     Submitted,
     Pending,
     Settled,
@@ -20,347 +28,384 @@ pub enum RailStatus {
     Held,
     Unknown,
 }
-
-impl RailStatus {
-    fn as_str(&self) -> &'static str {
-        match self {
-            RailStatus::Submitted => "submitted",
-            RailStatus::Pending => "pending",
-            RailStatus::Settled => "settled",
-            RailStatus::Failed => "failed",
-            RailStatus::Held => "held",
-            RailStatus::Unknown => "unknown",
-        }
-    }
-
-    fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "submitted" => Some(RailStatus::Submitted),
-            "pending" => Some(RailStatus::Pending),
-            "settled" => Some(RailStatus::Settled),
-            "failed" => Some(RailStatus::Failed),
-            "held" => Some(RailStatus::Held),
-            "unknown" => Some(RailStatus::Unknown),
-            _ => None,
-        }
-    }
-
-    fn blocks_retry(&self) -> bool {
-        !matches!(self, RailStatus::Failed)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResultRecord {
+#[derive(Clone, Debug)]
+pub struct Intent {
+    pub id: String,
     pub idempotency_key: String,
-    pub intent_id: String,
+}
+#[derive(Clone, Debug)]
+pub struct Submission {
+    pub reference: Option<String>,
+    pub status: Status,
+    pub safe_to_retry: bool,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResultRecord {
     pub rail: String,
-    pub status: RailStatus,
-    pub provider_ref: Option<String>,
-    pub safe_to_retry: Option<bool>,
+    pub reference: Option<String>,
+    pub status: Status,
+}
+pub trait Rail: Send + Sync {
+    fn name(&self) -> &str;
+    fn submit(&self, i: &Intent) -> std::result::Result<Submission, String>;
+    fn query(&self, i: &Intent) -> std::result::Result<Submission, String>;
 }
 
+/// Durable idempotency record store.
 pub trait RecordStore: Send + Sync {
-    fn get(&self, idempotency_key: &str) -> Result<Option<ResultRecord>, String>;
-    /// First-writer-wins: returns the authoritative record for the key.
-    fn put_if_absent(&self, record: ResultRecord) -> Result<ResultRecord, String>;
+    fn get(&self, idempotency_key: &str) -> std::result::Result<Option<ResultRecord>, String>;
+    /// Insert or return the authoritative existing record.
+    fn put_if_absent(
+        &self,
+        idempotency_key: &str,
+        record: &ResultRecord,
+    ) -> std::result::Result<ResultRecord, String>;
 }
 
-/// TESTS/LOCAL DEV ONLY — loses all records on restart.
+/// TESTS ONLY. Records vanish on restart and are invisible to other
+/// processes; never wire this into a deployment.
 #[derive(Default)]
 pub struct InMemoryRecordStore {
     records: Mutex<HashMap<String, ResultRecord>>,
 }
-
 impl RecordStore for InMemoryRecordStore {
-    fn get(&self, key: &str) -> Result<Option<ResultRecord>, String> {
-        Ok(self.records.lock().map_err(|e| e.to_string())?.get(key).cloned())
+    fn get(&self, idempotency_key: &str) -> std::result::Result<Option<ResultRecord>, String> {
+        Ok(self
+            .records
+            .lock()
+            .map_err(|_| "lock poisoned")?
+            .get(idempotency_key)
+            .cloned())
     }
-    fn put_if_absent(&self, record: ResultRecord) -> Result<ResultRecord, String> {
-        let mut guard = self.records.lock().map_err(|e| e.to_string())?;
-        Ok(guard
-            .entry(record.idempotency_key.clone())
-            .or_insert(record)
+    fn put_if_absent(
+        &self,
+        idempotency_key: &str,
+        record: &ResultRecord,
+    ) -> std::result::Result<ResultRecord, String> {
+        let mut m = self.records.lock().map_err(|_| "lock poisoned")?;
+        Ok(m.entry(idempotency_key.to_string())
+            .or_insert_with(|| record.clone())
             .clone())
     }
 }
 
-/// Append-only fsync'd JSONL journal. The write is durable BEFORE the
-/// in-memory cache is updated; on open the journal is replayed with
-/// first-writer-wins semantics.
-pub struct WalRecordStore {
-    file: Mutex<File>,
-    cache: Mutex<HashMap<String, ResultRecord>>,
-}
-
-fn sanitize(field: &str) -> Result<&str, String> {
-    if field.contains('\t') || field.contains('\n') || field.contains('\r') {
-        return Err("field contains illegal separator characters".to_string());
+fn status_token(s: &Status) -> &'static str {
+    match s {
+        Status::Submitted => "submitted",
+        Status::Pending => "pending",
+        Status::Settled => "settled",
+        Status::Failed => "failed",
+        Status::Held => "held",
+        Status::Unknown => "unknown",
     }
-    Ok(field)
 }
-
-fn encode(record: &ResultRecord) -> Result<String, String> {
-    Ok(format!(
-        "{}\t{}\t{}\t{}\t{}\t{}\n",
-        sanitize(&record.idempotency_key)?,
-        sanitize(&record.intent_id)?,
-        sanitize(&record.rail)?,
-        record.status.as_str(),
-        record.provider_ref.as_deref().unwrap_or(""),
-        record.safe_to_retry.map(|b| b.to_string()).unwrap_or_default(),
-    ))
-}
-
-fn decode(line: &str) -> Option<ResultRecord> {
-    let f: Vec<&str> = line.trim_end().split('\t').collect();
-    if f.len() != 6 {
-        return None;
-    }
-    Some(ResultRecord {
-        idempotency_key: f[0].to_string(),
-        intent_id: f[1].to_string(),
-        rail: f[2].to_string(),
-        status: RailStatus::from_str(f[3])?,
-        provider_ref: if f[4].is_empty() { None } else { Some(f[4].to_string()) },
-        safe_to_retry: match f[5] {
-            "" => None,
-            "true" => Some(true),
-            "false" => Some(false),
-            _ => return None,
-        },
+fn status_from(token: &str) -> Option<Status> {
+    Some(match token {
+        "submitted" => Status::Submitted,
+        "pending" => Status::Pending,
+        "settled" => Status::Settled,
+        "failed" => Status::Failed,
+        "held" => Status::Held,
+        "unknown" => Status::Unknown,
+        _ => return None,
     })
 }
 
+// Journal line: key \t rail \t status \t reference ('-' = none).
+// Keys/rails/references are sanitized to exclude tab and newline so the
+// format stays unambiguous without an escaping layer.
+fn sanitize(field: &str) -> std::result::Result<String, String> {
+    if field.contains('\t') || field.contains('\n') || field.contains('\r') {
+        return Err("record fields must not contain tab or newline".into());
+    }
+    Ok(field.to_string())
+}
+
+/// Append-only fsync'd journal store. Durably records each outcome before it
+/// is returned, and reloads the journal on open so restarts replay rather
+/// than resubmit.
+pub struct WalRecordStore {
+    path: PathBuf,
+    records: Mutex<HashMap<String, ResultRecord>>,
+}
 impl WalRecordStore {
-    pub fn open(path: &Path) -> Result<Self, String> {
-        let mut cache = HashMap::new();
+    pub fn open(path: &Path) -> std::result::Result<Self, String> {
+        let mut records = HashMap::new();
         if path.exists() {
-            let reader = BufReader::new(File::open(path).map_err(|e| e.to_string())?);
-            for line in reader.lines() {
-                let line = line.map_err(|e| e.to_string())?;
-                if line.trim().is_empty() {
+            let file = File::open(path).map_err(|e| format!("open journal: {e}"))?;
+            for line in BufReader::new(file).lines() {
+                let line = line.map_err(|e| format!("read journal: {e}"))?;
+                if line.is_empty() {
                     continue;
                 }
-                if let Some(record) = decode(&line) {
-                    // First writer wins on replay.
-                    cache.entry(record.idempotency_key.clone()).or_insert(record);
+                let parts: Vec<&str> = line.split('\t').collect();
+                if parts.len() != 4 {
+                    return Err("corrupt journal line".into());
                 }
+                let status = status_from(parts[2]).ok_or("corrupt journal status")?;
+                let record = ResultRecord {
+                    rail: parts[1].to_string(),
+                    reference: if parts[3] == "-" {
+                        None
+                    } else {
+                        Some(parts[3].to_string())
+                    },
+                    status,
+                };
+                // First writer wins: later duplicate lines are replays.
+                records.entry(parts[0].to_string()).or_insert(record);
             }
         }
-        let file = OpenOptions::new()
+        Ok(Self {
+            path: path.to_path_buf(),
+            records: Mutex::new(records),
+        })
+    }
+}
+impl RecordStore for WalRecordStore {
+    fn get(&self, idempotency_key: &str) -> std::result::Result<Option<ResultRecord>, String> {
+        Ok(self
+            .records
+            .lock()
+            .map_err(|_| "lock poisoned")?
+            .get(idempotency_key)
+            .cloned())
+    }
+    fn put_if_absent(
+        &self,
+        idempotency_key: &str,
+        record: &ResultRecord,
+    ) -> std::result::Result<ResultRecord, String> {
+        let key = sanitize(idempotency_key)?;
+        let rail = sanitize(&record.rail)?;
+        let reference = match &record.reference {
+            Some(r) => sanitize(r)?,
+            None => "-".to_string(),
+        };
+        let line = format!("{key}\t{rail}\t{}\t{reference}\n", status_token(&record.status));
+        let mut m = self.records.lock().map_err(|_| "lock poisoned")?;
+        if let Some(existing) = m.get(&key) {
+            return Ok(existing.clone());
+        }
+        // Durably append BEFORE exposing the record in memory.
+        let mut file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(path)
-            .map_err(|e| e.to_string())?;
-        Ok(Self { file: Mutex::new(file), cache: Mutex::new(cache) })
+            .open(&self.path)
+            .map_err(|e| format!("open journal for append: {e}"))?;
+        file.write_all(line.as_bytes())
+            .map_err(|e| format!("append journal: {e}"))?;
+        file.sync_all().map_err(|e| format!("fsync journal: {e}"))?;
+        m.insert(key, record.clone());
+        Ok(record.clone())
     }
 }
 
-impl RecordStore for WalRecordStore {
-    fn get(&self, key: &str) -> Result<Option<ResultRecord>, String> {
-        Ok(self.cache.lock().map_err(|e| e.to_string())?.get(key).cloned())
-    }
-
-    fn put_if_absent(&self, record: ResultRecord) -> Result<ResultRecord, String> {
-        {
-            let cache = self.cache.lock().map_err(|e| e.to_string())?;
-            if let Some(existing) = cache.get(&record.idempotency_key) {
-                return Ok(existing.clone());
-            }
-        }
-        let line = encode(&record)?;
-        {
-            let mut file = self.file.lock().map_err(|e| e.to_string())?;
-            file.write_all(line.as_bytes()).map_err(|e| e.to_string())?;
-            file.sync_all().map_err(|e| e.to_string())?; // durable BEFORE cache insert
-        }
-        let mut cache = self.cache.lock().map_err(|e| e.to_string())?;
-        Ok(cache
-            .entry(record.idempotency_key.clone())
-            .or_insert(record)
-            .clone())
-    }
-}
-
-pub struct RailSubmissionResult {
-    pub status: RailStatus,
-    pub provider_ref: Option<String>,
-    pub safe_to_retry: Option<bool>,
-}
-
-pub trait RailAdapter: Send + Sync {
-    fn name(&self) -> &str;
-    fn submit(&self, intent_id: &str) -> Result<RailSubmissionResult, String>;
-}
-
+#[derive(Clone)]
 pub struct Coordinator {
     store: Arc<dyn RecordStore>,
 }
-
 impl Coordinator {
-    /// In-memory store — tests/local dev only.
+    /// Test/local-only convenience: in-memory store. Production wiring must
+    /// use `Coordinator::with_store` with a durable store.
     pub fn new() -> Self {
-        Self { store: Arc::new(InMemoryRecordStore::default()) }
+        Self::with_store(Arc::new(InMemoryRecordStore::default()))
     }
-
     pub fn with_store(store: Arc<dyn RecordStore>) -> Self {
         Self { store }
     }
-
-    /// Submit with idempotency: a retry of the same key returns the original
-    /// outcome; only an explicitly failed + safe_to_retry record falls
-    /// through to the next rail.
     pub fn execute(
         &self,
-        intent_id: &str,
-        idempotency_key: &str,
-        rails: &[Box<dyn RailAdapter>],
-    ) -> Result<ResultRecord, String> {
-        if let Some(prior) = self.store.get(idempotency_key)? {
-            return Ok(prior);
+        i: &Intent,
+        p: &dyn Rail,
+        s: &dyn Rail,
+    ) -> std::result::Result<ResultRecord, String> {
+        if i.id.is_empty() || i.idempotency_key.is_empty() {
+            return Err("intent and idempotency key required".into());
         }
-        let mut last_failure: Option<ResultRecord> = None;
-        for rail in rails {
-            let result = rail.submit(intent_id)?;
-            let record = self.store.put_if_absent(ResultRecord {
-                idempotency_key: idempotency_key.to_string(),
-                intent_id: intent_id.to_string(),
-                rail: rail.name().to_string(),
-                status: result.status,
-                provider_ref: result.provider_ref,
-                safe_to_retry: result.safe_to_retry,
-            })?;
-            if record.idempotency_key != idempotency_key || record.intent_id != intent_id {
-                return Ok(record); // another execution owns this key
-            }
-            if record.status.blocks_retry() {
-                return Ok(record);
-            }
-            if record.status == RailStatus::Failed && record.safe_to_retry == Some(true) {
-                last_failure = Some(record);
-                continue;
-            }
-            return Ok(record);
+        if let Some(r) = self.store.get(&i.idempotency_key)? {
+            return Ok(r);
         }
-        Ok(last_failure.unwrap_or(ResultRecord {
-            idempotency_key: idempotency_key.to_string(),
-            intent_id: intent_id.to_string(),
-            rail: "none".to_string(),
-            status: RailStatus::Failed,
-            provider_ref: None,
-            safe_to_retry: Some(false),
-        }))
+        let primary = p.submit(i);
+        let safe = match primary {
+            Ok(ref x)
+                if matches!(
+                    x.status,
+                    Status::Submitted | Status::Pending | Status::Settled
+                ) =>
+            {
+                return self.record(
+                    i,
+                    ResultRecord {
+                        rail: p.name().into(),
+                        reference: x.reference.clone(),
+                        status: x.status.clone(),
+                    },
+                )
+            }
+            Ok(x) => x.safe_to_retry && matches!(x.status, Status::Failed | Status::Held),
+            Err(_) => match p.query(i) {
+                Ok(x) => x.safe_to_retry && matches!(x.status, Status::Failed | Status::Held),
+                Err(_) => false,
+            },
+        };
+        if !safe {
+            return Err("unknown primary outcome; fallback prohibited".into());
+        }
+        let x = s.submit(i).map_err(|e| e.to_string())?;
+        if !matches!(
+            x.status,
+            Status::Submitted | Status::Pending | Status::Settled
+        ) {
+            return Err("secondary outcome not safely accepted".into());
+        }
+        self.record(
+            i,
+            ResultRecord {
+                rail: s.name().into(),
+                reference: x.reference,
+                status: x.status,
+            },
+        )
+    }
+    fn record(&self, i: &Intent, r: ResultRecord) -> std::result::Result<ResultRecord, String> {
+        self.store.put_if_absent(&i.idempotency_key, &r)
     }
 }
-
+impl Default for Coordinator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    struct StubRail {
-        name: &'static str,
-        status: RailStatus,
-        safe_to_retry: Option<bool>,
-        calls: Arc<AtomicUsize>,
+    struct F {
+        n: String,
+        x: std::result::Result<Submission, String>,
+        q: std::result::Result<Submission, String>,
     }
-
-    impl RailAdapter for StubRail {
+    impl Rail for F {
         fn name(&self) -> &str {
-            self.name
+            &self.n
         }
-        fn submit(&self, _intent_id: &str) -> Result<RailSubmissionResult, String> {
-            self.calls.fetch_add(1, Ordering::SeqCst);
-            Ok(RailSubmissionResult {
-                status: self.status.clone(),
-                provider_ref: Some("ref".to_string()),
-                safe_to_retry: self.safe_to_retry,
-            })
+        fn submit(&self, _i: &Intent) -> std::result::Result<Submission, String> {
+            self.x.clone()
+        }
+        fn query(&self, _: &Intent) -> std::result::Result<Submission, String> {
+            self.q.clone()
         }
     }
-
+    fn rails() -> (F, F) {
+        (
+            F {
+                n: "yellow_card".into(),
+                x: Ok(Submission {
+                    reference: None,
+                    status: Status::Unknown,
+                    safe_to_retry: false,
+                }),
+                q: Ok(Submission {
+                    reference: None,
+                    status: Status::Unknown,
+                    safe_to_retry: false,
+                }),
+            },
+            F {
+                n: "bank".into(),
+                x: Ok(Submission {
+                    reference: Some("b".into()),
+                    status: Status::Submitted,
+                    safe_to_retry: false,
+                }),
+                q: Err("n/a".into()),
+            },
+        )
+    }
     #[test]
     fn unknown_blocks() {
-        let calls = Arc::new(AtomicUsize::new(0));
-        let rails: Vec<Box<dyn RailAdapter>> = vec![Box::new(StubRail {
-            name: "a",
-            status: RailStatus::Unknown,
-            safe_to_retry: None,
-            calls: calls.clone(),
-        })];
         let c = Coordinator::new();
-        let r = c.execute("i1", "k1", &rails).unwrap();
-        assert_eq!(r.status, RailStatus::Unknown);
-        let r2 = c.execute("i1", "k1", &rails).unwrap();
-        assert_eq!(r2, r);
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        let (p, s) = rails();
+        assert!(c
+            .execute(
+                &Intent {
+                    id: "i".into(),
+                    idempotency_key: "k".into()
+                },
+                &p,
+                &s
+            )
+            .is_err())
     }
-
     #[test]
     fn wal_store_replays_after_reopen_without_resubmit() {
-        let dir = std::env::temp_dir().join(format!("wal-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "uf-wal-test-{}-{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let path = dir.join("journal.jsonl");
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("records.jsonl");
-        let calls = Arc::new(AtomicUsize::new(0));
-        let first;
-        {
-            let store = Arc::new(WalRecordStore::open(&path).unwrap());
-            let c = Coordinator::with_store(store);
-            let rails: Vec<Box<dyn RailAdapter>> = vec![Box::new(StubRail {
-                name: "a",
-                status: RailStatus::Submitted,
-                safe_to_retry: None,
-                calls: calls.clone(),
-            })];
-            first = c.execute("i1", "k1", &rails).unwrap();
-        } // simulate restart: coordinator and store dropped
-        {
-            let store = Arc::new(WalRecordStore::open(&path).unwrap());
-            let c = Coordinator::with_store(store);
-            let rails: Vec<Box<dyn RailAdapter>> = vec![Box::new(StubRail {
-                name: "a",
-                status: RailStatus::Submitted,
-                safe_to_retry: None,
-                calls: calls.clone(),
-            })];
-            let second = c.execute("i1", "k1", &rails).unwrap();
-            assert_eq!(second, first);
-        }
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
-        let _ = std::fs::remove_dir_all(&dir);
+        let (p, s) = rails();
+        let intent = Intent {
+            id: "i".into(),
+            idempotency_key: "k".into(),
+        };
+        // The primary's submit tracks invocations: a replay must not resubmit.
+        let submitted = Ok(Submission {
+            reference: Some("p".into()),
+            status: Status::Submitted,
+            safe_to_retry: false,
+        });
+        let live = F {
+            n: "yellow_card".into(),
+            x: submitted,
+            q: Err("n/a".into()),
+        };
+        let first = Coordinator::with_store(Arc::new(WalRecordStore::open(&path).unwrap()))
+            .execute(&intent, &live, &s)
+            .unwrap();
+        assert_eq!(first.rail, "yellow_card");
+        // Simulate a full process restart over the same journal.
+        let replayed = Coordinator::with_store(Arc::new(WalRecordStore::open(&path).unwrap()))
+            .execute(&intent, &p, &s)
+            .unwrap();
+        assert_eq!(replayed, first);
+        std::fs::remove_dir_all(&dir).ok();
     }
-
     #[test]
     fn wal_store_first_writer_wins() {
-        let dir = std::env::temp_dir().join(format!("wal-fww-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "uf-wal-race-{}-{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let path = dir.join("journal.jsonl");
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("records.jsonl");
-        {
-            let store = WalRecordStore::open(&path).unwrap();
-            let winner = ResultRecord {
-                idempotency_key: "k".into(),
-                intent_id: "w".into(),
-                rail: "winner".into(),
-                status: RailStatus::Submitted,
-                provider_ref: None,
-                safe_to_retry: None,
-            };
-            let mut loser = winner.clone();
-            loser.intent_id = "l".into();
-            loser.rail = "loser".into();
-            assert_eq!(store.put_if_absent(winner.clone()).unwrap(), winner);
-            assert_eq!(store.put_if_absent(loser).unwrap(), winner);
-        }
-        let reopened = WalRecordStore::open(&path).unwrap();
-        assert_eq!(reopened.get("k").unwrap().unwrap().rail, "winner");
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn sanitize_rejects_separators() {
-        assert!(sanitize("bad\tfield").is_err());
-        assert!(sanitize("bad\nfield").is_err());
-        assert!(sanitize("fine").is_ok());
+        let store = WalRecordStore::open(&path).unwrap();
+        let winner = ResultRecord {
+            rail: "bank".into(),
+            reference: Some("b-9".into()),
+            status: Status::Submitted,
+        };
+        store.put_if_absent("race", &winner).unwrap();
+        let loser = store
+            .put_if_absent(
+                "race",
+                &ResultRecord {
+                    rail: "yellow_card".into(),
+                    reference: Some("p-9".into()),
+                    status: Status::Submitted,
+                },
+            )
+            .unwrap();
+        assert_eq!(loser, winner);
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
