@@ -34,7 +34,7 @@ function Router() {
         </Suspense>
       </Route>
       {/* Bare module paths (e.g. bookmarked or shared links) redirect into the console shell */}
-      {(["overview", "registry", "integrations", "governance", "treasury", "markets", "payments", "compliance", "reports", "alerts"] as const).map((module) => (
+      {(["overview", "registry", "integrations", "governance", "treasury", "markets", "payments", "compliance", "reports", "alerts", "operations", "admins"] as const).map((module) => (
         <Route key={module} path={`/${module}`}>
           <Redirect to={module === "overview" ? "/console" : `/console/${module}`} />
         </Route>
