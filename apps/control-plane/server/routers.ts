@@ -23,6 +23,7 @@ import { assessVaspOffshoreCounterpartyProfile, assessVaspTravelRuleRoute, creat
 import { assessImtoReadiness, createImtoReadinessProfile, imtoEvidenceCategories, recordImtoReadinessEvidence } from "./imtoReadiness";
 import { assessReadinessAssurance, initialiseReadinessAssurance, listReadinessAssurance, readinessAssuranceAreas, recordReadinessAssuranceEvidence, rejectReadinessAssuranceEvidence, verifyReadinessAssuranceEvidence } from "./vaspReadinessAssurance";
 import { validateVaspEvidenceManifestAgainstRegister, validateVaspOwnerAssignmentsAgainstRegister } from "./vaspEvidenceKitValidation";
+import { auditVaspEvidenceIntegrity, computeVaspAssuranceEvidenceChain, computeVaspReadinessIndex, detectVaspIncidentPatterns, evaluateVaspEvidenceStaleness, evaluateVaspOffshoreExposureConcentration, generateVaspAssurancePack, planVaspRegulatoryCriticalPath, scanVaspSodConflicts, scoreVaspTravelRuleRoute } from "./vaspInnovations";
 import { assignExternalStakeholder, listCbnLiaisonAssignments, listProviderContactAssignments, recordExternalStakeholderEvidence } from "./externalStakeholders";
 import { decideCustomerUseCaseGate, getCustomerWorkspace, recordCustomerDestinationCounterparty, updatePostgresCustomerProfile } from "./customerUseCase";
 import { decideFinancialSoundnessGate, getLiquidityProviderWorkspace, listLiquidityProviders, recordCounterpartyEvidenceItem, updateCounterpartyLpArchetype } from "./liquidityProviderEvidence";
@@ -161,6 +162,16 @@ export const appRouter = router({
         attestationSha256: z.string().optional(),
       })).min(1).max(6),
     })).query(({ input }) => validateVaspEvidenceManifestAgainstRegister(input.dossierId, input.manifest)),
+    vaspEvidenceStaleness: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => evaluateVaspEvidenceStaleness(input.dossierId)),
+    vaspAssuranceEvidenceChain: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => computeVaspAssuranceEvidenceChain(input.dossierId)),
+    vaspTravelRuleRouteScore: auditorProcedure.input(z.object({ dossierId: z.string().uuid(), counterpartyId: z.string().uuid() })).query(({ input }) => scoreVaspTravelRuleRoute(input.dossierId, input.counterpartyId)),
+    vaspReadinessIndex: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => computeVaspReadinessIndex(input.dossierId)),
+    vaspOffshoreExposureConcentration: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => evaluateVaspOffshoreExposureConcentration(input.dossierId)),
+    vaspIncidentPatterns: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => detectVaspIncidentPatterns(input.dossierId)),
+    vaspRegulatoryCriticalPath: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => planVaspRegulatoryCriticalPath(input.dossierId)),
+    vaspEvidenceIntegrityAudit: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => auditVaspEvidenceIntegrity(input.dossierId)),
+    vaspSodConflictScan: auditorProcedure.query(() => scanVaspSodConflicts()),
+    vaspAssurancePack: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => generateVaspAssurancePack(input.dossierId)),
     assessReadinessAssurance: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => assessReadinessAssurance(input.dossierId)),
     recordReadinessAssuranceEvidence: complianceProcedure.input(z.object({ dossierId: z.string().uuid(), area: z.enum(readinessAssuranceAreas), evidenceUri: z.string().url().refine(value => value.startsWith("https://"), "Evidence must use HTTPS"), evidenceSha256: z.string().regex(/^[a-f0-9]{64}$/) })).mutation(({ ctx, input }) => recordReadinessAssuranceEvidence({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     verifyReadinessAssuranceEvidence: assuranceVerifierProcedure.input(z.object({ dossierId: z.string().uuid(), area: z.enum(readinessAssuranceAreas), externalVerifier: z.string().trim().min(3).max(255), externalAttestationUri: z.string().url().refine(value => value.startsWith("https://"), "Attestation must use HTTPS"), externalAttestationSha256: z.string().regex(/^[a-f0-9]{64}$/), rationale: z.string().trim().min(20).max(4000) })).mutation(({ ctx, input }) => verifyReadinessAssuranceEvidence({ openId: ctx.user.openId, role: ctx.user.role }, input)),
