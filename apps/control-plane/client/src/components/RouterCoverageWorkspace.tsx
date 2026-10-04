@@ -118,6 +118,8 @@ const PROCS: ProcDef[] = [
   { router: "contracts", name: "reconcileLedgerProjectionViaService", kind: "mutation", roles: ["admin", "compliance_officer"], hint: "no input" },
   { router: "postgres", name: "readiness", kind: "query", roles: ["admin", "compliance_officer", "treasury_operator", "auditor"], hint: "no input" },
   { router: "postgres", name: "rejectReadinessAssuranceEvidence", kind: "mutation", roles: ["admin", "auditor"], hint: "dossierId, area, rationale" },
+  { router: "postgres", name: "validateVaspOwnerAssignments", kind: "query", roles: ["admin", "compliance_officer", "treasury_operator", "auditor"], hint: "dossierId, assignments[]" },
+  { router: "postgres", name: "validateVaspEvidenceManifest", kind: "query", roles: ["admin", "compliance_officer", "treasury_operator", "auditor"], hint: "dossierId, manifest[]" },
   { router: "postgres", name: "captureServiceHealthSample", kind: "mutation", roles: ["admin"], hint: "no input" },
   { router: "postgres", name: "persistDocumentAnalysisEvidence", kind: "mutation", roles: ["admin", "compliance_officer"], hint: "analysisJobId, kind, disposition, engineName, engineVersion, modelTag, modelDigest, promptPolicyVersion, evidenceSha256, signals, limitations" },
 ];
