@@ -63,6 +63,25 @@ class MLLakehouse:
         for layer in ("bronze", "silver", "gold"):
             (self.root / layer).mkdir(parents=True, exist_ok=True)
 
+    @classmethod
+    def from_env(cls, default: Path | str = "infra/lakehouse/data") -> "MLLakehouse":
+        """Wire the governed infra/lakehouse boundary to the ML pipeline.
+
+        ``UMOJA_LAKEHOUSE_ROOT`` (see infra/lakehouse/lakehouse.env.template)
+        selects the local bronze/silver/gold parquet root used in dev/CI and
+        for continuous-training snapshots. In governed deployments the same
+        root is a mounted S3-compatible volume configured through the
+        template's object-store settings; ``UMOJA_LAKEHOUSE_ENABLED=false``
+        keeps the boundary disabled exactly as the template intends.
+        """
+        import os
+        if os.environ.get("UMOJA_LAKEHOUSE_ENABLED", "true").lower() == "false":
+            raise RuntimeError(
+                "lakehouse boundary is disabled (UMOJA_LAKEHOUSE_ENABLED=false); "
+                "training must not read or write governed data"
+            )
+        return cls(os.environ.get("UMOJA_LAKEHOUSE_ROOT", str(default)))
+
     def _partition_path(self, layer: str, name: str, day: str) -> Path:
         p = self.root / layer / name / f"day={day}"
         p.mkdir(parents=True, exist_ok=True)

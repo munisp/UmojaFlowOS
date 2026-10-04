@@ -22,6 +22,8 @@ import { assessCbnSandboxEvidenceCompleteness, createCbnSandboxDossier, createCb
 import { assessVaspOffshoreCounterpartyProfile, assessVaspTravelRuleRoute, createVaspOffshoreCounterpartyProfile, createVaspRegulatoryProfile, getVaspSupervisoryReadiness, listVaspRegulatoryProfiles, listVaspTravelRuleAssessments, offshoreExposureEvidenceCategories, recordVaspOffshoreCounterpartyEvidence, recordVaspSupervisoryEvidence, recordVaspTravelRuleEvidence, supervisoryEvidenceCategories, travelRuleEvidenceCategories } from "./vaspReadiness";
 import { assessImtoReadiness, createImtoReadinessProfile, imtoEvidenceCategories, recordImtoReadinessEvidence } from "./imtoReadiness";
 import { assessReadinessAssurance, initialiseReadinessAssurance, listReadinessAssurance, readinessAssuranceAreas, recordReadinessAssuranceEvidence, rejectReadinessAssuranceEvidence, verifyReadinessAssuranceEvidence } from "./vaspReadinessAssurance";
+import { validateVaspEvidenceManifestAgainstRegister, validateVaspOwnerAssignmentsAgainstRegister } from "./vaspEvidenceKitValidation";
+import { auditVaspEvidenceIntegrity, computeVaspAssuranceEvidenceChain, computeVaspReadinessIndex, detectVaspIncidentPatterns, evaluateVaspEvidenceStaleness, evaluateVaspOffshoreExposureConcentration, generateVaspAssurancePack, planVaspRegulatoryCriticalPath, scanVaspSodConflicts, scoreVaspTravelRuleRoute } from "./vaspInnovations";
 import { assignExternalStakeholder, listCbnLiaisonAssignments, listProviderContactAssignments, recordExternalStakeholderEvidence } from "./externalStakeholders";
 import { decideCustomerUseCaseGate, getCustomerWorkspace, recordCustomerDestinationCounterparty, updatePostgresCustomerProfile } from "./customerUseCase";
 import { decideFinancialSoundnessGate, getLiquidityProviderWorkspace, listLiquidityProviders, recordCounterpartyEvidenceItem, updateCounterpartyLpArchetype } from "./liquidityProviderEvidence";
@@ -62,6 +64,55 @@ import {
 } from "./contracts/services";
 import { z } from "zod";
 import { legacyOperatingRoles, type OperatingRole } from "./operatingRoles";
+import {
+  requestStakeholderAccount, decideAdministratorApproval, transitionStakeholderAccount,
+  listStakeholderAccounts, assignSuperAdministrator, revokeSuperAdministrator, listSuperAdministrators,
+  listAdministratorGovernanceAudit, revokeStakeholderSession, listStakeholderSessions,
+  upsertNotificationPreferences, getNotificationPreferences, listSecurityMessages, listKycReminderDeliveries,
+} from "./stakeholderAccounts";
+import {
+  getAdministratorKycUploadPolicy, updateAdministratorKycUploadPolicy, listAdministratorKycUploadPolicyAudit,
+  createAdministratorKycUploadIntent, finalizeAdministratorKycUploadIntent, recordAdministratorKycOversizeException,
+  submitAdministratorKycEvidence, recordAdministratorKycReview, createAdministratorKycEvidenceRequest,
+  transitionAdministratorKycEvidenceRequest, raiseAdministratorKycEscalation, recordAdministratorKycReviewEntry,
+  getAdministratorKycWorkspace, ADMIN_KYC_EVIDENCE_KINDS, ADMIN_KYC_JURISDICTIONS,
+} from "./administratorKyc";
+import {
+  createTradeCase, transitionTradeCase, assignTradeCaseStakeholder, revokeTradeCaseStakeholder,
+  submitTradeCaseEvidence, reviewTradeCaseEvidence, configureTradeCaseRoute, transitionTradeCaseRoute,
+  recordTradeCaseApproval, raiseTradeCaseException, resolveTradeCaseException, recordTradeCaseReconciliation,
+  listTradeCases, getTradeCaseWorkspace, TRADE_EVIDENCE_KINDS, TRADE_STAKEHOLDER_ROLES, TRADE_APPROVAL_ROLES,
+} from "./tradePaymentControl";
+import {
+  registerGovernedBankAccount, recordLiquidityGovernancePolicy, recordStablecoinTreasuryMandate,
+  registerSupplyChainFinanceProgramme, registerSpendCardProgramme, recordSpendPolicyRule,
+  recordEnterpriseGovernanceReview, getEnterpriseGovernanceWorkspace, listSpendPolicyRules,
+} from "./enterpriseGovernance";
+import {
+  recordControlAssuranceAssessment, recordAdapterCertificationEvidence, recordControlAuditPacket,
+  listControlAssuranceAssessments, listAdapterCertificationEvidence, listControlAuditPackets,
+  ASSURANCE_KINDS, ADAPTER_KINDS, PACKET_SCOPES,
+} from "./controlAssuranceHub";
+import {
+  configureStablecoinOrchestrationRoute, reviewStablecoinOrchestrationRoute, listStablecoinOrchestrationRoutes,
+  recordAuthorisedExecutionTest, recordExecutionApprovalRehearsal, listExecutionApprovalRehearsals,
+  recordStablecoinExecutionEvidence, listStablecoinExecutionEvidence,
+  recordStablecoinSettlementAttempt, listStablecoinSettlementAttempts,
+} from "./executionRehearsal";
+import {
+  recordLedgerPostingIntent, transitionLedgerPostingIntent, recordLedgerReconciliationRun,
+  recordLedgerReconciliationDiscrepancy, listLedgerPostingIntents, listLedgerReconciliationRuns,
+  listLedgerReconciliationDiscrepancies,
+} from "./ledgerReconciliation";
+import {
+  recordProviderSendRequest, transitionProviderSendRequest, listProviderSendRequests,
+  recordRegulatorySubmissionAttempt, listRegulatorySubmissionAttempts,
+} from "./liveControlPipelines";
+
+const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/, "must be 64 lowercase hex chars");
+const httpsUri = z.string().url().refine(v => v.startsWith("https://"), "must use HTTPS");
+const rationale = z.string().trim().min(16).max(4000);
+const uuid = z.string().uuid();
 
 type LegacyOperatingRole = Exclude<OperatingRole, "provider_contact" | "cbn_liaison">;
 function legacyActor(user: { openId: string; role: OperatingRole }): { openId: string; role: LegacyOperatingRole } {
@@ -89,6 +140,38 @@ export const appRouter = router({
     createVaspRegulatoryProfile: adminProcedure.input(z.object({ dossierId: z.string().uuid(), supervisoryPath: z.enum(["sec_arip", "sec_full_registration", "other_supervisory_path"]), operationalModelSummary: z.string().trim().min(50).max(4000) })).mutation(({ ctx, input }) => createVaspRegulatoryProfile({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     initialiseReadinessAssurance: adminProcedure.input(z.object({ dossierId: z.string().uuid() })).mutation(({ ctx, input }) => initialiseReadinessAssurance({ openId: ctx.user.openId, role: ctx.user.role }, input.dossierId)),
     readinessAssurance: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => listReadinessAssurance(input.dossierId)),
+    validateVaspOwnerAssignments: auditorProcedure.input(z.object({
+      dossierId: z.string().uuid(),
+      assignments: z.array(z.object({
+        area: z.string(),
+        points: z.number().int(),
+        accountableRole: z.string(),
+        externalEvidenceOwner: z.string(),
+        externalContact: z.string(),
+        platformSubmitterSubject: z.string(),
+        platformVerifierSubject: z.string(),
+      })).min(1).max(6),
+    })).query(({ input }) => validateVaspOwnerAssignmentsAgainstRegister(input.dossierId, input.assignments)),
+    validateVaspEvidenceManifest: auditorProcedure.input(z.object({
+      dossierId: z.string().uuid(),
+      manifest: z.array(z.object({
+        area: z.string(),
+        evidenceUri: z.string(),
+        evidenceSha256: z.string(),
+        attestationUri: z.string().optional(),
+        attestationSha256: z.string().optional(),
+      })).min(1).max(6),
+    })).query(({ input }) => validateVaspEvidenceManifestAgainstRegister(input.dossierId, input.manifest)),
+    vaspEvidenceStaleness: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => evaluateVaspEvidenceStaleness(input.dossierId)),
+    vaspAssuranceEvidenceChain: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => computeVaspAssuranceEvidenceChain(input.dossierId)),
+    vaspTravelRuleRouteScore: auditorProcedure.input(z.object({ dossierId: z.string().uuid(), counterpartyId: z.string().uuid() })).query(({ input }) => scoreVaspTravelRuleRoute(input.dossierId, input.counterpartyId)),
+    vaspReadinessIndex: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => computeVaspReadinessIndex(input.dossierId)),
+    vaspOffshoreExposureConcentration: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => evaluateVaspOffshoreExposureConcentration(input.dossierId)),
+    vaspIncidentPatterns: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => detectVaspIncidentPatterns(input.dossierId)),
+    vaspRegulatoryCriticalPath: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => planVaspRegulatoryCriticalPath(input.dossierId)),
+    vaspEvidenceIntegrityAudit: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => auditVaspEvidenceIntegrity(input.dossierId)),
+    vaspSodConflictScan: auditorProcedure.query(() => scanVaspSodConflicts()),
+    vaspAssurancePack: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => generateVaspAssurancePack(input.dossierId)),
     assessReadinessAssurance: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => assessReadinessAssurance(input.dossierId)),
     recordReadinessAssuranceEvidence: complianceProcedure.input(z.object({ dossierId: z.string().uuid(), area: z.enum(readinessAssuranceAreas), evidenceUri: z.string().url().refine(value => value.startsWith("https://"), "Evidence must use HTTPS"), evidenceSha256: z.string().regex(/^[a-f0-9]{64}$/) })).mutation(({ ctx, input }) => recordReadinessAssuranceEvidence({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     verifyReadinessAssuranceEvidence: assuranceVerifierProcedure.input(z.object({ dossierId: z.string().uuid(), area: z.enum(readinessAssuranceAreas), externalVerifier: z.string().trim().min(3).max(255), externalAttestationUri: z.string().url().refine(value => value.startsWith("https://"), "Attestation must use HTTPS"), externalAttestationSha256: z.string().regex(/^[a-f0-9]{64}$/), rationale: z.string().trim().min(20).max(4000) })).mutation(({ ctx, input }) => verifyReadinessAssuranceEvidence({ openId: ctx.user.openId, role: ctx.user.role }, input)),
@@ -422,6 +505,265 @@ export const appRouter = router({
       validTo: z.coerce.date().optional(),
       status: z.enum(["pending_review", "verified", "expired", "suspended", "rejected"]).default("pending_review"),
     })).mutation(({ ctx, input }) => createPostgresCounterpartyAuthorization({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+  }),
+  stakeholder: router({
+    requestAccount: publicProcedure.input(z.object({
+      username: z.string().regex(/^[a-z][a-z0-9_.-]{2,63}$/),
+      displayName: z.string().trim().min(2).max(120),
+      password: z.string().min(12),
+      requestedRole: z.enum(["compliance_officer", "treasury_operator", "auditor", "admin"]),
+      notificationEmail: z.string().email().optional(),
+    })).mutation(({ input }) => requestStakeholderAccount(input)),
+    accounts: auditorProcedure.input(z.object({ status: z.enum(["pending_approval", "active", "suspended"]).optional() }).optional()).query(({ input }) => listStakeholderAccounts(input?.status)),
+    decideAdministratorApproval: adminProcedure.input(z.object({
+      administratorAccountId: uuid,
+      decision: z.enum(["approved", "rejected", "suspended", "revoked"]),
+      rationale,
+    })).mutation(({ ctx, input }) => decideAdministratorApproval({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    transitionAccount: adminProcedure.input(z.object({
+      accountId: uuid, target: z.enum(["active", "suspended"]), reason: z.string().trim().min(8).max(4000),
+    })).mutation(({ ctx, input }) => transitionStakeholderAccount({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    assignSuperAdministrator: adminProcedure.input(z.object({ subject: z.string().min(3).max(256) }))
+      .mutation(({ ctx, input }) => assignSuperAdministrator({ openId: ctx.user.openId, role: ctx.user.role }, input.subject)),
+    revokeSuperAdministrator: adminProcedure.input(z.object({ subject: z.string().min(3).max(256), reason: z.string().trim().min(16).max(4000) }))
+      .mutation(({ ctx, input }) => revokeSuperAdministrator({ openId: ctx.user.openId, role: ctx.user.role }, input.subject, input.reason)),
+    superAdministrators: auditorProcedure.query(() => listSuperAdministrators()),
+    governanceAudit: auditorProcedure.input(z.object({ accountId: uuid.optional() }).optional()).query(({ input }) => listAdministratorGovernanceAudit(input?.accountId)),
+    sessions: auditorProcedure.input(z.object({ accountId: uuid.optional() }).optional()).query(({ input }) => listStakeholderSessions(input?.accountId)),
+    revokeSession: adminProcedure.input(z.object({ sessionId: uuid, reason: z.string().trim().min(8) }))
+      .mutation(({ ctx, input }) => revokeStakeholderSession({ openId: ctx.user.openId, role: ctx.user.role }, input.sessionId, input.reason)),
+    notificationPreferences: auditorProcedure.input(z.object({ accountId: uuid })).query(({ input }) => getNotificationPreferences(input.accountId)),
+    updateNotificationPreferences: adminProcedure.input(z.object({ accountId: uuid, emailKycRemindersEnabled: z.boolean() }))
+      .mutation(({ ctx, input }) => upsertNotificationPreferences({ openId: ctx.user.openId, role: ctx.user.role }, input.accountId, input.emailKycRemindersEnabled)),
+    securityMessages: auditorProcedure.input(z.object({ accountId: uuid })).query(({ input }) => listSecurityMessages(input.accountId)),
+    kycReminderDeliveries: auditorProcedure.input(z.object({ accountId: uuid.optional() }).optional()).query(({ input }) => listKycReminderDeliveries(input?.accountId)),
+  }),
+  administratorKyc: router({
+    workspace: complianceProcedure.input(z.object({ accountId: uuid })).query(({ input }) => getAdministratorKycWorkspace(input.accountId)),
+    uploadPolicy: auditorProcedure.query(() => getAdministratorKycUploadPolicy()),
+    updateUploadPolicy: adminProcedure.input(z.object({ maxFileBytes: z.number().int().min(1048576).max(52428800), reason: z.string().trim().min(16).max(2000) }))
+      .mutation(({ ctx, input }) => updateAdministratorKycUploadPolicy({ openId: ctx.user.openId, role: ctx.user.role }, input.maxFileBytes, input.reason)),
+    uploadPolicyAudit: auditorProcedure.query(() => listAdministratorKycUploadPolicyAudit()),
+    createUploadIntent: complianceProcedure.input(z.object({
+      administratorAccountId: uuid, evidenceKind: z.enum(ADMIN_KYC_EVIDENCE_KINDS),
+      jurisdictionCode: z.enum(ADMIN_KYC_JURISDICTIONS), originalFilename: z.string().min(1).max(180),
+      mimeType: z.enum(["application/pdf", "image/jpeg", "image/png"]),
+      sizeBytes: z.number().int().positive(), contentSha256: sha256Hex, storageKey: z.string().min(8),
+      ttlMinutes: z.number().int().min(5).max(1440).optional(),
+    })).mutation(({ ctx, input }) => createAdministratorKycUploadIntent({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    finalizeUploadIntent: complianceProcedure.input(z.object({ intentId: uuid }))
+      .mutation(({ ctx, input }) => finalizeAdministratorKycUploadIntent({ openId: ctx.user.openId, role: ctx.user.role }, input.intentId)),
+    recordOversizeException: complianceOnlyProcedure.input(z.object({
+      uploadIntentId: uuid, administratorAccountId: uuid, jurisdictionCode: z.enum(ADMIN_KYC_JURISDICTIONS),
+      exceptionRationale: z.string().trim().min(16).max(4000),
+    })).mutation(({ ctx, input }) => recordAdministratorKycOversizeException({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    submitEvidence: complianceProcedure.input(z.object({
+      administratorAccountId: uuid, evidenceKind: z.enum(ADMIN_KYC_EVIDENCE_KINDS),
+      jurisdictionCode: z.enum(ADMIN_KYC_JURISDICTIONS), referenceSha256: sha256Hex,
+    })).mutation(({ ctx, input }) => submitAdministratorKycEvidence({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordReview: complianceOnlyProcedure.input(z.object({
+      administratorAccountId: uuid, outcome: z.enum(["approved", "rejected", "needs_information"]), rationale,
+    })).mutation(({ ctx, input }) => recordAdministratorKycReview({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    createEvidenceRequest: complianceOnlyProcedure.input(z.object({
+      administratorAccountId: uuid, requestSummary: z.string().trim().min(8).max(2000), dueAt: z.coerce.date().optional(),
+    })).mutation(({ ctx, input }) => createAdministratorKycEvidenceRequest({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    transitionEvidenceRequest: complianceProcedure.input(z.object({
+      requestId: uuid, target: z.enum(["submitted", "resolved", "closed"]),
+    })).mutation(({ ctx, input }) => transitionAdministratorKycEvidenceRequest({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    raiseEscalation: complianceOnlyProcedure.input(z.object({
+      administratorAccountId: uuid,
+      reason: z.enum(["sanctions_pep_concern", "liveness_deepfake_concern", "evidence_mismatch", "single_evidence_exception", "compliance_discretion"]),
+    })).mutation(({ ctx, input }) => raiseAdministratorKycEscalation({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordReviewEntry: complianceOnlyProcedure.input(z.object({
+      administratorAccountId: uuid, escalationId: uuid.nullable().optional(), reviewSequence: z.union([z.literal(1), z.literal(2)]),
+      outcome: z.enum(["approved", "rejected", "needs_information"]), rationale,
+    })).mutation(({ ctx, input }) => recordAdministratorKycReviewEntry({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+  }),
+  tradeControl: router({
+    cases: auditorProcedure.input(z.object({ legalEntityId: uuid.optional() }).optional()).query(({ input }) => listTradeCases(input?.legalEntityId)),
+    workspace: auditorProcedure.input(z.object({ tradeCaseId: uuid })).query(({ input }) => getTradeCaseWorkspace(input.tradeCaseId)),
+    createCase: complianceOrTreasuryProcedure.input(z.object({
+      caseReference: z.string().regex(/^TPC-[A-Z0-9][A-Z0-9-]{5,78}$/),
+      legalEntityId: uuid, customerId: uuid.nullable().optional(), supplierBeneficiaryId: uuid.nullable().optional(),
+      corridor: z.string().min(2), purchaseCurrency: z.enum(["NGN", "KES", "ZAR", "USD", "USDC", "USDT"]),
+      purchaseAmount: z.string().regex(/^\d+(\.\d{1,12})?$/), intendedSettlementCurrency: z.enum(["NGN", "KES", "ZAR", "USD", "USDC", "USDT"]),
+      purposeSummary: z.string().trim().min(16).max(4000),
+    })).mutation(({ ctx, input }) => createTradeCase({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    transitionCase: complianceOrTreasuryProcedure.input(z.object({ tradeCaseId: uuid, targetStatus: z.string().min(2) }))
+      .mutation(({ ctx, input }) => transitionTradeCase({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    assignStakeholder: complianceOrTreasuryProcedure.input(z.object({
+      tradeCaseId: uuid, stakeholderRole: z.enum(TRADE_STAKEHOLDER_ROLES), stakeholderSubject: z.string().min(3),
+    })).mutation(({ ctx, input }) => assignTradeCaseStakeholder({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    revokeStakeholder: complianceOrTreasuryProcedure.input(z.object({ stakeholderId: uuid }))
+      .mutation(({ ctx, input }) => revokeTradeCaseStakeholder({ openId: ctx.user.openId, role: ctx.user.role }, input.stakeholderId)),
+    submitEvidence: complianceOrTreasuryProcedure.input(z.object({
+      tradeCaseId: uuid, evidenceKind: z.enum(TRADE_EVIDENCE_KINDS), evidenceUri: httpsUri, evidenceSha256: sha256Hex,
+    })).mutation(({ ctx, input }) => submitTradeCaseEvidence({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    reviewEvidence: complianceOnlyProcedure.input(z.object({
+      evidenceId: uuid, decision: z.enum(["accepted", "rejected", "replacement_requested"]), rationale: z.string().trim().min(16).max(4000).optional(),
+    })).mutation(({ ctx, input }) => reviewTradeCaseEvidence({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    configureRoute: complianceOrTreasuryProcedure.input(z.object({
+      tradeCaseId: uuid, counterpartyId: uuid, integrationConnectionId: uuid,
+      routeKind: z.enum(["authorised_dealer_fx", "bank_supplier_settlement", "stablecoin_conversion", "supply_chain_finance"]),
+      sourceCurrency: z.enum(["NGN", "KES", "ZAR", "USD", "USDC", "USDT"]), targetCurrency: z.enum(["NGN", "KES", "ZAR", "USD", "USDC", "USDT"]),
+      routePolicyEvidenceUri: httpsUri, routePolicyEvidenceSha256: sha256Hex,
+    })).mutation(({ ctx, input }) => configureTradeCaseRoute({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    transitionRoute: complianceOnlyProcedure.input(z.object({
+      routeId: uuid, readinessState: z.enum(["evidence_pending", "pending_compliance_review", "approved_for_authorised_release", "blocked"]),
+    })).mutation(({ ctx, input }) => transitionTradeCaseRoute({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordApproval: complianceOrTreasuryProcedure.input(z.object({
+      tradeCaseId: uuid, approvalRole: z.enum(TRADE_APPROVAL_ROLES),
+      decision: z.enum(["approved", "blocked", "needs_information"]), rationale,
+    })).mutation(({ ctx, input }) => recordTradeCaseApproval({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    raiseException: complianceOrTreasuryProcedure.input(z.object({
+      tradeCaseId: uuid,
+      exceptionKind: z.enum(["documentary_gap", "counterparty_scope", "route_capacity", "beneficiary_change", "travel_rule_gap", "stablecoin_provenance_gap", "policy_conflict", "other"]),
+      rationale,
+    })).mutation(({ ctx, input }) => raiseTradeCaseException({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    resolveException: complianceOnlyProcedure.input(z.object({
+      exceptionId: uuid, decision: z.enum(["remediated", "rejected"]), resolutionRationale: rationale,
+    })).mutation(({ ctx, input }) => resolveTradeCaseException({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordReconciliation: complianceProcedure.input(z.object({
+      tradeCaseId: uuid,
+      referenceKind: z.enum(["provider_confirmation", "bank_reference", "supplier_receipt", "trade_finance_reference", "stablecoin_attestation"]),
+      referenceUri: httpsUri, referenceSha256: sha256Hex, status: z.enum(["recorded", "consistent", "discrepant"]),
+    })).mutation(({ ctx, input }) => recordTradeCaseReconciliation({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+  }),
+  enterpriseGovernance: router({
+    workspace: auditorProcedure.input(z.object({ legalEntityId: uuid })).query(({ input }) => getEnterpriseGovernanceWorkspace(input.legalEntityId)),
+    registerGovernedBankAccount: treasuryProcedure.input(z.object({
+      legalEntityId: uuid, counterpartyId: uuid, integrationConnectionId: uuid,
+      countryCode: z.string().length(2), currency: z.enum(["NGN", "KES", "ZAR", "USD", "USDC", "USDT"]),
+      accountReferenceHash: sha256Hex, mandateEvidenceUri: httpsUri, mandateEvidenceSha256: sha256Hex,
+    })).mutation(({ ctx, input }) => registerGovernedBankAccount({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordLiquidityPolicy: treasuryProcedure.input(z.object({
+      legalEntityId: uuid, countryCode: z.string().length(2), currency: z.enum(["NGN", "KES", "ZAR", "USD", "USDC", "USDT"]),
+      concentrationLimitPercent: z.number().min(0).max(100), approvalThresholdAmount: z.string().regex(/^\d+(\.\d{1,12})?$/),
+      policyEvidenceUri: httpsUri, policyEvidenceSha256: sha256Hex,
+    })).mutation(({ ctx, input }) => recordLiquidityGovernancePolicy({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordStablecoinMandate: treasuryProcedure.input(z.object({
+      legalEntityId: uuid, asset: z.enum(["USDC", "USDT"]), counterpartyId: uuid, integrationConnectionId: uuid,
+      maximumExposure: z.string().regex(/^\d+(\.\d{1,12})?$/), requiresTravelRule: z.boolean(), requiresBeneficiaryEvidence: z.boolean(),
+      mandateEvidenceUri: httpsUri, mandateEvidenceSha256: sha256Hex,
+    })).mutation(({ ctx, input }) => recordStablecoinTreasuryMandate({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    registerSupplyChainProgramme: treasuryProcedure.input(z.object({
+      legalEntityId: uuid, funderCounterpartyId: uuid, integrationConnectionId: uuid, supplierBeneficiaryId: uuid,
+      programmeReference: z.string().min(4), receivableEvidenceUri: httpsUri, receivableEvidenceSha256: sha256Hex,
+      programmePolicyUri: httpsUri, programmePolicySha256: sha256Hex,
+    })).mutation(({ ctx, input }) => registerSupplyChainFinanceProgramme({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    registerSpendCardProgramme: treasuryProcedure.input(z.object({
+      legalEntityId: uuid, counterpartyId: uuid, integrationConnectionId: uuid, programmeReference: z.string().min(4),
+      countryCode: z.string().length(2), currency: z.enum(["NGN", "KES", "ZAR", "USD"]),
+      programmeEvidenceUri: httpsUri, programmeEvidenceSha256: sha256Hex,
+    })).mutation(({ ctx, input }) => registerSpendCardProgramme({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordSpendPolicyRule: treasuryProcedure.input(z.object({
+      spendCardProgrammeId: uuid,
+      ruleKind: z.enum(["category", "per_transaction_limit", "period_limit", "employee_eligibility", "receipt_requirement"]),
+      ruleValue: z.record(z.unknown()), evidenceUri: httpsUri, evidenceSha256: sha256Hex,
+    })).mutation(({ ctx, input }) => recordSpendPolicyRule({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    spendPolicyRules: auditorProcedure.input(z.object({ spendCardProgrammeId: uuid })).query(({ input }) => listSpendPolicyRules(input.spendCardProgrammeId)),
+    recordReview: complianceProcedure.input(z.object({
+      moduleKind: z.enum(["multi_bank_treasury", "stablecoin_treasury", "supply_chain_finance", "spend_card_programme"]),
+      subjectId: uuid, decision: z.enum(["approved", "blocked", "needs_information"]), rationale,
+    })).mutation(({ ctx, input }) => recordEnterpriseGovernanceReview({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+  }),
+  controlAssurance: router({
+    recordAssessment: assuranceVerifierProcedure.input(z.object({
+      assessmentKind: z.enum(ASSURANCE_KINDS), subjectType: z.string().min(2), subjectId: z.string().min(2),
+      outcome: z.enum(["covered", "attention_required", "blocked", "unavailable"]),
+      findingCodes: z.array(z.string()), evidenceUri: httpsUri, evidenceSha256: sha256Hex,
+    })).mutation(({ ctx, input }) => recordControlAssuranceAssessment({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordAdapterCertification: complianceProcedure.input(z.object({
+      counterpartyId: uuid, integrationConnectionId: uuid.nullable().optional(), adapterKind: z.enum(ADAPTER_KINDS),
+      certificationState: z.enum(["documented", "evidence_pending", "ready_for_controlled_test", "blocked", "retired"]),
+      corridor: z.string().nullable().optional(), asset: z.enum(["USDC", "USDT", "NGN", "KES", "ZAR", "USD"]).nullable().optional(),
+      evidenceUri: httpsUri, evidenceSha256: sha256Hex, controlledTestReference: z.string().nullable().optional(),
+    })).mutation(({ ctx, input }) => recordAdapterCertificationEvidence({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordAuditPacket: assuranceVerifierProcedure.input(z.object({
+      packetScope: z.enum(PACKET_SCOPES), scopeReference: z.string().min(2),
+      packetUri: httpsUri, packetSha256: sha256Hex, evidenceCount: z.number().int().min(0),
+    })).mutation(({ ctx, input }) => recordControlAuditPacket({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    assessments: auditorProcedure.input(z.object({ subjectType: z.string().optional(), subjectId: z.string().optional() }).optional())
+      .query(({ input }) => listControlAssuranceAssessments(input?.subjectType, input?.subjectId)),
+    adapterCertifications: auditorProcedure.input(z.object({ counterpartyId: uuid.optional() }).optional())
+      .query(({ input }) => listAdapterCertificationEvidence(input?.counterpartyId)),
+    auditPackets: auditorProcedure.input(z.object({ packetScope: z.string().optional(), scopeReference: z.string().optional() }).optional())
+      .query(({ input }) => listControlAuditPackets(input?.packetScope, input?.scopeReference)),
+  }),
+  executionRehearsal: router({
+    configureStablecoinRoute: treasuryProcedure.input(z.object({
+      corridor: z.string().min(2), asset: z.enum(["USDC", "USDT"]), counterpartyId: uuid, integrationConnectionId: uuid,
+      requiresTravelRule: z.boolean(), beneficiaryEvidenceRequired: z.boolean(),
+      routePolicyEvidenceUri: httpsUri, routePolicyEvidenceSha256: sha256Hex,
+    })).mutation(({ ctx, input }) => configureStablecoinOrchestrationRoute({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    reviewStablecoinRoute: complianceProcedure.input(z.object({ routeId: uuid, decision: z.enum(["approved", "blocked"]), rationale }))
+      .mutation(({ ctx, input }) => reviewStablecoinOrchestrationRoute({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    stablecoinRoutes: auditorProcedure.input(z.object({ corridor: z.string().optional() }).optional()).query(({ input }) => listStablecoinOrchestrationRoutes(input?.corridor)),
+    recordAuthorisedTest: complianceProcedure.input(z.object({
+      counterpartyId: uuid, corridor: z.string().min(2), testPlanEvidenceUri: httpsUri,
+      authorisationEvidenceUri: httpsUri.nullable().optional(), status: z.enum(["documented", "authorised", "blocked", "closed"]),
+    })).mutation(({ ctx, input }) => recordAuthorisedExecutionTest({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordRehearsal: complianceProcedure.input(z.object({
+      paymentOrderId: uuid, counterpartyId: uuid, stablecoinRouteId: uuid.nullable().optional(),
+      outcome: z.enum(["blocked", "ready_for_authorised_execution"]),
+      prerequisiteSnapshot: z.record(z.unknown()), rationale,
+    })).mutation(({ ctx, input }) => recordExecutionApprovalRehearsal({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    rehearsals: auditorProcedure.input(z.object({ paymentOrderId: uuid.optional() }).optional()).query(({ input }) => listExecutionApprovalRehearsals(input?.paymentOrderId)),
+    recordExecutionEvidence: complianceProcedure.input(z.object({
+      paymentOrderId: uuid, routeId: uuid, evidenceKind: z.enum(["travel_rule", "beneficiary_verification", "wallet_ownership"]),
+      evidenceUri: httpsUri, evidenceSha256: sha256Hex,
+    })).mutation(({ ctx, input }) => recordStablecoinExecutionEvidence({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    executionEvidence: auditorProcedure.input(z.object({ paymentOrderId: uuid })).query(({ input }) => listStablecoinExecutionEvidence(input.paymentOrderId)),
+    recordSettlementAttempt: treasuryProcedure.input(z.object({
+      paymentOrderId: uuid, paymentLegId: uuid, idempotencyKey: z.string().min(8), payloadSha256: sha256Hex,
+      direction: z.enum(["onramp", "offramp"]), asset: z.enum(["USDC", "USDT"]),
+      fiatCurrency: z.enum(["NGN", "KES", "ZAR", "USD"]), amountMinor: z.string().regex(/^\d+$/),
+      providerReference: z.string().nullable().optional(),
+    })).mutation(({ ctx, input }) => recordStablecoinSettlementAttempt({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    settlementAttempts: auditorProcedure.input(z.object({ paymentOrderId: uuid.optional() }).optional()).query(({ input }) => listStablecoinSettlementAttempts(input?.paymentOrderId)),
+  }),
+  ledgerReconciliation: router({
+    recordPostingIntent: treasuryProcedure.input(z.object({
+      postingIdentity: z.string().min(8), correlationId: z.string().min(8),
+      currency: z.enum(["NGN", "KES", "ZAR", "USD", "USDC", "USDT"]), amountMinor: z.string().regex(/^\d+$/),
+      debitAccountId: z.number().int().positive(), creditAccountId: z.number().int().positive(),
+      expectedTransferId: z.number().int().positive().nullable().optional(),
+    })).mutation(({ ctx, input }) => recordLedgerPostingIntent({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    transitionPostingIntent: treasuryProcedure.input(z.object({
+      postingIdentity: z.string().min(8), intentState: z.enum(["posted", "voided", "blocked"]),
+      expectedTransferId: z.number().int().positive().nullable().optional(),
+    })).mutation(({ ctx, input }) => transitionLedgerPostingIntent({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordRun: assuranceVerifierProcedure.input(z.object({
+      runReference: z.string().min(8), windowStart: z.coerce.date(), windowEnd: z.coerce.date(),
+      status: z.enum(["reconciled", "discrepancy", "indeterminate"]),
+      intentCount: z.number().int().min(0), factCount: z.number().int().min(0), discrepancyCount: z.number().int().min(0),
+      sourceIdentity: z.string().min(2), errorSummary: z.string().nullable().optional(),
+    })).mutation(({ ctx, input }) => recordLedgerReconciliationRun({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    recordDiscrepancy: assuranceVerifierProcedure.input(z.object({
+      runId: uuid, postingIdentity: z.string().nullable().optional(), tigerbeetleTransferId: z.number().int().positive().nullable().optional(),
+      discrepancyCode: z.enum(["missing_fact", "unexpected_fact", "field_mismatch", "duplicate_identity", "invalid_balance"]),
+      expected: z.record(z.unknown()).nullable().optional(), observed: z.record(z.unknown()).nullable().optional(),
+    })).mutation(({ ctx, input }) => recordLedgerReconciliationDiscrepancy({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    postingIntents: auditorProcedure.input(z.object({ intentState: z.string().optional() }).optional()).query(({ input }) => listLedgerPostingIntents(input?.intentState)),
+    runs: auditorProcedure.input(z.object({ status: z.string().optional() }).optional()).query(({ input }) => listLedgerReconciliationRuns(input?.status)),
+    discrepancies: auditorProcedure.input(z.object({ runId: uuid })).query(({ input }) => listLedgerReconciliationDiscrepancies(input.runId)),
+  }),
+  livePipelines: router({
+    recordProviderSend: complianceProcedure.input(z.object({
+      paymentOrderId: uuid, paymentLegId: uuid, integrationConnectionId: uuid,
+      providerReference: z.string().min(4), providerStatus: z.string().min(2), requestSha256: sha256Hex,
+    })).mutation(({ ctx, input }) => recordProviderSendRequest({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    transitionProviderSend: complianceProcedure.input(z.object({
+      sendRequestId: uuid, finalityState: z.enum(["webhook_confirmed", "reconciliation_pending", "reconciled", "failed", "discrepancy"]),
+      providerFinalityReference: z.string().nullable().optional(), reconciliationReference: z.string().nullable().optional(),
+    })).mutation(({ ctx, input }) => transitionProviderSendRequest({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    providerSends: auditorProcedure.input(z.object({ paymentOrderId: uuid.optional() }).optional()).query(({ input }) => listProviderSendRequests(input?.paymentOrderId)),
+    recordRegulatorySubmission: complianceProcedure.input(z.object({
+      regulatoryReportId: uuid, integrationConnectionId: uuid, channelReference: z.string().min(2), requestSha256: sha256Hex,
+      attemptState: z.enum(["prepared", "submitted", "accepted", "rejected", "unavailable"]),
+      externalReference: z.string().nullable().optional(), responseEvidenceSha256: sha256Hex.nullable().optional(),
+    })).mutation(({ ctx, input }) => recordRegulatorySubmissionAttempt({ openId: ctx.user.openId, role: ctx.user.role }, input)),
+    regulatorySubmissions: auditorProcedure.input(z.object({ regulatoryReportId: uuid.optional() }).optional()).query(({ input }) => listRegulatorySubmissionAttempts(input?.regulatoryReportId)),
   }),
   contracts: router({
     parseGoPaymentOrderValidated: complianceProcedure.input(z.unknown()).mutation(({ input }) => parseGoPaymentOrderValidatedEvent(input)),

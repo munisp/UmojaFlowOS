@@ -1,0 +1,53 @@
+{
+  "description": "UmojaFlowOS anti-wipe protected surfaces. CBN/NDPA-aligned retention: compliance evidence and audit logs 7 years (2555 days), model registry and lakehouse 1 year rolling. The guardian (scripts/infra/filesystem_anti_wipe.py) builds a hash-chain manifest over these paths and fails closed on deletion, modification, or truncation.",
+  "protected": [
+    {
+      "path": "artifacts/evidence",
+      "class": "compliance-evidence",
+      "immutable": true,
+      "retention_days": 2555
+    },
+    {
+      "path": "artifacts/final-compliance",
+      "class": "compliance-evidence",
+      "immutable": true,
+      "retention_days": 2555
+    },
+    {
+      "path": "artifacts/external-signoff",
+      "class": "compliance-evidence",
+      "immutable": true,
+      "retention_days": 2555
+    },
+    {
+      "path": "logs/audit",
+      "class": "audit-log",
+      "append_only": true,
+      "retention_days": 2555
+    },
+    {
+      "path": "services/ml-intelligence/runtime",
+      "class": "model-registry",
+      "immutable": false,
+      "retention_days": 365
+    },
+    {
+      "path": "infra/lakehouse",
+      "class": "lakehouse",
+      "immutable": false,
+      "retention_days": 365
+    },
+    {
+      "path": "database/postgresql",
+      "class": "schema-migrations",
+      "immutable": false,
+      "retention_days": null
+    },
+    {
+      "path": "assurance",
+      "class": "regulatory-assurance",
+      "immutable": true,
+      "retention_days": 2555
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+[project]
+name = "umojaflowos-remittance-bdc"
+version = "1.0.0"
+requires-python = ">=3.11"
+description = "Remittance (IMTO) and Bureau de Change (BDC) control-plane service for UmojaFlowOS: remitter/beneficiary lifecycle, purpose codes, corridor caps, rate locks, payout-channel evidence, BDC rate boards, FX tickets, vault position, CBN returns aggregation. Evidence-only and fail-closed: no payout, FX execution, settlement, or regulatory submission."
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn>=0.27",
+  "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "httpx>=0.27"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,37 @@
+{
+  "experiments": {
+    "fraud-net-v20260924002724": {
+      "challenger_traffic_pct": 10.0,
+      "challenger_version": "v20260924002724",
+      "champion_version": "v20260924002519",
+      "guardrail_metric": "pr_auc",
+      "min_samples": 1000,
+      "model_family": "fraud_net",
+      "name": "fraud-net-v20260924002724",
+      "started_at": "2026-09-24T00:27:38.891213+00:00",
+      "status": "promoted"
+    },
+    "fraud-net-v20260924003004": {
+      "challenger_traffic_pct": 10.0,
+      "challenger_version": "v20260924003004",
+      "champion_version": "v20260924002724",
+      "guardrail_metric": "pr_auc",
+      "min_samples": 1000,
+      "model_family": "fraud_net",
+      "name": "fraud-net-v20260924003004",
+      "started_at": "2026-09-24T00:31:54.115301+00:00",
+      "status": "promoted"
+    },
+    "fraud-net-v20260924003212": {
+      "challenger_traffic_pct": 10.0,
+      "challenger_version": "v20260924003212",
+      "champion_version": "v20260924003004",
+      "guardrail_metric": "pr_auc",
+      "min_samples": 1000,
+      "model_family": "fraud_net",
+      "name": "fraud-net-v20260924003212",
+      "started_at": "2026-09-24T00:34:01.141217+00:00",
+      "status": "promoted"
+    }
+  }
+}

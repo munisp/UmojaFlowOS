@@ -10,9 +10,9 @@ import {
 
 afterEach(cleanup);
 
-// Recharts' responsive container observes element size, which jsdom does not
-// implement. Supplying a real observer object (rather than stubbing the chart)
-// keeps the component under test the same component that ships.
+// The chart is hand-rolled SVG (see ServiceTrendCharts.tsx); jsdom needs no
+// layout observers for it. This stub remains so any component rendered
+// alongside the charts that still observes element size cannot crash the suite.
 class TestResizeObserver {
   observe() {}
   unobserve() {}

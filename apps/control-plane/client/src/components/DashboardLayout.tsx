@@ -31,6 +31,7 @@ import {
   LineChart,
   LogOut,
   PanelLeft,
+  Radar,
   ReceiptText,
   Scale,
   ShieldCheck,
@@ -55,6 +56,7 @@ const menuItems = [
   { icon: Activity, label: "Integrations", path: "/console/integrations" },
   { icon: Scale, label: "Governance", path: "/console/governance" },
   { icon: BellRing, label: "Alerts", path: "/console/alerts" },
+  { icon: Radar, label: "Operations", path: "/console/operations" },
   { icon: UserCog, label: "Admins", path: "/console/admins" },
 ];
 
@@ -73,8 +75,8 @@ const auditableModulePaths = menuItems.filter(item => item.path !== "/console/ad
 const modulesByRole: Record<OperatorRole, string[] | null> = {
   admin: null,
   auditor: auditableModulePaths,
-  compliance_officer: ["/console", "/console/compliance", "/console/reports", "/console/sandbox", "/console/registry", "/console/governance", "/console/alerts"],
-  treasury_operator: ["/console", "/console/payments", "/console/treasury", "/console/markets", "/console/compliance", "/console/registry", "/console/integrations", "/console/alerts"],
+  compliance_officer: ["/console", "/console/compliance", "/console/reports", "/console/sandbox", "/console/registry", "/console/governance", "/console/alerts", "/console/operations"],
+  treasury_operator: ["/console", "/console/payments", "/console/treasury", "/console/markets", "/console/compliance", "/console/registry", "/console/integrations", "/console/alerts", "/console/operations"],
   provider_contact: ["/console"],
   cbn_liaison: ["/console"],
 };

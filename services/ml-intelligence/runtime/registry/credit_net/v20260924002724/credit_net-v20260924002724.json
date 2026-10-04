@@ -1,0 +1,64 @@
+{
+  "advisory_only": true,
+  "data_provenance": "synthetic_nigeria generator account-level credit behaviour labels",
+  "epochs_run": 8,
+  "feature_config": {
+    "norm_mean": [
+      12.090009689331055,
+      1.9149999618530273,
+      7.231196403503418,
+      1.5616666078567505,
+      2.176909923553467,
+      11.710491180419922,
+      9.721732139587402,
+      15.552499771118164,
+      1.4908332824707031,
+      1.559999942779541,
+      0.051623985171318054,
+      0.9243788719177246
+    ],
+    "norm_std": [
+      0.910822331905365,
+      0.7241827845573425,
+      0.964851438999176,
+      1.2032735347747803,
+      1.0973659753799438,
+      2.6858322620391846,
+      2.118433713912964,
+      45.45790100097656,
+      7.070242881774902,
+      7.245098114013672,
+      0.1301422268152237,
+      0.9426724314689636
+    ],
+    "numeric": [
+      "log_income",
+      "kyc_tier",
+      "log_opened_days",
+      "age_band_code",
+      "log_txn_count",
+      "log_total_outflow",
+      "log_avg_amount",
+      "unique_counterparties",
+      "gambling_txns",
+      "loan_app_txns",
+      "night_ratio",
+      "spend_ratio"
+    ]
+  },
+  "metrics": {
+    "band_accuracy": 0.7766666666666666,
+    "f1": 0.5483870967741935,
+    "positive_rate": 0.2433333396911621,
+    "pr_auc": 0.5791881606156302,
+    "roc_auc": 0.7662784382354715
+  },
+  "model_name": "credit_net",
+  "n_train": 1200,
+  "n_val": 300,
+  "seed": 42,
+  "trained_at": "2026-09-24T00:27:35.658483+00:00",
+  "training_window": "2026-01-01 00:00:00+00:00..2026-01-30 23:52:00+00:00",
+  "version": "v20260924002724",
+  "weights_sha256": "45ec9fbe3301ecf8e02c5ee38a436fac3cd107cec504afb52bddb503042c5b3b"
+}

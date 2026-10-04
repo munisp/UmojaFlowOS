@@ -64,7 +64,19 @@
       header_up X-Request-ID {http.request.uuid}
     }
   }
+  @hashed_assets path /assets/*
+  handle @hashed_assets {
+    # Vite emits content-hashed filenames — safe to cache immutably for a year.
+    # Mobile (perf/slo.yaml): repeat visits must pay zero JS network cost.
+    header Cache-Control "public, max-age=31536000, immutable"
+    reverse_proxy {$UMOJA_CONTROL_PLANE_UPSTREAM:http://control-plane:3000} {
+      header_up X-Forwarded-Proto https
+      header_up X-Request-ID {http.request.uuid}
+    }
+  }
   handle {
+    # HTML shell: never cached — it points at the hashed assets.
+    header Cache-Control "no-cache, must-revalidate"
     reverse_proxy {$UMOJA_CONTROL_PLANE_UPSTREAM:http://control-plane:3000} {
       header_up X-Forwarded-Proto https
       header_up X-Request-ID {http.request.uuid}
