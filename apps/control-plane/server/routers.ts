@@ -22,6 +22,7 @@ import { assessCbnSandboxEvidenceCompleteness, createCbnSandboxDossier, createCb
 import { assessVaspOffshoreCounterpartyProfile, assessVaspTravelRuleRoute, createVaspOffshoreCounterpartyProfile, createVaspRegulatoryProfile, getVaspSupervisoryReadiness, listVaspRegulatoryProfiles, listVaspTravelRuleAssessments, offshoreExposureEvidenceCategories, recordVaspOffshoreCounterpartyEvidence, recordVaspSupervisoryEvidence, recordVaspTravelRuleEvidence, supervisoryEvidenceCategories, travelRuleEvidenceCategories } from "./vaspReadiness";
 import { assessImtoReadiness, createImtoReadinessProfile, imtoEvidenceCategories, recordImtoReadinessEvidence } from "./imtoReadiness";
 import { assessReadinessAssurance, initialiseReadinessAssurance, listReadinessAssurance, readinessAssuranceAreas, recordReadinessAssuranceEvidence, rejectReadinessAssuranceEvidence, verifyReadinessAssuranceEvidence } from "./vaspReadinessAssurance";
+import { validateVaspEvidenceManifestAgainstRegister, validateVaspOwnerAssignmentsAgainstRegister } from "./vaspEvidenceKitValidation";
 import { assignExternalStakeholder, listCbnLiaisonAssignments, listProviderContactAssignments, recordExternalStakeholderEvidence } from "./externalStakeholders";
 import { decideCustomerUseCaseGate, getCustomerWorkspace, recordCustomerDestinationCounterparty, updatePostgresCustomerProfile } from "./customerUseCase";
 import { decideFinancialSoundnessGate, getLiquidityProviderWorkspace, listLiquidityProviders, recordCounterpartyEvidenceItem, updateCounterpartyLpArchetype } from "./liquidityProviderEvidence";
@@ -138,6 +139,28 @@ export const appRouter = router({
     createVaspRegulatoryProfile: adminProcedure.input(z.object({ dossierId: z.string().uuid(), supervisoryPath: z.enum(["sec_arip", "sec_full_registration", "other_supervisory_path"]), operationalModelSummary: z.string().trim().min(50).max(4000) })).mutation(({ ctx, input }) => createVaspRegulatoryProfile({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     initialiseReadinessAssurance: adminProcedure.input(z.object({ dossierId: z.string().uuid() })).mutation(({ ctx, input }) => initialiseReadinessAssurance({ openId: ctx.user.openId, role: ctx.user.role }, input.dossierId)),
     readinessAssurance: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => listReadinessAssurance(input.dossierId)),
+    validateVaspOwnerAssignments: auditorProcedure.input(z.object({
+      dossierId: z.string().uuid(),
+      assignments: z.array(z.object({
+        area: z.string(),
+        points: z.number().int(),
+        accountableRole: z.string(),
+        externalEvidenceOwner: z.string(),
+        externalContact: z.string(),
+        platformSubmitterSubject: z.string(),
+        platformVerifierSubject: z.string(),
+      })).min(1).max(6),
+    })).query(({ input }) => validateVaspOwnerAssignmentsAgainstRegister(input.dossierId, input.assignments)),
+    validateVaspEvidenceManifest: auditorProcedure.input(z.object({
+      dossierId: z.string().uuid(),
+      manifest: z.array(z.object({
+        area: z.string(),
+        evidenceUri: z.string(),
+        evidenceSha256: z.string(),
+        attestationUri: z.string().optional(),
+        attestationSha256: z.string().optional(),
+      })).min(1).max(6),
+    })).query(({ input }) => validateVaspEvidenceManifestAgainstRegister(input.dossierId, input.manifest)),
     assessReadinessAssurance: auditorProcedure.input(z.object({ dossierId: z.string().uuid() })).query(({ input }) => assessReadinessAssurance(input.dossierId)),
     recordReadinessAssuranceEvidence: complianceProcedure.input(z.object({ dossierId: z.string().uuid(), area: z.enum(readinessAssuranceAreas), evidenceUri: z.string().url().refine(value => value.startsWith("https://"), "Evidence must use HTTPS"), evidenceSha256: z.string().regex(/^[a-f0-9]{64}$/) })).mutation(({ ctx, input }) => recordReadinessAssuranceEvidence({ openId: ctx.user.openId, role: ctx.user.role }, input)),
     verifyReadinessAssuranceEvidence: assuranceVerifierProcedure.input(z.object({ dossierId: z.string().uuid(), area: z.enum(readinessAssuranceAreas), externalVerifier: z.string().trim().min(3).max(255), externalAttestationUri: z.string().url().refine(value => value.startsWith("https://"), "Attestation must use HTTPS"), externalAttestationSha256: z.string().regex(/^[a-f0-9]{64}$/), rationale: z.string().trim().min(20).max(4000) })).mutation(({ ctx, input }) => verifyReadinessAssuranceEvidence({ openId: ctx.user.openId, role: ctx.user.role }, input)),
