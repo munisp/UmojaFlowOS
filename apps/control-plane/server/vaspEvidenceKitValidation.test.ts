@@ -85,7 +85,7 @@ describe("vasp evidence-kit register consistency", () => {
 
   it("flags a live-recorded submitter that differs from the declaration", async () => {
     mockDb([{ ...liveRow, evidence_recorded_by: "someone-else" }]);
-    const report = await validateVaspOwnerAssignmentsAgainstRegister(dossierId, assignments());
+    const report = await validateVaspOwnerAssignmentsAgainstRegister(dossierId, assignments().filter(r => r.area === "controlled_live_test").concat(assignments().filter(r => r.area !== "controlled_live_test")));
     expect(report.findings.some(f => f.code === "SUBMITTER_MISMATCH")).toBe(true);
   });
 
